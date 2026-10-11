@@ -33,7 +33,7 @@ internal sealed class LocalNetClient : IDisposable
     SandboxDevice[] devices=[];
     SandboxWire[] wires=[];
     bool sandboxEnabled;
-    int id, connected, hostId;
+    int id, connected, hostId, protocolVersion;
     string status="OFFLINE";
 
     internal LocalNetClient(string host = "127.0.0.1", int port = 27015)
@@ -45,6 +45,8 @@ internal sealed class LocalNetClient : IDisposable
     internal bool Connected => Volatile.Read(ref connected) != 0;
     internal string Status => Volatile.Read(ref status);
     internal int Id => Volatile.Read(ref id);
+    internal int ProtocolVersion => Volatile.Read(ref protocolVersion);
+    internal bool SupportsSandbox => ProtocolVersion>=NetProtocol.Version;
     internal void Start() { Volatile.Write(ref status,"CONNECTING"); _ = Task.Run(RunAsync); }
 
     async Task RunAsync()
@@ -136,6 +138,7 @@ internal sealed class LocalNetClient : IDisposable
     {
         Volatile.Write(ref connected,0);
         Volatile.Write(ref id,0);
+        Volatile.Write(ref protocolVersion,0);
         lock(stateLock)
         {
             players=[];cubes=[];monster=null;monsterTuning=null;flickerTuning=null;
@@ -151,7 +154,9 @@ internal sealed class LocalNetClient : IDisposable
         if(message==null) return;
         if(message.Type=="welcome")
         {
-            Volatile.Write(ref status,"ONLINE");
+            Volatile.Write(ref protocolVersion,message.ProtocolVersion);
+            Volatile.Write(ref status,message.ProtocolVersion>=NetProtocol.Version
+                ? "ONLINE" : "SERVER UPDATE REQUIRED");
             Volatile.Write(ref id,message.Id);
             lock(stateLock) pendingWorld=message;
             Volatile.Write(ref connected,1);

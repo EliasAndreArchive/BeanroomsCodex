@@ -915,7 +915,7 @@ internal sealed class GameWindow : SilkForm
     {
         if(network.Connected)
         {
-            if(network.Id==menu.NetworkHost) network.Send(new NetMessage { Type="sandbox_toggle" });
+            if(network.SupportsSandbox) network.Send(new NetMessage { Type="sandbox_toggle" });
             return;
         }
         menu.SandboxEnabled=!menu.SandboxEnabled;
@@ -1131,12 +1131,20 @@ internal sealed class GameWindow : SilkForm
                 current.PressTime=target.PressTime;current.Kind=target.Kind;
             }
             networkWires=snapshot.Wires;
-            if(menu.SandboxEnabled!=snapshot.SandboxEnabled || menu.SandboxHost!=(snapshot.HostId==network.Id))
-            { menu.SandboxEnabled=snapshot.SandboxEnabled;menu.SandboxHost=snapshot.HostId==network.Id;menu.Dirty=true; }
+            // Older servers omit HostId. A populated player list still gives a
+            // stable host identity while the protocol check surfaces the upgrade.
+            int hostId=snapshot.HostId;
+            if(hostId==0 && snapshot.Players.Length>0) hostId=snapshot.Players.Min(player=>player.Id);
+            bool sandboxHost=hostId!=0&&hostId==network.Id;
+            bool sandboxSupported=network.SupportsSandbox;
+            if(menu.SandboxEnabled!=snapshot.SandboxEnabled || menu.SandboxHost!=sandboxHost ||
+               menu.SandboxSupported!=sandboxSupported)
+            { menu.SandboxEnabled=snapshot.SandboxEnabled;menu.SandboxHost=sandboxHost;
+                menu.SandboxSupported=sandboxSupported;menu.Dirty=true; }
             int count=snapshot.Players.Length;
-            if(!menu.NetworkConnected || menu.NetworkId!=network.Id || menu.NetworkHost!=snapshot.HostId || menu.NetworkPlayers!=count)
-            { menu.NetworkConnected=true;menu.NetworkId=network.Id;menu.NetworkHost=snapshot.HostId;menu.NetworkPlayers=count;menu.Dirty=true; }
-            bool writable=snapshot.HostId!=0&&snapshot.HostId==network.Id;
+            if(!menu.NetworkConnected || menu.NetworkId!=network.Id || menu.NetworkHost!=hostId || menu.NetworkPlayers!=count)
+            { menu.NetworkConnected=true;menu.NetworkId=network.Id;menu.NetworkHost=hostId;menu.NetworkPlayers=count;menu.Dirty=true; }
+            bool writable=sandboxHost;
             if(menu.MonsterControlsWritable!=writable) { menu.MonsterControlsWritable=writable;menu.Dirty=true; }
             if(!writable&&snapshot.MonsterTuning!=null&&menu.MonsterSettings.CopyFrom(snapshot.MonsterTuning))
                 menu.Dirty=true;
@@ -1210,7 +1218,8 @@ internal sealed class GameWindow : SilkForm
         }
         networkCubes=[];
         networkDevices=[];networkWires=[];
-        if(!menu.SandboxHost) { menu.SandboxHost=true;menu.SandboxEnabled=false;menu.Dirty=true; }
+        if(!menu.SandboxHost || !menu.SandboxSupported)
+        { menu.SandboxHost=true;menu.SandboxSupported=true;menu.SandboxEnabled=false;menu.Dirty=true; }
         remotePositions.Clear();
         remoteYaws.Clear();
         remoteColors.Clear();

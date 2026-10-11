@@ -12,9 +12,20 @@ int sandboxToggles=0;menu.SandboxToggle=()=>sandboxToggles++;
 menu.AdjustSelected(1);
 if(sandboxToggles!=1) throw new Exception("Host session menu did not expose sandbox mode");
 menu.SandboxHost=false;menu.AdjustSelected(1);
-if(sandboxToggles!=1) throw new Exception("Guest could change host sandbox mode");
+if(sandboxToggles!=2) throw new Exception("Guest session menu did not send a server-authorized sandbox request");
+menu.SandboxSupported=false;menu.AdjustSelected(1);
+if(sandboxToggles!=2) throw new Exception("Unsupported server still exposed sandbox mode");
 menu.NetworkConnected=false;menu.AdjustSelected(1);
-if(sandboxToggles!=2) throw new Exception("Solo session menu did not expose sandbox mode");
+if(sandboxToggles!=3) throw new Exception("Solo session menu did not expose sandbox mode");
+using(var staleClient=new LocalNetClient())
+{
+    var receive=typeof(LocalNetClient).GetMethod("ReceiveMessage",
+        System.Reflection.BindingFlags.Instance|System.Reflection.BindingFlags.NonPublic)!;
+    // A pre-version server omits ProtocolVersion, which deserializes as zero.
+    receive.Invoke(staleClient,["{\"Type\":\"welcome\",\"Id\":1}"]);
+    if(staleClient.SupportsSandbox || staleClient.Status!="SERVER UPDATE REQUIRED")
+        throw new Exception("A stale server did not report its required update");
+}
 foreach(string asset in new[]{"wall.png","floor.png","ceiling.png","beanface.png","eye.png"})
 {
     string path=Path.Combine(AppContext.BaseDirectory,"assets",asset);
@@ -382,32 +393,38 @@ if(args.Contains("--network") || args.Contains("--websocket"))
         Thread.Sleep(25);
     if(MathF.Abs((client.Snapshot().Players.FirstOrDefault(p=>p.Id==client.Id)?.X??0f)-finalX)>0.02f)
         throw new Exception("Latest player state did not reach the server");
-    if(!webSocket)
+    bool sandboxWasEnabled=client.Snapshot().SandboxEnabled;
+    client.Send(new NetMessage { Type="sandbox_toggle" });
+    deadline=DateTime.UtcNow.AddSeconds(3);
+    while(client.Snapshot().SandboxEnabled==sandboxWasEnabled && DateTime.UtcNow<deadline) Thread.Sleep(25);
+    if(client.Snapshot().SandboxEnabled==sandboxWasEnabled)
+        throw new Exception("Host sandbox toggle did not round-trip");
+    if(!client.Snapshot().SandboxEnabled)
     {
         client.Send(new NetMessage { Type="sandbox_toggle" });
         deadline=DateTime.UtcNow.AddSeconds(3);
         while(!client.Snapshot().SandboxEnabled && DateTime.UtcNow<deadline) Thread.Sleep(25);
-        if(!client.Snapshot().SandboxEnabled)
-            throw new Exception("Host could not enable sandbox mode");
-        client.Send(new NetMessage { Type="device_spawn",Action=(int)SandboxKind.Button });
-        client.Send(new NetMessage { Type="device_spawn",Action=(int)SandboxKind.Lamp });
-        deadline=DateTime.UtcNow.AddSeconds(3);
-        while(client.Snapshot().Devices.Length<2 && DateTime.UtcNow<deadline) Thread.Sleep(25);
-        var devices=client.Snapshot().Devices;
-        if(devices.Length<2) throw new Exception("Sandbox device spawn did not replicate");
-        if(devices.Any(device=>device.BodyId<=0))
-            throw new Exception("Sandbox device did not receive a physical body");
-        int button=devices.First(d=>d.Kind==SandboxKind.Button).Id;
-        int lamp=devices.First(d=>d.Kind==SandboxKind.Lamp).Id;
-        client.Send(new NetMessage { Type="weld",FromId=devices[0].BodyId,ToId=devices[1].BodyId });
-        client.Send(new NetMessage { Type="wire",FromId=button,ToId=lamp });
-        client.Send(new NetMessage { Type="device_interact",Action=button });
-        deadline=DateTime.UtcNow.AddSeconds(2);
-        while(!client.Snapshot().Devices.Any(d=>d.Id==lamp&&d.State) && DateTime.UtcNow<deadline) Thread.Sleep(25);
-        if(!client.Snapshot().Devices.Any(d=>d.Id==lamp&&d.State))
-            throw new Exception("Sandbox wire state did not replicate");
     }
-    Console.WriteLine($"PASS: {(webSocket?"WebSocket":"local TCP")} multiplayer welcome and world state");
+    if(!client.Snapshot().SandboxEnabled)
+        throw new Exception("Host could not enable sandbox mode");
+    client.Send(new NetMessage { Type="device_spawn",Action=(int)SandboxKind.Button });
+    client.Send(new NetMessage { Type="device_spawn",Action=(int)SandboxKind.Lamp });
+    deadline=DateTime.UtcNow.AddSeconds(3);
+    while(client.Snapshot().Devices.Length<2 && DateTime.UtcNow<deadline) Thread.Sleep(25);
+    var devices=client.Snapshot().Devices;
+    if(devices.Length<2) throw new Exception("Sandbox device spawn did not replicate");
+    if(devices.Any(device=>device.BodyId<=0))
+        throw new Exception("Sandbox device did not receive a physical body");
+    int button=devices.First(d=>d.Kind==SandboxKind.Button).Id;
+    int lamp=devices.First(d=>d.Kind==SandboxKind.Lamp).Id;
+    client.Send(new NetMessage { Type="weld",FromId=devices[0].BodyId,ToId=devices[1].BodyId });
+    client.Send(new NetMessage { Type="wire",FromId=button,ToId=lamp });
+    client.Send(new NetMessage { Type="device_interact",Action=button });
+    deadline=DateTime.UtcNow.AddSeconds(2);
+    while(!client.Snapshot().Devices.Any(d=>d.Id==lamp&&d.State) && DateTime.UtcNow<deadline) Thread.Sleep(25);
+    if(!client.Snapshot().Devices.Any(d=>d.Id==lamp&&d.State))
+        throw new Exception("Sandbox wire state did not replicate");
+    Console.WriteLine($"PASS: {(webSocket?"WebSocket":"local TCP")} multiplayer welcome, sandbox toggle, and world state");
 }
 if(args.Contains("--netmenu"))
 {
@@ -416,29 +433,63 @@ if(args.Contains("--netmenu"))
     var deadline=DateTime.UtcNow.AddSeconds(8);
     while((!host.Connected||!guest.Connected) && DateTime.UtcNow<deadline) Thread.Sleep(25);
     if(!host.Connected||!guest.Connected) throw new Exception("Session-menu test: handshake failed");
+    if(!host.SupportsSandbox || !guest.SupportsSandbox)
+        throw new Exception("Session-menu test: current server did not advertise sandbox support");
     deadline=DateTime.UtcNow.AddSeconds(3);
     while((host.Snapshot().HostId==0||guest.Snapshot().HostId==0) && DateTime.UtcNow<deadline) Thread.Sleep(25);
-    if(host.Snapshot().HostId!=host.Id) throw new Exception("Session-menu test: first peer was not the host");
-    if(guest.Snapshot().HostId==guest.Id) throw new Exception("Session-menu test: second peer was treated as host");
-    // Drive the real host session-menu toggle method against the live server.
+    LocalNetClient menuHost=host.Id<guest.Id?host:guest;
+    LocalNetClient menuGuest=menuHost==host?guest:host;
+    if(menuHost.Snapshot().HostId!=menuHost.Id || menuGuest.Snapshot().HostId==menuGuest.Id)
+        throw new Exception("Session-menu test: snapshots did not identify the server host");
+    if(menuHost.Snapshot().SandboxEnabled)
+    {
+        menuHost.Send(new NetMessage { Type="sandbox_toggle" });
+        deadline=DateTime.UtcNow.AddSeconds(3);
+        while(menuHost.Snapshot().SandboxEnabled && DateTime.UtcNow<deadline) Thread.Sleep(25);
+        if(menuHost.Snapshot().SandboxEnabled) throw new Exception("Session-menu test: could not reset sandbox state");
+    }
+    // Drive the real session-menu path. Snapshot synchronization must establish
+    // host status; the test intentionally never assigns SandboxHost.
     var window=new GameWindow();
     var networkField=typeof(GameWindow).GetField("network",
         System.Reflection.BindingFlags.Instance|System.Reflection.BindingFlags.NonPublic)!;
-    networkField.SetValue(window,host);
+    networkField.SetValue(window,menuHost);
     var windowMenu=(DebugMenu)typeof(GameWindow).GetField("menu",
         System.Reflection.BindingFlags.Instance|System.Reflection.BindingFlags.NonPublic)!.GetValue(window)!;
-    windowMenu.NetworkConnected=true;windowMenu.NetworkId=host.Id;
-    windowMenu.NetworkHost=host.Snapshot().HostId;windowMenu.SandboxHost=true;
-    var toggle=typeof(GameWindow).GetMethod("ToggleSandboxPermission",
+    var update=typeof(GameWindow).GetMethod("UpdateGame",
         System.Reflection.BindingFlags.Instance|System.Reflection.BindingFlags.NonPublic)!;
-    toggle.Invoke(window,[]);
+    windowMenu.SandboxHost=false;
+    deadline=DateTime.UtcNow.AddSeconds(2);
+    while(!windowMenu.SandboxHost && DateTime.UtcNow<deadline)
+    { update.Invoke(window,[1f/60f]);Thread.Sleep(25); }
+    if(!windowMenu.SandboxHost || windowMenu.NetworkHost!=menuHost.Id)
+        throw new Exception("Session-menu test: host status did not come from snapshots");
+    windowMenu.Open=true;windowMenu.SetPage(9);windowMenu.Selected=7;
+    windowMenu.AdjustSelected(1);
     deadline=DateTime.UtcNow.AddSeconds(3);
-    while(!host.Snapshot().SandboxEnabled && DateTime.UtcNow<deadline) Thread.Sleep(25);
-    if(!host.Snapshot().SandboxEnabled)
+    while(!menuHost.Snapshot().SandboxEnabled && DateTime.UtcNow<deadline) Thread.Sleep(25);
+    if(!menuHost.Snapshot().SandboxEnabled)
         throw new Exception("Host session-menu toggle did not enable sandbox");
-    if(!guest.Snapshot().SandboxEnabled)
+    if(!menuGuest.Snapshot().SandboxEnabled)
         throw new Exception("Sandbox mode did not replicate to the guest");
+
+    var guestWindow=new GameWindow();
+    networkField.SetValue(guestWindow,menuGuest);
+    var guestMenu=(DebugMenu)typeof(GameWindow).GetField("menu",
+        System.Reflection.BindingFlags.Instance|System.Reflection.BindingFlags.NonPublic)!.GetValue(guestWindow)!;
+    deadline=DateTime.UtcNow.AddSeconds(2);
+    while(guestMenu.SandboxHost && DateTime.UtcNow<deadline)
+    { update.Invoke(guestWindow,[1f/60f]);Thread.Sleep(25); }
+    if(guestMenu.SandboxHost) throw new Exception("Session-menu test: guest host status did not come from snapshots");
+    guestMenu.Open=true;guestMenu.SetPage(9);guestMenu.Selected=7;
+    guestMenu.AdjustSelected(1);
+    Thread.Sleep(250);
+    if(!menuHost.Snapshot().SandboxEnabled || !menuGuest.Snapshot().SandboxEnabled)
+        throw new Exception("Server accepted a guest sandbox toggle");
+
     networkField.SetValue(window,new LocalNetClient());
     window.Dispose();
-    Console.WriteLine("PASS: host session-menu sandbox toggle reached the server and guest");
+    networkField.SetValue(guestWindow,new LocalNetClient());
+    guestWindow.Dispose();
+    Console.WriteLine("PASS: server-authorized session-menu sandbox toggle reached host and guest");
 }

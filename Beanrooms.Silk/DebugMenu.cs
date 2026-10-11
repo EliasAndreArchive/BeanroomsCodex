@@ -6,7 +6,7 @@ namespace Beanrooms;
 internal sealed class DebugMenu
 {
     internal bool Open, TitleScreen, SettingsFromTitle, Dithering = true, PaletteReduction = true, PostEnabled = true, AutoExposure, Bloom = true, Lights = true, Vsync = true, Dirty = true, Volumetrics = true;
-    internal bool SandboxPage, SandboxEnabled, SandboxHost=true, WireTool, WeldTool;
+    internal bool SandboxPage, SandboxEnabled, SandboxHost=true, SandboxSupported=true, WireTool, WeldTool;
     internal int SandboxCategory, SandboxSelected;
     internal Action<SandboxKind>? SandboxSpawn;
     internal Action? SandboxToggle;
@@ -601,7 +601,9 @@ internal sealed class DebugMenu
         }
         else if(Page == 9)
         {
-            if(row==7 && (!NetworkConnected || SandboxHost)) SandboxToggle?.Invoke();
+            // The server validates the sender. Do not use a stale client-side host
+            // flag to prevent a host from issuing the request.
+            if(row==7 && (!NetworkConnected || SandboxSupported)) SandboxToggle?.Invoke();
             else if(row<4) SessionAction?.Invoke(row);
             else return;
         }
@@ -674,7 +676,7 @@ internal sealed class DebugMenu
             4 => NetworkConnected ? (NetworkRemote ? "ONLINE" : "LOCAL") : NetworkStatus,
             5 => NetworkConnected ? NetworkPlayers.ToString() : "1",
             6 => NetworkConnected ? (NetworkId==NetworkHost ? "HOST" : "GUEST") : "SOLO",
-            7 => SandboxEnabled ? "ON" : "OFF",
+            7 => NetworkConnected&&!SandboxSupported ? "SERVER UPDATE REQUIRED" : SandboxEnabled ? "ON" : "OFF",
             _ => ""
         };
         if(Page == 8) return row switch
@@ -978,7 +980,7 @@ internal sealed class DebugMenu
             }
             string detail=SandboxDetail(items[SandboxSelected]);
             PixelText(g,detail.Length>22?detail[..22]:detail,paleBlue,13,225);
-            PixelText(g,NetworkConnected?"HOST CONTROLS":"LOCAL SANDBOX",paleBlue,251,225);
+            PixelText(g,NetworkConnected?(SandboxHost?"HOST CONTROLS":"GUEST CONTROLS"):"LOCAL SANDBOX",paleBlue,251,225);
             PixelText(g,"B CLOSE  G WIRE  K WELD  E USE",paleBlue,13,231);
         }
         else if(Open && TitleScreen)
@@ -1032,7 +1034,7 @@ internal sealed class DebugMenu
                     Page==8&&!FlickerControlsWritable ||
                     Page==2&&!MovementControlsWritable ||
                     Page==9&&row==1&&!NetworkConnected&&!NetworkRemote ||
-                    Page==9&&row==7&&NetworkConnected&&!SandboxHost;
+                    Page==9&&row==7&&NetworkConnected&&!SandboxSupported;
                 Brush ink=locked?unfilled:focused?green:white;
                 PixelText(g,$"{row+1}.",ink,21,y+textOffset);
                 PixelText(g,Labels[Page][row],ink,44,y+textOffset);

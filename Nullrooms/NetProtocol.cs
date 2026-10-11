@@ -1,8 +1,16 @@
 namespace Beanrooms;
 
+internal static class NetProtocol
+{
+    // Bump when a server changes a feature whose absence would otherwise look like
+    // a valid, but ignored, client command.
+    internal const int Version=2;
+}
+
 internal sealed class NetMessage
 {
     public string Type { get; set; } = "";
+    public int ProtocolVersion { get; set; }
     public int Id { get; set; }
     public int Seed { get; set; }
     public int Action { get; set; }

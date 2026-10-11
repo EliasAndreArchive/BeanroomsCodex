@@ -175,7 +175,7 @@ internal sealed class LocalServer : IDisposable
                 peer.X=spawn.X;peer.Z=spawn.Y;
                 peers[id]=peer;
                 double age=clock.Elapsed.TotalSeconds-lastFlickerEvent;
-                peer.Send(new NetMessage { Type="welcome",Id=id,Seed=seed,X=peer.X,Y=peer.Y,Z=peer.Z,
+                peer.Send(new NetMessage { Type="welcome",ProtocolVersion=NetProtocol.Version,Id=id,Seed=seed,X=peer.X,Y=peer.Y,Z=peer.Z,
                     FlickerAge=age>=0 && age<flickerSettings.EventDuration ? (float)age : -1f });
                 _=peer.RunAsync(stop.Token);
                 Console.WriteLine($"Player {id} connected ({peers.Count} total)");
