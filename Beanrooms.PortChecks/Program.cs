@@ -1,5 +1,7 @@
 using Beanrooms;
 using StbImageSharp;
+using System.Drawing;
+using System.Numerics;
 
 var menu=new DebugMenu();
 menu.ShowTitle();
@@ -20,6 +22,23 @@ foreach(string asset in new[]{"spawn-boom.mp3","ui-click.wav","ui-hover.wav","la
     if(clip.Duration<=0) throw new Exception("Failed to decode "+asset);
 }
 using(var physics=new PhysicsBodies()) { }
+var predicted=new HeldCubePrediction();
+var testCube=new CubeState { Id=7,X=96,Y=1.5f,Z=98,HalfSize=0.43f,Qw=1 };
+var testCubes=new[] { testCube };
+Vector3 testEye=new(96,1.5f,96), testForward=Vector3.UnitZ;
+if(!predicted.TryBegin(testCubes,testEye,testForward,Quaternion.Identity,5f,2.25f,[]))
+    throw new Exception("Client could not predict a visible cube pickup");
+predicted.Apply(1f/60f,testEye,testForward,Quaternion.Identity,2.25f,18f,[],testCubes,testCube);
+if(Vector3.Distance(new Vector3(testCube.X,testCube.Y,testCube.Z),new Vector3(96,1.5f,98))>0.001f)
+    throw new Exception("Predicted pickup moved the cube before the camera moved");
+var blockingWall=new[] { new RectangleF(97f,97f,1f,2f) };
+for(int i=0;i<60;i++)
+    predicted.Apply(1f/60f,new Vector3(100,1.5f,96),testForward,
+        Quaternion.Identity,2.25f,18f,blockingWall,testCubes,testCube);
+if(testCube.X+testCube.HalfSize>97f)
+    throw new Exception("Predicted carried cube crossed a wall");
+predicted.Clear();
+if(predicted.Active) throw new Exception("Released cube kept local prediction");
 using(var game=new GameWindow())
 {
     var key=typeof(GameWindow).GetMethod("ProcessCmdKey",
@@ -36,7 +55,7 @@ using(var game=new GameWindow())
 if(!Beanrooms.Program.TryOnlineEndpoint("https://beanrooms-game.onrender.com","test-key",out string endpoint)
     || endpoint!="wss://beanrooms-game.onrender.com/ws?key=test-key")
     throw new Exception("Online server address format changed");
-Console.WriteLine("PASS: menu, Tab toggle, textures, eight audio clips, Bepu physics, online address");
+Console.WriteLine("PASS: menu, Tab toggle, textures, audio, Bepu physics, carried cube prediction, online address");
 if(args.Contains("--network") || args.Contains("--websocket"))
 {
     bool webSocket=args.Contains("--websocket");
@@ -46,7 +65,20 @@ if(args.Contains("--network") || args.Contains("--websocket"))
     client.Start();
     var deadline=DateTime.UtcNow.AddSeconds(8);
     while(!client.Connected && DateTime.UtcNow<deadline) Thread.Sleep(25);
-    if(!client.Connected || client.Id<=0 || client.ConsumeWorld()?.Type!="welcome")
+    NetMessage? welcome=client.ConsumeWorld();
+    if(!client.Connected || client.Id<=0 || welcome?.Type!="welcome")
         throw new Exception("Local multiplayer handshake failed: "+client.Status);
+    float finalX=welcome.X+0.25f;
+    for(int i=0;i<100;i++)
+        client.Send(new NetMessage { Type="state",X=welcome.X+i*0.0025f,Y=welcome.Y,
+            Z=welcome.Z,RespawnId=welcome.RespawnId,HoldDistance=2.25f });
+    client.Send(new NetMessage { Type="state",X=finalX,Y=welcome.Y,Z=welcome.Z,
+        RespawnId=welcome.RespawnId,HoldDistance=2.25f });
+    deadline=DateTime.UtcNow.AddSeconds(5);
+    while(DateTime.UtcNow<deadline &&
+          MathF.Abs((client.Snapshot().Players.FirstOrDefault(p=>p.Id==client.Id)?.X??0f)-finalX)>0.02f)
+        Thread.Sleep(25);
+    if(MathF.Abs((client.Snapshot().Players.FirstOrDefault(p=>p.Id==client.Id)?.X??0f)-finalX)>0.02f)
+        throw new Exception("Latest player state did not reach the server");
     Console.WriteLine($"PASS: {(webSocket?"WebSocket":"local TCP")} multiplayer welcome and world state");
 }

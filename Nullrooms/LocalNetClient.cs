@@ -13,6 +13,9 @@ internal sealed class LocalNetClient : IDisposable
     readonly int port;
     readonly Channel<NetMessage> outgoing = Channel.CreateUnbounded<NetMessage>(
         new UnboundedChannelOptions { SingleReader = true });
+    readonly Channel<byte> sendWake = Channel.CreateBounded<byte>(new BoundedChannelOptions(1)
+        { SingleReader = true, FullMode = BoundedChannelFullMode.DropOldest });
+    NetMessage? latestState;
     readonly object stateLock = new();
     readonly CancellationTokenSource stop = new();
     TcpClient? socket;
@@ -89,6 +92,8 @@ internal sealed class LocalNetClient : IDisposable
                     ResetConnectionState();
                     webSocket=null;
                     while(outgoing.Reader.TryRead(out _)) { }
+                    Interlocked.Exchange(ref latestState,null);
+                    while(sendWake.Reader.TryRead(out _)) { }
                 }
                 try { await Task.Delay(3000,stop.Token); }
                 catch(OperationCanceledException) { break; }
@@ -110,6 +115,7 @@ internal sealed class LocalNetClient : IDisposable
                 ReceiveMessage(line);
             }
             outgoing.Writer.TryComplete();
+            sendWake.Writer.TryComplete();
             await sender;
         }
         catch (OperationCanceledException) { }
@@ -160,22 +166,40 @@ internal sealed class LocalNetClient : IDisposable
 
     async Task SendWebSocketLoop(ClientWebSocket connection,CancellationToken cancel)
     {
-        await foreach(NetMessage message in outgoing.Reader.ReadAllAsync(cancel))
+        while(await sendWake.Reader.WaitToReadAsync(cancel))
         {
-            byte[] bytes=Encoding.UTF8.GetBytes(JsonSerializer.Serialize(message));
-            await connection.SendAsync(new ArraySegment<byte>(bytes),WebSocketMessageType.Text,true,cancel);
+            while(sendWake.Reader.TryRead(out _)) { }
+            NetMessage? state=Interlocked.Exchange(ref latestState,null);
+            if(state!=null) await SendWebSocketMessage(connection,state,cancel);
+            while(outgoing.Reader.TryRead(out NetMessage? control))
+                await SendWebSocketMessage(connection,control,cancel);
         }
+    }
+
+    static async Task SendWebSocketMessage(ClientWebSocket connection,NetMessage message,CancellationToken cancel)
+    {
+        byte[] bytes=Encoding.UTF8.GetBytes(JsonSerializer.Serialize(message));
+        await connection.SendAsync(new ArraySegment<byte>(bytes),WebSocketMessageType.Text,true,cancel);
     }
 
     async Task SendLoop(StreamWriter writer)
     {
-        await foreach(NetMessage message in outgoing.Reader.ReadAllAsync(stop.Token))
-            await writer.WriteLineAsync(JsonSerializer.Serialize(message));
+        while(await sendWake.Reader.WaitToReadAsync(stop.Token))
+        {
+            while(sendWake.Reader.TryRead(out _)) { }
+            NetMessage? state=Interlocked.Exchange(ref latestState,null);
+            if(state!=null) await writer.WriteLineAsync(JsonSerializer.Serialize(state));
+            while(outgoing.Reader.TryRead(out NetMessage? control))
+                await writer.WriteLineAsync(JsonSerializer.Serialize(control));
+        }
     }
 
     internal void Send(NetMessage message)
     {
-        if (Connected) outgoing.Writer.TryWrite(message);
+        if (!Connected) return;
+        if(message.Type=="state") Interlocked.Exchange(ref latestState,message);
+        else outgoing.Writer.TryWrite(message);
+        sendWake.Writer.TryWrite(0);
     }
 
     internal NetMessage? ConsumeWorld()
@@ -210,6 +234,7 @@ internal sealed class LocalNetClient : IDisposable
     {
         stop.Cancel();
         outgoing.Writer.TryComplete();
+        sendWake.Writer.TryComplete();
         socket?.Dispose();
         webSocket?.Dispose();
         stop.Dispose();

@@ -365,6 +365,9 @@ internal sealed class Peer : IDisposable
     readonly ConcurrentQueue<(int Id, NetMessage Message)> incoming;
     readonly Channel<NetMessage> outgoing=Channel.CreateUnbounded<NetMessage>(
         new UnboundedChannelOptions { SingleReader=true });
+    readonly Channel<byte> sendWake=Channel.CreateBounded<byte>(new BoundedChannelOptions(1)
+        { SingleReader=true,FullMode=BoundedChannelFullMode.DropOldest });
+    NetMessage? latestSnapshot;
     internal int Id { get; }
     internal float X=96f,Y=1.68f,Z=96f,Yaw=0.63f,Pitch,HoldDistance=2.25f;
     internal string Name;
@@ -378,7 +381,12 @@ internal sealed class Peer : IDisposable
         Id=id;Name=$"BEAN{id}";this.socket=socket;this.incoming=incoming;
         socket.NoDelay=true;
     }
-    internal void Send(NetMessage message) => outgoing.Writer.TryWrite(message);
+    internal void Send(NetMessage message)
+    {
+        if(message.Type=="snapshot") Interlocked.Exchange(ref latestSnapshot,message);
+        else outgoing.Writer.TryWrite(message);
+        sendWake.Writer.TryWrite(0);
+    }
 
     internal async Task RunAsync(CancellationToken stop)
     {
@@ -396,6 +404,7 @@ internal sealed class Peer : IDisposable
                 if(message!=null) incoming.Enqueue((Id,message));
             }
             outgoing.Writer.TryComplete();
+            sendWake.Writer.TryComplete();
             await sender;
         }
         catch(OperationCanceledException) { }
@@ -408,12 +417,19 @@ internal sealed class Peer : IDisposable
     }
     async Task SendLoop(StreamWriter writer,CancellationToken stop)
     {
-        await foreach(NetMessage message in outgoing.Reader.ReadAllAsync(stop))
-            await writer.WriteLineAsync(JsonSerializer.Serialize(message));
+        while(await sendWake.Reader.WaitToReadAsync(stop))
+        {
+            while(sendWake.Reader.TryRead(out _)) { }
+            while(outgoing.Reader.TryRead(out NetMessage? control))
+                await writer.WriteLineAsync(JsonSerializer.Serialize(control));
+            NetMessage? snapshot=Interlocked.Exchange(ref latestSnapshot,null);
+            if(snapshot!=null) await writer.WriteLineAsync(JsonSerializer.Serialize(snapshot));
+        }
     }
     public void Dispose()
     {
         outgoing.Writer.TryComplete();
+        sendWake.Writer.TryComplete();
         socket.Dispose();
     }
 }
