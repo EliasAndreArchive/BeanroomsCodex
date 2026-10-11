@@ -19,7 +19,7 @@ internal sealed class RigidCube
     internal Vector3 HoldTarget, HoldTargetVelocity;
     internal Quaternion CarryRotationOffset = Quaternion.Identity;
     internal float HalfSize, Drag = 0.025f, RestDrag;
-    internal bool HasHoldTarget, Grounded, Emissive;
+    internal bool HasHoldTarget, Grounded, Emissive, Plank;
     internal float ImpactCooldown;
     internal BodyHandle Handle;
 }
@@ -235,6 +235,16 @@ internal sealed class PhysicsBodies : IDisposable
         if(cube==null) return;
         simulation.Bodies[cube.Handle].Velocity.Linear+=forward*11f*dt;
     }
+    internal bool DevicePressed(SandboxDevice device)
+    {
+        foreach(RigidCube body in Bodies)
+        {
+            if(body.SandboxDeviceId==device.Id) continue;
+            Vector3 delta=body.Position-device.Position;
+            if(delta.X*delta.X+delta.Z*delta.Z<.48f*.48f && MathF.Abs(delta.Y)<.55f) return true;
+        }
+        return false;
+    }
     internal static float ContactSlipSpeed(Vector3 velocity,Vector3 angularVelocity,Quaternion rotation,float halfSize)
     {
         float lengthSquared=rotation.LengthSquared();
@@ -305,6 +315,25 @@ internal sealed class PhysicsBodies : IDisposable
             new BodyActivityDescription(0.0001f, 60));
         BodyHandle handle = simulation.Bodies.Add(description);
         Bodies.Add(new RigidCube { Id = nextBodyId++, Position = position, HalfSize = half, Emissive = emissive, Color = color, Handle = handle });
+        return true;
+    }
+
+    internal bool SpawnCornerPlank(Vector3 position,float yaw,IReadOnlyList<RectangleF> walls,Vector3 player)
+    {
+        EnsureEnvironment(walls);
+        const float half=.32f;
+        position.Y=half+.03f;
+        if(SpawnBlocked(position,half,walls,player)) return false;
+        Quaternion rotation=Quaternion.CreateFromAxisAngle(Vector3.UnitY,yaw);
+        var shape=new Box(half*2f,half*2f,half*2f);
+        TypedIndex shapeIndex=simulation.Shapes.Add(in shape);
+        BodyInertia inertia=shape.ComputeInertia(.7f);
+        BodyHandle handle=simulation.Bodies.Add(BodyDescription.CreateDynamic(
+            new RigidPose(position,rotation),new BodyVelocity(),inertia,
+            new CollidableDescription(shapeIndex,0f,3f,ContinuousDetection.Continuous()),
+            new BodyActivityDescription(.0001f,60)));
+        Bodies.Add(new RigidCube { Id=nextBodyId++,Position=position,HalfSize=half,Plank=true,
+            Rotation=rotation,Color=new Vector3(.43f,.24f,.10f),Handle=handle });
         return true;
     }
 

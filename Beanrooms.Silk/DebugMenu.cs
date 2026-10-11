@@ -13,9 +13,10 @@ internal sealed class DebugMenu
     static readonly SandboxKind[][] SandboxItems =
     [
         [SandboxKind.Cube,SandboxKind.GlowCube],
-        [SandboxKind.Thruster,SandboxKind.Lamp,SandboxKind.Piston],
+        [SandboxKind.Thruster,SandboxKind.Lamp,SandboxKind.Piston,SandboxKind.PressurePlate,SandboxKind.ProximitySensor],
         [SandboxKind.Button,SandboxKind.Lever,SandboxKind.And,SandboxKind.Or,SandboxKind.Not,
-         SandboxKind.Xor,SandboxKind.Nand,SandboxKind.Xnor,SandboxKind.Toggle,SandboxKind.Timer]
+         SandboxKind.Xor,SandboxKind.Nand,SandboxKind.Xnor,SandboxKind.Toggle,SandboxKind.Timer,
+         SandboxKind.Delay,SandboxKind.Counter,SandboxKind.Randomizer]
     ];
     internal const int SandboxRows=7, SandboxPitch=14, SandboxTop=54;
     internal SandboxKind SelectedSandboxItem => SandboxItems[SandboxCategory][SandboxSelected];
@@ -27,7 +28,9 @@ internal sealed class DebugMenu
         SandboxKind.GlowCube=>"GLOW CUBE",SandboxKind.And=>"AND GATE",
         SandboxKind.Or=>"OR GATE",SandboxKind.Not=>"NOT GATE",SandboxKind.Xor=>"XOR GATE",
         SandboxKind.Nand=>"NAND GATE",SandboxKind.Xnor=>"XNOR GATE",SandboxKind.Toggle=>"TOGGLE FLIP",
-        SandboxKind.Timer=>"TIMER CLOCK",_=>kind.ToString().ToUpperInvariant()
+        SandboxKind.Timer=>"TIMER CLOCK",SandboxKind.PressurePlate=>"PRESSURE PLATE",
+        SandboxKind.ProximitySensor=>"PROXIMITY SENSOR",SandboxKind.Randomizer=>"RANDOM PULSE",
+        _=>kind.ToString().ToUpperInvariant()
     };
     static string SandboxDetail(SandboxKind kind) => kind switch
     {
@@ -39,6 +42,9 @@ internal sealed class DebugMenu
         SandboxKind.Xnor=>"EVEN PARITY",SandboxKind.Toggle=>"LATCHES ON RISING EDGE",
         SandboxKind.Timer=>"BLINKS TWICE A SECOND",
         SandboxKind.Piston=>"PUSHES BLOCKS AHEAD",
+        SandboxKind.PressurePlate=>"CUBE MAKES OUTPUT",SandboxKind.ProximitySensor=>"PLAYER MAKES OUTPUT",
+        SandboxKind.Delay=>"WAITS BEFORE OUTPUT",SandboxKind.Counter=>"EVERY THIRD PULSE",
+        SandboxKind.Randomizer=>"RANDOM OUTPUT EACH SEC",
         _=>"POWERED LIGHT"
     };
     internal void SelectSandbox(int step)

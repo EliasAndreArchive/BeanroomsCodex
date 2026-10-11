@@ -30,6 +30,8 @@ internal sealed class PhotonAuthority : IDisposable
     {
         physics.Clear(); sandbox.Clear();
         walls=WorldLayout.Generate(seed).Walls;
+        foreach(var plank in WorldLayout.CornerPlanks(seed,walls))
+            physics.SpawnCornerPlank(plank.Position,plank.Yaw,walls,new Vector3(96f,1.68f,96f));
         monster=new MonsterBrain(seed,walls,monsterSettings);
     }
 
@@ -71,7 +73,8 @@ internal sealed class PhotonAuthority : IDisposable
         while(accumulator>=Step)
         {
             sandbox.Update(Step,d=>physics.ApplyThruster(d.Position,d.Yaw,Step,d.Id),
-                d=>physics.ApplyPiston(d.Position,d.Rotation,Step,d.Id));
+                d=>physics.ApplyPiston(d.Position,d.Rotation,Step,d.Id),d=>physics.DevicePressed(d),
+                d=>peers.Values.Any(p=>Vector3.DistanceSquared(d.Position,new Vector3(p.X,p.Y,p.Z))<3f*3f));
             foreach(PhotonPeer peer in peers.Values)
                 if(physics.HeldBy(peer.Id)) { physics.SlideResistance=peer.SlideResistance; break; }
             if(physics.Bodies.Count>0)
@@ -178,7 +181,7 @@ internal sealed class PhotonAuthority : IDisposable
     void BroadcastSnapshot()
     {
         PlayerState[] players=peers.Values.Select(p=>new PlayerState { Id=p.Id,X=p.X,Y=p.Y,Z=p.Z,Yaw=p.Yaw,MoveSpeed=p.MoveSpeed,SprintBlend=p.SprintBlend,CrouchBlend=p.CrouchBlend,Name=p.Name,R=p.R,G=p.G,B=p.B }).ToArray();
-        CubeState[] cubes=physics.Bodies.Where(b=>b.SandboxDeviceId==0).Select(b=>new CubeState { Id=b.Id,HolderId=physics.HolderOf(b),X=b.Position.X,Y=b.Position.Y,Z=b.Position.Z,Vx=b.Velocity.X,Vy=b.Velocity.Y,Vz=b.Velocity.Z,Ax=b.AngularVelocity.X,Ay=b.AngularVelocity.Y,Az=b.AngularVelocity.Z,Qx=b.Rotation.X,Qy=b.Rotation.Y,Qz=b.Rotation.Z,Qw=b.Rotation.W,Grounded=b.Grounded,SlipSpeed=PhysicsBodies.ContactSlipSpeed(b),HalfSize=b.HalfSize,Emissive=b.Emissive,R=b.Color.X,G=b.Color.Y,B=b.Color.Z }).ToArray();
+        CubeState[] cubes=physics.Bodies.Where(b=>b.SandboxDeviceId==0).Select(b=>new CubeState { Id=b.Id,HolderId=physics.HolderOf(b),X=b.Position.X,Y=b.Position.Y,Z=b.Position.Z,Vx=b.Velocity.X,Vy=b.Velocity.Y,Vz=b.Velocity.Z,Ax=b.AngularVelocity.X,Ay=b.AngularVelocity.Y,Az=b.AngularVelocity.Z,Qx=b.Rotation.X,Qy=b.Rotation.Y,Qz=b.Rotation.Z,Qw=b.Rotation.W,Grounded=b.Grounded,SlipSpeed=PhysicsBodies.ContactSlipSpeed(b),HalfSize=b.HalfSize,Emissive=b.Emissive,Plank=b.Plank,R=b.Color.X,G=b.Color.Y,B=b.Color.Z }).ToArray();
         Broadcast(new NetMessage { Type="snapshot",Seed=seed,Players=players,Cubes=cubes,HostId=players.Select(p=>p.Id).DefaultIfEmpty(0).Min(),SandboxEnabled=sandboxEnabled,Devices=sandbox.Devices.ToArray(),Wires=sandbox.Wires.ToArray(),CubeImpacts=physics.DrainCubeImpacts(),MonsterTuning=monsterSettings.Clone(),FlickerTuning=flickerSettings.Clone(),Monster=monster?.State });
     }
 

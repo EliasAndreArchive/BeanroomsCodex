@@ -115,4 +115,17 @@ internal static class WorldLayout
         }
         return (grid,walls);
     }
+
+    internal static IEnumerable<(Vector3 Position,float Yaw)> CornerPlanks(int seed,IReadOnlyList<RectangleF> walls)
+    {
+        var rng=new Random(unchecked(seed*486187739+17));
+        foreach(RectangleF wall in walls)
+        {
+            if(rng.NextDouble()>.075) continue;
+            float x=rng.Next(2)==0?wall.Left-.62f:wall.Right+.62f;
+            float z=rng.Next(2)==0?wall.Top-.62f:wall.Bottom+.62f;
+            if(x<4.5f||x>187.5f||z<4.5f||z>187.5f) continue;
+            yield return (new Vector3(x,.35f,z),(float)(rng.NextDouble()*MathF.PI));
+        }
+    }
 }

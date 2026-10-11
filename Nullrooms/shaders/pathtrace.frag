@@ -112,13 +112,28 @@ Hit trace(vec3 ro, vec3 rd, float limit) {
     }
     for(int object=0;object<objectCount;object++) {
         vec4 data=objectData(object);
-        float radius=data.w*1.733;
+        float radius=objectCode(object)<-0.5 ? 1.35 : data.w*1.733;
         vec3 toCenter=data.xyz-ro;
         float along=dot(toCenter,rd);
         if(along < -radius || along > h.t+radius || dot(toCenter-rd*along,toCenter-rd*along)>radius*radius) continue;
         vec4 inverseRotation=vec4(-objectRotation(object).xyz,objectRotation(object).w);
         vec3 localOrigin=rotateQ(inverseRotation,ro-data.xyz);
         vec3 localDirection=rotateQ(inverseRotation,rd);
+        if(objectCode(object)<-0.5) {
+            vec3 halfSize=vec3(0.18,0.10,1.12);
+            vec3 safe=sign(localDirection)*max(abs(localDirection),vec3(0.000001));
+            vec3 nearPart=(-halfSize-localOrigin)/safe;
+            vec3 farPart=(halfSize-localOrigin)/safe;
+            vec3 loPart=min(nearPart,farPart),hiPart=max(nearPart,farPart);
+            float entryPart=max(max(loPart.x,loPart.y),loPart.z);
+            float leavePart=min(min(hiPart.x,hiPart.y),hiPart.z);
+            if(entryPart>0.001 && entryPart<leavePart && entryPart<h.t) {
+                vec3 n=loPart.x>loPart.y && loPart.x>loPart.z ? vec3(-sign(localDirection.x),0,0) :
+                       loPart.y>loPart.z ? vec3(0,-sign(localDirection.y),0) : vec3(0,0,-sign(localDirection.z));
+                h.t=entryPart;h.normal=rotateQ(objectRotation(object),n);h.baseColor=objectColor(object);h.material=4;
+            }
+            continue;
+        }
         int kind=int(floor(objectCode(object)-2.0+0.001));
         if(kind>=2) {
             vec3 safe=sign(localDirection)*max(abs(localDirection),vec3(0.000001));
@@ -145,6 +160,16 @@ Hit trace(vec3 ro, vec3 rd, float limit) {
                     if(part==1) { halfSize=vec3(0.22,0.20,0.22);center.y=0.0;color=vec3(0.21,0.23,0.27); }
                     if(part==2) { halfSize=vec3(0.15,0.15,0.20);center=vec3(0.0,0.0,devicePowered(object)?0.42:0.38);color=devicePowered(object)?objectColor(object):vec3(0.45,0.47,0.50); }
                     if(part==3) { halfSize=vec3(0.17,0.045,0.03);center=vec3(0.0,0.0,devicePowered(object)?0.82:0.40);color=vec3(0.75,0.55,0.2); }
+                } else if(kind==15) {
+                    if(part==1) { halfSize=vec3(0.29,0.045,0.29);center.y=-0.18;color=objectColor(object); }
+                    if(part==2) { halfSize=vec3(0.18,0.018,0.18);center.y=-0.12;color=devicePowered(object)?vec3(1.0,0.76,0.18):vec3(0.20); }
+                } else if(kind==16) {
+                    if(part==1) { halfSize=vec3(0.18,0.20,0.10);center.y=-0.02;color=vec3(0.14,0.18,0.20); }
+                    if(part==2) { halfSize=vec3(0.10,0.10,0.025);center=vec3(0.0,0.02,0.11);color=devicePowered(object)?objectColor(object):vec3(0.08,0.18,0.20); }
+                } else if(kind>=17 && kind<=19) {
+                    if(part==1) { halfSize=vec3(0.24,0.15,0.12);center=vec3(0.0,-0.06,-0.18);color=objectColor(object); }
+                    if(part==2) { halfSize=vec3(0.12,0.075,0.035);center=vec3(0.0,0.03,0.02);color=devicePowered(object)?objectColor(object)*1.3:vec3(0.12); }
+                    if(part==3) { halfSize=vec3(0.035,0.035,0.035);center=vec3(0.0,0.03,0.10);color=vec3(0.8,0.9,0.75); }
                 }
                 if(any(lessThanEqual(halfSize,vec3(0.0)))) continue;
                 vec3 nearPart=(-halfSize-(localOrigin-center))/safe;

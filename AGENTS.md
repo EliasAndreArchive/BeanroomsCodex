@@ -4,6 +4,12 @@
 
 Beanrooms is a .NET 8 desktop game. The main client uses Silk.NET/GLFW for its window and input, OpenGL for rendering, OpenAL for sound playback, Bepu for cube physics, Vercidium Audio for room acoustics, and Photon Realtime for online rooms. Solo play simulates everything in the client. Online play elects the Photon room master to run the authoritative world simulation; every client displays its snapshots.
 
+## Game intent
+
+Beanrooms is a low resolution first person Backrooms exploration sandbox. Players walk procedural fluorescent rooms, avoid the monster, carry and throw physical objects, and build simple contraptions when the host enables sandbox mode. The visual style is deliberately pixelated and dithered, with path traced room lighting, while the world objects should still feel solid, readable, and physical.
+
+Every interactive object must have a clear physical purpose: it should be visible in the ray traced renderer, receive a Bepu body when it is grabbable, and replicate through the online authority. Decorative objects are allowed only when they cannot be mistaken for something the player can use. Seeded corner planks are grabbable wooden props and must be created from the current world seed by solo, Photon, and legacy-server paths.
+
 ## Project map
 
 | Path | Purpose |
@@ -43,7 +49,18 @@ Beanrooms is a .NET 8 desktop game. The main client uses Silk.NET/GLFW for its w
 - `GameAudio` plays the game's clips through OpenAL. Nearby ceiling fixtures each have a spatial hum source that shares the lamp clip. `VercidiumAcoustics` traces walls, floor, and ceiling; listener EAX controls local, UI, and distant untracked sound reverb, while grouped EAX effects route nearby spatial lamps, monster, remote footsteps, and cubes through their source rooms. Vercidium's source filters also control their direct sound. Rebuild its geometry when the world seed changes.
 - Network-message and snapshot changes must be reflected in `PhotonAuthority`, `PhotonNetClient`, and the client. Keep room-master simulation authoritative over pickup and physics. Update the legacy server only when its test/development path should preserve the behavior.
 - Sandbox mode works in solo and online. In solo, `Tab → Session → Sandbox Mode` toggles it locally; the B-key sandbox browser only opens once sandbox mode is enabled (in any mode), and online the Photon room master controls the toggle and guests cannot change it. Cubes can always spawn; glow cubes and devices require sandbox mode. Sandbox devices have Bepu bodies and use the normal pickup path. The authority validates device placement, interaction, wires, and `Weld` constraints, evaluates the logic graph, applies powered thruster force, and broadcasts device poses and state.
+- The sandbox currently includes cubes, glow cubes, thrusters, lamps, pistons, buttons, levers, pressure plates, proximity sensors, AND/OR/NOT/XOR/NAND/XNOR gates, toggles, timers, delays, counters, and random pulse sources. Devices must define their menu entry, detail text, state rules in `SandboxWorld`, callback needs in all three simulators, and a model in `pathtrace.frag`.
 - `pathtrace.frag` renders the devices as composite procedural models. Fixed path tracing is the default. Realtime GI can update its probe based radiance cache when moving emissive cubes or powered sandbox lamps change, giving fixtures and portable lights dynamic soft indirect light.
+
+## Coding rules
+
+- Keep gameplay rules in `Nullrooms/` whenever solo and online modes share them. `Beanrooms.Silk` should gather input, present state, and render it; it should not become a second source of physics or sandbox truth.
+- Treat the Photon room master as authoritative. Guests send input messages and render snapshots. Do not add client prediction for held cubes, throws, rotations, device physics, or sandbox state without an explicit reconciliation design.
+- Preserve deterministic world setup: any seed-generated object must be derived from `WorldLayout` and spawned by `GameWindow.GenerateWorld`, `PhotonAuthority.ResetWorld`, and `LocalServer.ResetWorld`.
+- Add a regression check in `Beanrooms.PortChecks` for every new network rule, device state machine, world prop, or input edge case. Use the live `--photon` check when changing Photon connection, event, room, authority, or snapshot behavior.
+- Keep rendering data compact. `UploadObjects` packs one object into three RGBA texels, and `pathtrace.frag` decodes that layout. Update both sides together whenever an object flag or shape type changes.
+- Keep input controls consistent: B opens the sandbox browser only when sandbox is enabled; G toggles wires; K toggles welding; left click grabs or selects a tool target. Menu text should describe player-facing behavior, not implementation details.
+- Preserve third party licensing. Vercidium and Photon files are local dependencies; retain their license and documentation files when upgrading either SDK.
 
 ## Build and checks
 

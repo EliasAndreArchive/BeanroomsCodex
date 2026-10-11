@@ -2,7 +2,7 @@ using System.Numerics;
 
 namespace Beanrooms;
 
-internal enum SandboxKind { Cube, GlowCube, Thruster, Button, Lever, And, Or, Not, Lamp, Xor, Nand, Xnor, Toggle, Timer, Piston }
+internal enum SandboxKind { Cube, GlowCube, Thruster, Button, Lever, And, Or, Not, Lamp, Xor, Nand, Xnor, Toggle, Timer, Piston, PressurePlate, ProximitySensor, Delay, Counter, Randomizer }
 
 internal sealed class SandboxDevice
 {
@@ -22,6 +22,7 @@ internal sealed class SandboxDevice
     // Toggle latches on a rising input edge; Timer free-runs as a clock source.
     public bool PrevInput { get; set; }
     public float Timer { get; set; }
+    public int Count { get; set; }
     public Vector3 Position => new(X,Y,Z);
     public Quaternion Rotation => new(Qx,Qy,Qz,Qw);
 }
@@ -95,7 +96,7 @@ internal sealed class SandboxWorld
         SandboxDevice? source=Devices.FirstOrDefault(d=>d.Id==from);
         SandboxDevice? target=Devices.FirstOrDefault(d=>d.Id==to);
         if(source==null || target==null || source.Kind is SandboxKind.Thruster or SandboxKind.Lamp or SandboxKind.Piston ||
-           target.Kind is SandboxKind.Button or SandboxKind.Lever) return false;
+           target.Kind is SandboxKind.Button or SandboxKind.Lever or SandboxKind.PressurePlate or SandboxKind.ProximitySensor or SandboxKind.Randomizer) return false;
         if(Vector3.DistanceSquared(source.Position,target.Position)>20f*20f) return false;
         Wires.Add(new SandboxWire { From=from,To=to });
         return true;
@@ -108,11 +109,22 @@ internal sealed class SandboxWorld
         else if(device?.Kind==SandboxKind.Lever) device.State=!device.State;
     }
 
-    internal void Update(float dt,Action<SandboxDevice>? poweredThruster=null,Action<SandboxDevice>? poweredPiston=null)
+    internal void Update(float dt,Action<SandboxDevice>? poweredThruster=null,Action<SandboxDevice>? poweredPiston=null,
+        Func<SandboxDevice,bool>? platePressed=null,Func<SandboxDevice,bool>? playerNearby=null)
     {
         foreach(SandboxDevice device in Devices)
             if(device.Kind==SandboxKind.Button && device.PressTime>0f)
             { device.PressTime=Math.Max(0f,device.PressTime-dt);device.State=device.PressTime>0f; }
+        foreach(SandboxDevice device in Devices)
+        {
+            if(device.Kind==SandboxKind.PressurePlate) device.State=platePressed?.Invoke(device)==true;
+            else if(device.Kind==SandboxKind.ProximitySensor) device.State=playerNearby?.Invoke(device)==true;
+            else if(device.Kind==SandboxKind.Randomizer)
+            {
+                device.Timer+=dt;
+                if(device.Timer>=1f) { device.Timer-=1f;device.State=Random.Shared.NextSingle()<.35f; }
+            }
+        }
         // Stateful sources settle once per frame before the combinational pass runs.
         foreach(SandboxDevice device in Devices)
         {
@@ -131,6 +143,18 @@ internal sealed class SandboxWorld
                 device.Timer+=dt;
                 if(device.Timer>=0.5f) { device.Timer-=0.5f;device.State=!device.State; }
             }
+            else if(device.Kind==SandboxKind.Counter)
+            {
+                bool high=inputs>0&&active>0;
+                if(high&&!device.PrevInput) { device.Count=(device.Count+1)%3;device.State=device.Count==0; }
+                device.PrevInput=high;
+            }
+            else if(device.Kind==SandboxKind.Delay)
+            {
+                bool high=inputs>0&&active>0;
+                if(high!=device.PrevInput) { device.PrevInput=high;device.Timer=0f; }
+                else if(device.State!=high) { device.Timer+=dt;if(device.Timer>=.65f) device.State=high; }
+            }
         }
         // Iterate enough times for short gate chains. Feedback loops settle at the previous state.
         for(int pass=0;pass<8;pass++)
@@ -138,7 +162,7 @@ internal sealed class SandboxWorld
             bool changed=false;
             foreach(SandboxDevice device in Devices)
             {
-                if(device.Kind is SandboxKind.Button or SandboxKind.Lever or SandboxKind.Toggle or SandboxKind.Timer) continue;
+                if(device.Kind is SandboxKind.Button or SandboxKind.Lever or SandboxKind.Toggle or SandboxKind.Timer or SandboxKind.Counter or SandboxKind.Delay or SandboxKind.PressurePlate or SandboxKind.ProximitySensor or SandboxKind.Randomizer) continue;
                 int inputs=0,active=0;
                 foreach(SandboxWire wire in Wires)
                     if(wire.To==device.Id)

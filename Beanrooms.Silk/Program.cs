@@ -560,7 +560,7 @@ internal sealed class GameWindow : SilkForm
                 texels[j+3]=b.HalfSize*(animate?CubeVisualScale(i,b.Id,now):1f);
                 texels[j+4]=b.Qx;texels[j+5]=b.Qy;texels[j+6]=b.Qz;texels[j+7]=b.Qw;
                 texels[j+8]=b.R;texels[j+9]=b.G;texels[j+10]=b.B;
-                texels[j+11]=b.Emissive?1f:0f;
+                texels[j+11]=b.Emissive?1f:b.Plank?-1f:0f;
             }
             else
             {
@@ -569,7 +569,7 @@ internal sealed class GameWindow : SilkForm
                 texels[j+3]=b.HalfSize*(animate?CubeVisualScale(i,b.Id,now):1f);
                 texels[j+4]=b.Rotation.X; texels[j+5]=b.Rotation.Y; texels[j+6]=b.Rotation.Z; texels[j+7]=b.Rotation.W;
                 texels[j+8]=b.Color.X; texels[j+9]=b.Color.Y; texels[j+10]=b.Color.Z;
-                texels[j+11]=b.Emissive?1f:0f;
+                texels[j+11]=b.Emissive?1f:b.Plank?-1f:0f;
             }
         }
         for(int i=0;i<devices.Length;i++)
@@ -586,6 +586,11 @@ internal sealed class GameWindow : SilkForm
                 SandboxKind.Lever=>new(0.65f,0.68f,0.62f),
                 SandboxKind.Lamp=>new(0.95f,0.83f,0.44f),
                 SandboxKind.Piston=>new(0.30f,0.34f,0.38f),
+                SandboxKind.PressurePlate=>new(0.78f,0.45f,0.16f),
+                SandboxKind.ProximitySensor=>new(0.26f,0.83f,0.90f),
+                SandboxKind.Delay=>new(0.52f,0.36f,0.82f),
+                SandboxKind.Counter=>new(0.91f,0.37f,0.27f),
+                SandboxKind.Randomizer=>new(0.38f,0.74f,0.40f),
                 _=>new(0.21f,0.49f,0.56f)
             };
             texels[j+8]=color.X;texels[j+9]=color.Y;texels[j+10]=color.Z;
@@ -656,6 +661,8 @@ internal sealed class GameWindow : SilkForm
         grid=layout.Grid;
         boxes.Clear();
         boxes.AddRange(layout.Walls);
+        foreach(var plank in WorldLayout.CornerPlanks(seed,boxes))
+            physics.SpawnCornerPlank(plank.Position,plank.Yaw,boxes,camera);
         audio?.SetWorld(boxes);
         localMonster = new MonsterBrain(seed,boxes,menu.MonsterSettings);
         visibleMonster = localMonster.State;
@@ -1199,7 +1206,7 @@ internal sealed class GameWindow : SilkForm
                 Quaternion qb=new(target.Qx,target.Qy,target.Qz,target.Qw);
                 Quaternion q=Quaternion.Slerp(qa,qb,blend);
                 current.Qx=q.X;current.Qy=q.Y;current.Qz=q.Z;current.Qw=q.W;
-                current.HalfSize=target.HalfSize;current.Emissive=target.Emissive;
+                current.HalfSize=target.HalfSize;current.Emissive=target.Emissive;current.Plank=target.Plank;
                 current.HolderId=target.HolderId;
                 current.Vx=target.Vx;current.Vy=target.Vy;current.Vz=target.Vz;current.Grounded=target.Grounded;
                 current.Ax=target.Ax;current.Ay=target.Ay;current.Az=target.Az;
@@ -1250,7 +1257,8 @@ internal sealed class GameWindow : SilkForm
         physics.Update(dt,eye,forward,ViewRotation(),boxes,camera);
         physics.SyncSandboxDevices(localSandbox.Devices);
         localSandbox.Update(dt,device=>physics.ApplyThruster(device.Position,device.Yaw,dt,device.Id),
-            device=>physics.ApplyPiston(device.Position,device.Rotation,dt,device.Id));
+            device=>physics.ApplyPiston(device.Position,device.Rotation,dt,device.Id),
+            device=>physics.DevicePressed(device),device=>Vector3.DistanceSquared(device.Position,camera)<3f*3f);
         localMonster?.Update(dt,[new PlayerState { Id=1,X=eye.X,Y=eye.Y,Z=eye.Z,Yaw=smoothYaw }],physics.Bodies);
         visibleMonster=localMonster?.State;
         if(menu.MonsterSettings.Enabled && visibleMonster!=null &&
@@ -1268,7 +1276,7 @@ internal sealed class GameWindow : SilkForm
         X=source.X,Y=source.Y,Z=source.Z,Qx=source.Qx,Qy=source.Qy,Qz=source.Qz,Qw=source.Qw,
         Vx=source.Vx,Vy=source.Vy,Vz=source.Vz,Grounded=source.Grounded,
         Ax=source.Ax,Ay=source.Ay,Az=source.Az,SlipSpeed=source.SlipSpeed,
-        HalfSize=source.HalfSize,Emissive=source.Emissive,R=source.R,G=source.G,B=source.B
+        HalfSize=source.HalfSize,Emissive=source.Emissive,Plank=source.Plank,R=source.R,G=source.G,B=source.B
     };
     static SandboxDevice CloneDevice(SandboxDevice source) => new()
     {

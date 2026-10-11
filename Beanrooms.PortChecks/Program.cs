@@ -51,6 +51,32 @@ using(var photonAuthority=new PhotonAuthority([4,9]))
     if(!guestAttempt.SandboxEnabled)
         throw new Exception("Photon authority accepted a guest sandbox toggle");
 }
+{
+    var sandbox=new SandboxWorld();
+    var plate=new SandboxDevice { Id=1,Kind=SandboxKind.PressurePlate };
+    var delay=new SandboxDevice { Id=2,Kind=SandboxKind.Delay };
+    var lever=new SandboxDevice { Id=3,Kind=SandboxKind.Lever };
+    var counter=new SandboxDevice { Id=4,Kind=SandboxKind.Counter };
+    sandbox.Devices.AddRange([plate,delay,lever,counter]);
+    sandbox.Connect(1,2);sandbox.Connect(3,4);
+    sandbox.Update(.1f,platePressed:_=>true);
+    if(!plate.State) throw new Exception("Pressure plate did not report a nearby cube");
+    for(int i=0;i<7;i++) sandbox.Update(.1f,platePressed:_=>true);
+    if(!delay.State) throw new Exception("Delay gate did not hold then pass its input");
+    for(int pulse=0;pulse<3;pulse++)
+    {
+        lever.State=true;sandbox.Update(.02f);
+        lever.State=false;sandbox.Update(.02f);
+    }
+    if(!counter.State) throw new Exception("Counter did not fire on its third pulse");
+}
+{
+    var layout=WorldLayout.Generate(82317);
+    using var physics=new PhysicsBodies();
+    foreach(var plank in WorldLayout.CornerPlanks(82317,layout.Walls))
+        physics.SpawnCornerPlank(plank.Position,plank.Yaw,layout.Walls,new System.Numerics.Vector3(96f,1.68f,96f));
+    if(!physics.Bodies.Any(body=>body.Plank)) throw new Exception("Seeded world did not place any corner planks");
+}
 foreach(string asset in new[]{"wall.png","floor.png","ceiling.png","beanface.png","eye.png"})
 {
     string path=Path.Combine(AppContext.BaseDirectory,"assets",asset);
@@ -512,27 +538,18 @@ using(var game=new GameWindow())
     gameMenu.SelectSandbox(-9);
     if(gameMenu.SandboxSelected!=0 || gameMenu.SandboxScroll!=0)
         throw new Exception("Sandbox selection did not scroll back to the top");
-    gameMenu.SelectSandbox(9);
+    gameMenu.SelectSandbox(gameMenu.SandboxItemCount);
     gameMenu.MouseWheel(-120);
-    if(gameMenu.SandboxScroll!=3)
+    if(gameMenu.SandboxScroll!=gameMenu.SandboxMaxScroll)
         throw new Exception("Sandbox mouse wheel scrolled past the end");
     gameMenu.MouseWheel(120);
-    if(gameMenu.SandboxScroll!=2)
+    if(gameMenu.SandboxScroll!=Math.Max(0,gameMenu.SandboxMaxScroll-1))
         throw new Exception("Sandbox mouse wheel did not scroll the list");
-    gameMenu.MouseWheel(-120);
-    if(gameMenu.SandboxScroll!=3)
-        throw new Exception("Sandbox mouse wheel did not scroll back down");
-    gameMenu.MouseWheel(120);
-    if(gameMenu.SandboxScroll!=2)
-        throw new Exception("Sandbox mouse wheel did not scroll up from the end");
-    gameMenu.MouseWheel(120);
-    if(gameMenu.SandboxScroll!=1)
-        throw new Exception("Sandbox mouse wheel did not keep scrolling up");
-    gameMenu.MouseWheel(120);
+    for(int i=0;i<gameMenu.SandboxMaxScroll+2;i++) gameMenu.MouseWheel(120);
     if(gameMenu.SandboxScroll!=0)
         throw new Exception("Sandbox mouse wheel did not reach the top");
     gameMenu.MouseWheel(-120);
-    if(gameMenu.SandboxScroll!=1)
+    if(gameMenu.SandboxScroll!=Math.Min(1,gameMenu.SandboxMaxScroll))
         throw new Exception("Sandbox mouse wheel did not scroll down from the top");
     int settingsRow=gameMenu.Selected;
     key.Invoke(game,[new Message(),Keys.Down]);
@@ -691,6 +708,8 @@ if(args.Contains("--photon"))
     { first.Service(1f/60f);second.Service(1f/60f);Thread.Sleep(16); }
     if(host.Snapshot().HostId!=host.Id||guest.Snapshot().HostId!=host.Id)
         throw new Exception("Photon snapshots did not select the room master as host");
+    if(!host.Snapshot().Cubes.Any(cube=>cube.Plank)||!guest.Snapshot().Cubes.Any(cube=>cube.Plank))
+        throw new Exception("Photon corner planks did not replicate to every room player");
     host.Send(new NetMessage { Type="sandbox_toggle" });
     deadline=DateTime.UtcNow.AddSeconds(5);
     while(!guest.Snapshot().SandboxEnabled && DateTime.UtcNow<deadline)

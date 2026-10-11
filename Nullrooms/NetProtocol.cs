@@ -229,6 +229,7 @@ internal sealed class CubeState
     public float Qw { get; set; }
     public float HalfSize { get; set; }
     public bool Emissive { get; set; }
+    public bool Plank { get; set; }
     public float R { get; set; }
     public float G { get; set; }
     public float B { get; set; }

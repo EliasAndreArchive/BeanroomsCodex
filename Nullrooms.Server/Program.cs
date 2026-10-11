@@ -68,6 +68,8 @@ internal sealed class LocalServer : IDisposable
         physics.Clear();
         sandbox.Clear();
         walls = WorldLayout.Generate(seed).Walls;
+        foreach(var plank in WorldLayout.CornerPlanks(seed,walls))
+            physics.SpawnCornerPlank(plank.Position,plank.Yaw,walls,new Vector3(96f,1.68f,96f));
         monster = new MonsterBrain(seed,walls,monsterSettings);
     }
 
@@ -106,7 +108,9 @@ internal sealed class LocalServer : IDisposable
             while(accumulator>=Step)
             {
                 sandbox.Update(Step,device=>physics.ApplyThruster(device.Position,device.Yaw,Step,device.Id),
-                device=>physics.ApplyPiston(device.Position,device.Rotation,Step,device.Id));
+                device=>physics.ApplyPiston(device.Position,device.Rotation,Step,device.Id),
+                device=>physics.DevicePressed(device),device=>peers.Values.Any(peer=>
+                    Vector3.DistanceSquared(device.Position,new Vector3(peer.X,peer.Y,peer.Z))<3f*3f));
                 Vector3 eye=new(96f,1.68f,96f), forward=Vector3.UnitZ;
                 Quaternion rotation=Quaternion.Identity;
                 foreach(Peer peer in peers.Values)
@@ -381,7 +385,7 @@ internal sealed class LocalServer : IDisposable
             Ax=body.AngularVelocity.X,Ay=body.AngularVelocity.Y,Az=body.AngularVelocity.Z,
             SlipSpeed=PhysicsBodies.ContactSlipSpeed(body),
             Qx=body.Rotation.X,Qy=body.Rotation.Y,Qz=body.Rotation.Z,Qw=body.Rotation.W,
-            HalfSize=body.HalfSize,Emissive=body.Emissive,
+            HalfSize=body.HalfSize,Emissive=body.Emissive,Plank=body.Plank,
             R=body.Color.X,G=body.Color.Y,B=body.Color.Z
         }).ToArray();
         var message=new NetMessage { Type="snapshot",Seed=seed,Players=players,Cubes=cubes,
