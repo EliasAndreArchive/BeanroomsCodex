@@ -6,9 +6,32 @@ namespace Beanrooms;
 internal sealed class DebugMenu
 {
     internal bool Open, TitleScreen, SettingsFromTitle, Dithering = true, PaletteReduction = true, PostEnabled = true, AutoExposure, Bloom = true, Lights = true, Vsync = true, Dirty = true, Volumetrics = true;
+    internal bool SandboxPage, SandboxEnabled, SandboxHost=true, WireTool, WeldTool;
+    internal int SandboxCategory, SandboxSelected;
+    internal Action<SandboxKind>? SandboxSpawn;
+    internal Action? SandboxToggle;
+    static readonly SandboxKind[][] SandboxItems =
+    [
+        [SandboxKind.Cube,SandboxKind.GlowCube],
+        [SandboxKind.Thruster,SandboxKind.Lamp],
+        [SandboxKind.Button,SandboxKind.Lever,SandboxKind.And,SandboxKind.Or,SandboxKind.Not]
+    ];
+    internal SandboxKind SelectedSandboxItem => SandboxItems[SandboxCategory][SandboxSelected];
+    static string SandboxName(SandboxKind kind) => kind switch
+    {
+        SandboxKind.GlowCube=>"GLOW CUBE",SandboxKind.And=>"AND GATE",
+        SandboxKind.Or=>"OR GATE",SandboxKind.Not=>"NOT GATE",_=>kind.ToString().ToUpperInvariant()
+    };
+    internal void ToggleSandbox()
+    {
+        FinishEditing();
+        if(Open && SandboxPage) { Open=false;SandboxPage=false; }
+        else { Open=true;SandboxPage=true;TitleScreen=false; }
+        SandboxCategory=0;SandboxSelected=0;Dirty=true;InteractionSound?.Invoke();
+    }
     internal int TitlePage, TitleSelected;
     internal int RenderMode = 2, ProbeQuality = 2, ProbeBounces = 4, HybridDirectSamples = 4;
-    internal string RenderModeName => RenderMode switch { 0 => "Preview", 1 => "Hybrid GI", _ => "Path traced fixed" };
+    internal string RenderModeName => RenderMode switch { 0 => "Preview", 1 => "Realtime GI", _ => "Path traced fixed" };
     internal int Temperature, PaletteSteps = 16, Samples = 32, Bounces = 2, ResolutionIndex, FpsLimit;
     internal int TonemapMode = 2;
     internal float Exposure = 2f, Saturation = 1f, Contrast = 1f;
@@ -43,6 +66,7 @@ internal sealed class DebugMenu
     internal (PointF A,PointF B,Color Ink)[] MonsterSegments = [];
     internal (PointF At,string Label,Color Ink)[] MonsterPoints = [];
     internal (PointF At,string Label,Color Ink)[] PlayerTags = [];
+    internal (PointF A,PointF B,Color Ink)[] SandboxWires = [];
     internal RectangleF[] ObjectFrames = [];
     internal string MonsterTargetText = "TARGET NONE";
     internal int BodyCount;
@@ -112,11 +136,12 @@ internal sealed class DebugMenu
         new[] { "PLAYER NAME", "BEAN COLOR", "RED", "GREEN", "BLUE", "SERVER", "JOIN KEY", "CONNECT", "DISCONNECT", "CONNECTION", "PLAYER ID", "PLAYERS", "ROLE" },
         new[] { "POST FX", "TONEMAP", "EXPOSURE", "AUTO EXPOSURE", "BRIGHTEN SPEED", "DARKEN SPEED", "BLOOM", "BLOOM STRENGTH", "BLOOM THRESHOLD", "BLOOM RADIUS" },
         new[] { "MINOR FLICKER", "MINOR INTERVAL", "MINOR CHANCE", "MINOR DURATION", "RANDOM EVENTS", "EVENT INTERVAL", "EVENT LENGTH", "EVENT SPEED MIN", "EVENT SPEED MAX", "EVENT OFF CHANCE", "CHASE FLICKER", "CHASE FOG", "CHASE FOG MAX", "FOG RISE", "FOG FALL", "CHASE RED", "CHASE RED CHANCE" },
-        new[] { "RESUME", "LEAVE MULTIPLAYER", "MAIN MENU", "QUIT GAME", "CONNECTION", "PLAYERS", "ROLE" }
+        new[] { "RESUME", "LEAVE MULTIPLAYER", "MAIN MENU", "QUIT GAME", "CONNECTION", "PLAYERS", "ROLE", "SANDBOX MODE" }
     };
 
     internal void Toggle()
     {
+        if(SandboxPage) { ToggleSandbox();return; }
         FinishEditing();
         if(Open && SettingsFromTitle && !TitleScreen) ShowTitle();
         else if(Open && TitleScreen && TitlePage==1) ShowTitle();
@@ -285,6 +310,26 @@ internal sealed class DebugMenu
 
     internal void MouseDown(int x, int y)
     {
+        if(SandboxPage)
+        {
+            if(x>=294 && y>=24 && y<39) { ToggleSandbox();return; }
+            if(y>=43 && y<59 && x>=13 && x<211)
+            { SandboxCategory=Math.Clamp((x-13)/66,0,2);SandboxSelected=0;Dirty=true;InteractionSound?.Invoke();return; }
+            if(x>=13 && x<210 && y>=67 && y<161)
+            {
+                int col=(x-13)/64,itemRow=(y-67)/48,index=itemRow*3+col;
+                if(index<SandboxItems[SandboxCategory].Length)
+                { SandboxSelected=index;Dirty=true;InteractionSound?.Invoke(); }
+                return;
+            }
+            if(x>=218 && x<305 && y>=170 && y<189)
+            {
+                SandboxKind kind=SandboxItems[SandboxCategory][SandboxSelected];
+                if(SandboxEnabled || kind==SandboxKind.Cube) SandboxSpawn?.Invoke(kind);
+                Dirty=true;InteractionSound?.Invoke();return;
+            }
+            return;
+        }
         if(TitleScreen)
         {
             int titleRow=TitleRowAt(x,y);
@@ -317,6 +362,7 @@ internal sealed class DebugMenu
     }
     internal void MouseMove(int x,int y)
     {
+        if(SandboxPage) return;
         if(TitleScreen)
         {
             int row=TitleRowAt(x,y);
@@ -532,7 +578,8 @@ internal sealed class DebugMenu
         }
         else if(Page == 9)
         {
-            if(row<4) SessionAction?.Invoke(row);
+            if(row==7 && (!NetworkConnected || SandboxHost)) SandboxToggle?.Invoke();
+            else if(row<4) SessionAction?.Invoke(row);
             else return;
         }
         else if(Page == 7)
@@ -604,6 +651,7 @@ internal sealed class DebugMenu
             4 => NetworkConnected ? (NetworkRemote ? "ONLINE" : "LOCAL") : NetworkStatus,
             5 => NetworkConnected ? NetworkPlayers.ToString() : "1",
             6 => NetworkConnected ? (NetworkId==NetworkHost ? "HOST" : "GUEST") : "SOLO",
+            7 => SandboxEnabled ? "ON" : "OFF",
             _ => ""
         };
         if(Page == 8) return row switch
@@ -874,6 +922,29 @@ internal sealed class DebugMenu
         g.FillRectangle(brush,right-corner,bottom-1,corner,1);
         g.FillRectangle(brush,right-1,bottom-corner,1,corner);
     }
+    static void DrawSandboxIcon(Graphics g,SandboxKind kind,int x,int y)
+    {
+        using var metal=new SolidBrush(Color.FromArgb(139,150,159));
+        using var dark=new SolidBrush(Color.FromArgb(76,86,98));
+        using var accent=new SolidBrush(kind==SandboxKind.GlowCube || kind==SandboxKind.Lamp?
+            Color.FromArgb(244,227,135):kind==SandboxKind.Thruster?
+            Color.FromArgb(238,122,63):Color.FromArgb(89,205,169));
+        if(kind is SandboxKind.Cube or SandboxKind.GlowCube)
+        { g.FillRectangle(metal,x-10,y-10,20,20);g.FillRectangle(dark,x-8,y-8,16,16);
+          if(kind==SandboxKind.GlowCube) g.FillRectangle(accent,x-5,y-5,10,10); }
+        else if(kind==SandboxKind.Thruster)
+        { g.FillRectangle(metal,x-9,y-6,18,13);g.FillRectangle(dark,x-5,y-9,10,4);
+          g.FillRectangle(accent,x-5,y+7,10,5); }
+        else if(kind==SandboxKind.Lever)
+        { g.FillRectangle(metal,x-11,y+4,22,6);g.FillRectangle(accent,x+2,y-10,4,16); }
+        else if(kind==SandboxKind.Button)
+        { g.FillRectangle(metal,x-11,y-2,22,11);g.FillRectangle(accent,x-7,y-7,14,7); }
+        else if(kind==SandboxKind.Lamp)
+        { g.FillRectangle(metal,x-11,y+4,22,5);g.FillRectangle(accent,x-8,y-10,16,16); }
+        else
+        { g.FillRectangle(metal,x-12,y-9,24,19);g.FillRectangle(dark,x-9,y-6,18,13);
+          PixelText(g,kind==SandboxKind.And?"&":kind==SandboxKind.Or?"+":"!",accent,x-3,y-4); }
+    }
     internal Bitmap Draw()
     {
         var image = new Bitmap(320, 240, PixelFormat.Format32bppArgb);
@@ -885,7 +956,52 @@ internal sealed class DebugMenu
         using var paleBlue = new SolidBrush(Color.FromArgb(170, 211, 231));
         using var green = new SolidBrush(Color.FromArgb(84, 224, 160));
         using var unfilled = new SolidBrush(Color.FromArgb(130, 160, 171));
-        if(Open && TitleScreen)
+        if(Open && SandboxPage)
+        {
+            using var panel=new SolidBrush(Color.FromArgb(235,34,35,44));
+            using var inset=new SolidBrush(Color.FromArgb(255,20,22,29));
+            using var tile=new SolidBrush(Color.FromArgb(255,45,46,57));
+            using var blue=new SolidBrush(Color.FromArgb(45,79,183));
+            using var amber=new SolidBrush(Color.FromArgb(220,184,101));
+            g.FillRectangle(panel,8,24,304,195);
+            g.FillRectangle(inset,8,24,304,15);
+            PixelText(g,"SANDBOX MENU",white,117,28);
+            PixelText(g,"X",white,299,28);
+            string[] categories=["OBJECTS","DEVICES","LOGIC"];
+            for(int i=0;i<3;i++)
+            {
+                g.FillRectangle(i==SandboxCategory?amber:tile,13+i*66,43,63,16);
+                PixelText(g,categories[i],i==SandboxCategory?inset:white,16+i*66,47);
+            }
+            SandboxKind[] items=SandboxItems[SandboxCategory];
+            for(int i=0;i<items.Length;i++)
+            {
+                int x=13+(i%3)*64,y=67+(i/3)*48;
+                g.FillRectangle(i==SandboxSelected?blue:tile,x,y,60,44);
+                DrawSandboxIcon(g,items[i],x+30,y+17);
+                string name=SandboxName(items[i]);
+                PixelText(g,name.Length>9?name[..9]:name,white,x+2,y+34);
+            }
+            g.FillRectangle(inset,214,43,92,116);
+            SandboxKind selected=items[SandboxSelected];
+            DrawSandboxIcon(g,selected,260,77);
+            PixelText(g,SandboxName(selected),white,220,106);
+            string detail=selected switch
+            {
+                SandboxKind.Cube=>"PHYSICS BOX",SandboxKind.GlowCube=>"LIGHT BOX",
+                SandboxKind.Thruster=>"POWER PUSHES CUBE",SandboxKind.Button=>"PULSE OUTPUT",
+                SandboxKind.Lever=>"TOGGLE OUTPUT",SandboxKind.And=>"ALL INPUTS ON",
+                SandboxKind.Or=>"ANY INPUT ON",SandboxKind.Not=>"INVERT INPUT",
+                _=>"POWERED LIGHT"
+            };
+            PixelText(g,detail.Length>14?detail[..14]:detail,paleBlue,219,128);
+            g.FillRectangle(blue,218,170,87,19);
+            PixelText(g,SandboxEnabled || selected==SandboxKind.Cube?"SPAWN":"LOCKED",white,239,176);
+            PixelText(g,NetworkConnected?"HOST CONTROLS":"LOCAL SANDBOX",paleBlue,218,198);
+            PixelText(g,"TAB > SESSION",paleBlue,218,207);
+            PixelText(g,"B CLOSE  G WIRE  K WELD  E USE",paleBlue,13,225);
+        }
+        else if(Open && TitleScreen)
         {
             PixelText(g,TitlePage==0?"BEANROOMS MENU":"BEANROOMS ONLINE",paleBlue,12,4);
             if(TitlePage==0)
@@ -935,7 +1051,8 @@ internal sealed class DebugMenu
                 bool locked=Page==5&&!MonsterControlsWritable ||
                     Page==8&&!FlickerControlsWritable ||
                     Page==2&&!MovementControlsWritable ||
-                    Page==9&&row==1&&!NetworkConnected&&!NetworkRemote;
+                    Page==9&&row==1&&!NetworkConnected&&!NetworkRemote ||
+                    Page==9&&row==7&&NetworkConnected&&!SandboxHost;
                 Brush ink=locked?unfilled:focused?green:white;
                 PixelText(g,$"{row+1}.",ink,21,y+textOffset);
                 PixelText(g,Labels[Page][row],ink,44,y+textOffset);
@@ -958,6 +1075,10 @@ internal sealed class DebugMenu
         }
         else
         {
+            if(WireTool)
+                PixelText(g,"WIRE TOOL: CLICK SOURCE, THEN TARGET",green,13,225);
+            else if(WeldTool)
+                PixelText(g,"WELD TOOL: CLICK TWO OBJECTS",green,13,225);
             foreach(var tag in PlayerTags)
             {
                 using var brush=new SolidBrush(tag.Ink);
@@ -967,6 +1088,11 @@ internal sealed class DebugMenu
             {
                 DrawFrameCorners(g,Brushes.Black,frame,1);
                 DrawFrameCorners(g,white,frame,0);
+            }
+            foreach(var wire in SandboxWires)
+            {
+                using var pen=new Pen(wire.Ink);
+                g.DrawLine(pen,wire.A,wire.B);
             }
             if(ShowDebugOverlay)
             {
@@ -992,4 +1118,5 @@ internal sealed class DebugMenu
         Dirty = false;
         return image;
     }
+
 }

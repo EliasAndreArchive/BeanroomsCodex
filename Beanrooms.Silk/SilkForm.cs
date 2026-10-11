@@ -9,8 +9,8 @@ namespace Beanrooms;
 
 internal enum Keys
 {
-    None,A,Back,C,ControlKey,D,D1,D2,D3,Delete,Down,E,Enter,Escape,F,F11,H,
-    LControlKey,Left,LShiftKey,M,OemCloseBrackets,OemMinus,OemOpenBrackets,Oemplus,
+    None,A,B,Back,C,ControlKey,D,D1,D2,D3,Delete,Down,E,Enter,Escape,F,F11,G,H,
+    K,LControlKey,Left,LShiftKey,M,OemCloseBrackets,OemMinus,OemOpenBrackets,Oemplus,
     P,Q,R,RControlKey,Right,RShiftKey,S,ShiftKey,Space,T,Tab,Up,V,W
 }
 internal sealed class KeyEventArgs(Keys key,bool control) : EventArgs
@@ -169,8 +169,8 @@ internal abstract class SilkForm : IDisposable
     };
     static Keys Translate(Key key) => key switch
     {
-        Key.A=>Keys.A,Key.B=>Keys.None,Key.C=>Keys.C,Key.D=>Keys.D,Key.E=>Keys.E,
-        Key.F=>Keys.F,Key.H=>Keys.H,Key.M=>Keys.M,Key.P=>Keys.P,Key.Q=>Keys.Q,
+        Key.A=>Keys.A,Key.B=>Keys.B,Key.C=>Keys.C,Key.D=>Keys.D,Key.E=>Keys.E,
+        Key.F=>Keys.F,Key.G=>Keys.G,Key.H=>Keys.H,Key.K=>Keys.K,Key.M=>Keys.M,Key.P=>Keys.P,Key.Q=>Keys.Q,
         Key.R=>Keys.R,Key.S=>Keys.S,Key.T=>Keys.T,Key.V=>Keys.V,Key.W=>Keys.W,
         Key.Number1=>Keys.D1,Key.Number2=>Keys.D2,Key.Number3=>Keys.D3,
         Key.Backspace=>Keys.Back,Key.Delete=>Keys.Delete,Key.Down=>Keys.Down,

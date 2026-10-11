@@ -80,6 +80,13 @@ internal sealed class GameWindow : SilkForm
     readonly Stopwatch watch = Stopwatch.StartNew();
     readonly HashSet<Keys> keys = new();
     readonly List<RectangleF> boxes = new();
+    readonly SandboxWorld localSandbox = new();
+    SandboxDevice[] networkDevices=[];
+    SandboxWire[] networkWires=[];
+    int pendingWireId;
+    int pendingWeldId;
+    bool sandboxToggleKeyDown;
+    bool wireToggleKeyDown,weldToggleKeyDown;
     readonly List<Vector2> activeFixtures = new();
     readonly float[] fixturePixels = new float[FixtureGrid*FixtureGrid*4];
     readonly bool[] fixtureBase = new bool[FixtureGrid*FixtureGrid];
@@ -120,10 +127,11 @@ internal sealed class GameWindow : SilkForm
     readonly Dictionary<int, float> remoteYaws = new();
     readonly Dictionary<int, Vector3> remoteColors = new();
     readonly Dictionary<int, string> remoteNames = new();
+    readonly List<FootstepSource> remoteFootsteps = new();
     CubeState[] networkCubes = [];
-    readonly HeldCubePrediction heldCubePrediction = new();
     double nextNetworkSend;
     bool networkHolding;
+    int grabSequence;
     int respawnId;
     double localRespawnProtectedUntil;
     bool chaseLocked;
@@ -170,6 +178,8 @@ internal sealed class GameWindow : SilkForm
         menu.HoverSound=()=>audio?.PlayHover();
         Text = "BEANROOMS  |  WASD move  •  F cube  •  T light event  •  Tab menu  •  F11 full screen";
         menu.ObjectAction = HandleObjectAction;
+        menu.SandboxSpawn = SpawnSandboxItem;
+        menu.SandboxToggle = ToggleSandboxPermission;
         ClientSize = new Size(960, 720);
         string? localSide=Environment.GetCommandLineArgs().Skip(1).FirstOrDefault(arg=>arg is "--local-left" or "--local-right");
         launchFullscreen=localSide==null;
@@ -182,7 +192,31 @@ internal sealed class GameWindow : SilkForm
             Location=new Point(left+(localSide=="--local-right"?656:0),top);
         }
         KeyDown += (_, e) => {
+            if(e.KeyCode==Keys.B)
+            {
+                if(!sandboxToggleKeyDown) { sandboxToggleKeyDown=true;ToggleSandboxMenu(); }
+                e.Handled=true;
+                return;
+            }
+            if(!menu.Open && e.KeyCode==Keys.G)
+            {
+                if(!wireToggleKeyDown) { wireToggleKeyDown=true;menu.WireTool=!menu.WireTool;menu.WeldTool=false;pendingWireId=0;menu.Dirty=true; }
+                e.Handled=true;return;
+            }
+            if(!menu.Open && e.KeyCode==Keys.K)
+            {
+                if(!weldToggleKeyDown) { weldToggleKeyDown=true;menu.WeldTool=!menu.WeldTool;menu.WireTool=false;pendingWeldId=0;menu.Dirty=true; }
+                e.Handled=true;return;
+            }
             if(menu.Open) {
+                if(menu.SandboxPage)
+                {
+                    if(e.KeyCode is Keys.B or Keys.Escape) ToggleSandboxMenu();
+                    else if(e.KeyCode==Keys.Left) menu.SandboxCategory=Math.Max(0,menu.SandboxCategory-1);
+                    else if(e.KeyCode==Keys.Right) menu.SandboxCategory=Math.Min(2,menu.SandboxCategory+1);
+                    else if(e.KeyCode==Keys.Enter) SpawnSandboxItem(menu.SelectedSandboxItem);
+                    menu.Dirty=true;e.Handled=true;return;
+                }
                 if(menu.EditingText)
                 {
                     bool handled=true;
@@ -214,19 +248,19 @@ internal sealed class GameWindow : SilkForm
             if (e.KeyCode == Keys.Escape) ReleaseMouse();
         };
         KeyPress += (_, e) => { if(menu.Open && menu.EditingText) { if(menu.EditingName) menu.EditNameCharacter(e.KeyChar); else menu.EditConnectionCharacter(e.KeyChar);e.Handled=true; } };
-        KeyUp += (_, e) => { keys.Remove(e.KeyCode); if(menu.Open) return; if (e.KeyCode == Keys.C) crouchToggle=!crouchToggle; if (e.KeyCode == Keys.R) Regenerate(); if (e.KeyCode == Keys.F) HandleObjectAction(0); if (e.KeyCode == Keys.T) TriggerLightEvent(); if (e.KeyCode == Keys.P) { menu.RenderMode=(menu.RenderMode+1)%3; menu.Dirty=true; } if (e.KeyCode == Keys.D1) { menu.ResolutionIndex=0; menu.Dirty=true; } if (e.KeyCode == Keys.D2) { menu.ResolutionIndex=1; menu.Dirty=true; } if (e.KeyCode == Keys.D3) { menu.ResolutionIndex=2; menu.Dirty=true; } if(menu.MovementControlsWritable && e.KeyCode==Keys.OemOpenBrackets) { menu.WalkSpeed=Math.Max(1f,menu.WalkSpeed-0.4f); menu.Dirty=true; } if(menu.MovementControlsWritable && e.KeyCode==Keys.OemCloseBrackets) { menu.WalkSpeed=Math.Min(8f,menu.WalkSpeed+0.4f); menu.Dirty=true; } if(e.KeyCode==Keys.OemMinus) { menu.MouseSensitivity=Math.Max(0.0004f,menu.MouseSensitivity*0.85f); menu.Dirty=true; } if(e.KeyCode==Keys.Oemplus) { menu.MouseSensitivity=Math.Min(0.005f,menu.MouseSensitivity*1.15f); menu.Dirty=true; } };
+        KeyUp += (_, e) => { keys.Remove(e.KeyCode); if(e.KeyCode==Keys.B) sandboxToggleKeyDown=false; if(e.KeyCode==Keys.G) wireToggleKeyDown=false; if(e.KeyCode==Keys.K) weldToggleKeyDown=false; if(menu.Open) return; if(e.KeyCode==Keys.E) InteractWithDevice(); if (e.KeyCode == Keys.C) crouchToggle=!crouchToggle; if (e.KeyCode == Keys.R) Regenerate(); if (e.KeyCode == Keys.F) HandleObjectAction(0); if (e.KeyCode == Keys.T) TriggerLightEvent(); if (e.KeyCode == Keys.P) { menu.RenderMode=(menu.RenderMode+1)%3; menu.Dirty=true; } if (e.KeyCode == Keys.D1) { menu.ResolutionIndex=0; menu.Dirty=true; } if (e.KeyCode == Keys.D2) { menu.ResolutionIndex=1; menu.Dirty=true; } if (e.KeyCode == Keys.D3) { menu.ResolutionIndex=2; menu.Dirty=true; } if(menu.MovementControlsWritable && e.KeyCode==Keys.OemOpenBrackets) { menu.WalkSpeed=Math.Max(1f,menu.WalkSpeed-0.4f); menu.Dirty=true; } if(menu.MovementControlsWritable && e.KeyCode==Keys.OemCloseBrackets) { menu.WalkSpeed=Math.Min(8f,menu.WalkSpeed+0.4f); menu.Dirty=true; } if(e.KeyCode==Keys.OemMinus) { menu.MouseSensitivity=Math.Max(0.0004f,menu.MouseSensitivity*0.85f); menu.Dirty=true; } if(e.KeyCode==Keys.Oemplus) { menu.MouseSensitivity=Math.Min(0.005f,menu.MouseSensitivity*1.15f); menu.Dirty=true; } };
         KeyUp += (_, e) => {
             if(menu.Open) return;
             if(e.KeyCode==Keys.M) { menu.MonsterDebug=!menu.MonsterDebug;menu.Dirty=true; }
             if(e.KeyCode==Keys.H) { menu.ShowDebugOverlay=!menu.ShowDebugOverlay;menu.Dirty=true; }
             if(e.KeyCode==Keys.V) { menu.Volumetrics=!menu.Volumetrics;menu.Dirty=true; }
         };
-        MouseDown += (_, e) => { if(menu.Open) { if(TryMenuPoint(e.Location,out Point point)) menu.MouseDown(point.X,point.Y); if(!menu.Open) CloseSettings(); return; } wantsCapture=true; CaptureMouse(); if(e.Button==MouseButtons.Left && active) { if(network.Connected) { networkHolding=true; ViewPose(out Vector3 eye,out Vector3 forward); heldCubePrediction.TryBegin(networkCubes,eye,forward,ViewRotation(),menu.PickupRange,menu.HoldDistance,boxes); SendPlayerState(); network.Send(new NetMessage { Type="pickup" }); } else { ViewPose(out Vector3 eye,out Vector3 forward); physics.HoldDistance=menu.HoldDistance; physics.TryPickup(eye,forward,ViewRotation(),boxes); } } };
+        MouseDown += (_, e) => { if(menu.Open) { if(TryMenuPoint(e.Location,out Point point)) menu.MouseDown(point.X,point.Y); if(!menu.Open) CloseSettings(); return; } wantsCapture=true; CaptureMouse(); if(e.Button==MouseButtons.Left && active) { if(menu.WireTool) { WireDevice();return; } if(menu.WeldTool) { WeldGrabbables();return; } if(network.Connected) { networkHolding=true; SendPlayerState(); network.Send(new NetMessage { Type="pickup",GrabSequence=++grabSequence }); } else { ViewPose(out Vector3 eye,out Vector3 forward); physics.HoldDistance=menu.HoldDistance; physics.TryPickup(eye,forward,ViewRotation(),boxes); } } };
         MouseMove += (_, e) => { if(menu.Open && TryMenuPoint(e.Location,out Point point)) menu.MouseMove(point.X,point.Y); };
         MouseWheel += (_, e) => { if(!menu.Open && (physics.Held!=null || networkHolding)) { menu.HoldDistance=Math.Clamp(menu.HoldDistance+Math.Sign(e.Delta)*0.2f,1.2f,4f); menu.Dirty=true; } };
-        MouseUp += (_, e) => { menu.MouseUp(); if(e.Button==MouseButtons.Left) { networkHolding=false; heldCubePrediction.Clear(); if(network.Connected) network.Send(new NetMessage { Type="release" }); else physics.Release(); } };
+        MouseUp += (_, e) => { menu.MouseUp(); if(e.Button==MouseButtons.Left) { if(network.Connected) network.Send(new NetMessage { Type="release" }); else physics.Release(); networkHolding=false; } };
         Activated += (_, _) => { if(ready && wantsCapture) BeginInvoke(new Action(CaptureMouse)); };
-        Deactivate += (_, _) => { networkHolding=false; heldCubePrediction.Clear(); network.Send(new NetMessage { Type="release" }); physics.Release(); SuspendMouse(); };
+        Deactivate += (_, _) => { networkHolding=false; network.Send(new NetMessage { Type="release" }); physics.Release(); SuspendMouse(); };
         FormClosed += (_, _) => { audio?.Dispose(); network.Dispose(); physics.Dispose(); ReleaseMouse(); };
     }
 
@@ -443,6 +477,12 @@ internal sealed class GameWindow : SilkForm
                 hash.Add((int)MathF.Round(cube.Z*20f));hash.Add(cube.HalfSize);
                 hash.Add(cube.R);hash.Add(cube.G);hash.Add(cube.B);
             }
+            foreach(SandboxDevice device in networkDevices)
+            {
+                if(device.Kind!=SandboxKind.Lamp) continue;
+                hash.Add(device.Id);hash.Add(device.State);
+                hash.Add((int)MathF.Round(device.X*12f));hash.Add((int)MathF.Round(device.Z*12f));
+            }
         }
         else
         {
@@ -453,6 +493,12 @@ internal sealed class GameWindow : SilkForm
                 hash.Add((int)MathF.Round(cube.Position.Y*20f));
                 hash.Add((int)MathF.Round(cube.Position.Z*20f));
                 hash.Add(cube.HalfSize);hash.Add(cube.Color);
+            }
+            foreach(SandboxDevice device in localSandbox.Devices)
+            {
+                if(device.Kind!=SandboxKind.Lamp) continue;
+                hash.Add(device.Id);hash.Add(device.State);
+                hash.Add((int)MathF.Round(device.X*12f));hash.Add((int)MathF.Round(device.Z*12f));
             }
         }
         return hash.ToHashCode();
@@ -472,13 +518,16 @@ internal sealed class GameWindow : SilkForm
 
     void UploadObjects(int program,bool animate)
     {
-        int bodyCount=network.Connected?networkCubes.Length:physics.Bodies.Count;
-        if(cubeVisualIds.Length<bodyCount)
+        RigidCube[] localCubes=network.Connected?[]:physics.Bodies.Where(body=>body.SandboxDeviceId==0).ToArray();
+        int cubeCount=network.Connected?networkCubes.Length:localCubes.Length;
+        SandboxDevice[] devices=network.Connected?networkDevices:localSandbox.Devices.ToArray();
+        int bodyCount=cubeCount+devices.Length;
+        if(cubeVisualIds.Length<cubeCount)
         {
-            Array.Resize(ref cubeVisualIds,bodyCount);
-            Array.Resize(ref cubeVisualBirth,bodyCount);
+            Array.Resize(ref cubeVisualIds,cubeCount);
+            Array.Resize(ref cubeVisualBirth,cubeCount);
         }
-        if(cubeVisualNetworkMode!=network.Connected || bodyCount==0)
+        if(cubeVisualNetworkMode!=network.Connected || cubeCount==0)
         {
             Array.Clear(cubeVisualIds);
             cubeVisualNetworkMode=network.Connected;
@@ -488,7 +537,7 @@ internal sealed class GameWindow : SilkForm
         if(objectTexels.Length<bodyCount*12) Array.Resize(ref objectTexels,bodyCount*12);
         float[] texels=objectTexels;
         double now=watch.Elapsed.TotalSeconds;
-        for(int i=0;i<bodyCount;i++)
+        for(int i=0;i<cubeCount;i++)
         {
             int j=i*12;
             if(network.Connected)
@@ -502,13 +551,31 @@ internal sealed class GameWindow : SilkForm
             }
             else
             {
-                RigidCube b=physics.Bodies[i];
+                RigidCube b=localCubes[i];
                 texels[j]=b.Position.X; texels[j+1]=b.Position.Y; texels[j+2]=b.Position.Z;
                 texels[j+3]=b.HalfSize*(animate?CubeVisualScale(i,b.Id,now):1f);
                 texels[j+4]=b.Rotation.X; texels[j+5]=b.Rotation.Y; texels[j+6]=b.Rotation.Z; texels[j+7]=b.Rotation.W;
                 texels[j+8]=b.Color.X; texels[j+9]=b.Color.Y; texels[j+10]=b.Color.Z;
                 texels[j+11]=b.Emissive?1f:0f;
             }
+        }
+        for(int i=0;i<devices.Length;i++)
+        {
+            SandboxDevice device=devices[i];int j=(cubeCount+i)*12;
+            texels[j]=device.X;texels[j+1]=device.Y;texels[j+2]=device.Z;texels[j+3]=0.5f;
+            Quaternion q=device.Rotation;
+            if(q.LengthSquared()<0.001f) q=Quaternion.CreateFromAxisAngle(Vector3.UnitY,device.Yaw);
+            texels[j+4]=q.X;texels[j+5]=q.Y;texels[j+6]=q.Z;texels[j+7]=q.W;
+            Vector3 color=device.Kind switch
+            {
+                SandboxKind.Thruster=>new(0.55f,0.62f,0.68f),
+                SandboxKind.Button=>new(0.75f,0.19f,0.12f),
+                SandboxKind.Lever=>new(0.65f,0.68f,0.62f),
+                SandboxKind.Lamp=>new(0.95f,0.83f,0.44f),
+                _=>new(0.21f,0.49f,0.56f)
+            };
+            texels[j+8]=color.X;texels[j+9]=color.Y;texels[j+10]=color.Z;
+            texels[j+11]=(int)device.Kind+2+(device.State?0.5f:0f);
         }
         int textureUnit=program==probeProgram?4:9;
         Bind(textureUnit,objectTexture);
@@ -570,10 +637,12 @@ internal sealed class GameWindow : SilkForm
     {
         probeDirty=true;
         physics.Clear();
+        localSandbox.Clear();networkDevices=[];networkWires=[];pendingWireId=0;pendingWeldId=0;
         var layout=WorldLayout.Generate(seed);
         grid=layout.Grid;
         boxes.Clear();
         boxes.AddRange(layout.Walls);
+        audio?.SetWorld(boxes);
         localMonster = new MonsterBrain(seed,boxes,menu.MonsterSettings);
         visibleMonster = localMonster.State;
         Gl.BindTexture(0x0DE1,worldTexture);
@@ -588,7 +657,7 @@ internal sealed class GameWindow : SilkForm
         smoothYaw = yaw;
         smoothPitch = pitch;
         lookInitialized = true;
-        menu.BodyCount=physics.Bodies.Count; menu.Dirty=true;
+        menu.BodyCount=physics.Bodies.Count(body=>body.SandboxDeviceId==0); menu.Dirty=true;
     }
     static float FixtureHash(int x,int z,int worldSeed)
     {
@@ -711,7 +780,7 @@ internal sealed class GameWindow : SilkForm
     {
         bool opening=!menu.Open;
         networkHolding=false;
-        heldCubePrediction.Clear();
+
         network.Send(new NetMessage { Type="release" });
         physics.Release();
         menu.Toggle();
@@ -753,7 +822,7 @@ internal sealed class GameWindow : SilkForm
         networkStarted=false;
         remoteServer=false;
         networkHolding=false;
-        heldCubePrediction.Clear();
+
         menu.NetworkRemote=false;
         menu.NetworkConnected=false;
         menu.NetworkId=0;
@@ -807,6 +876,7 @@ internal sealed class GameWindow : SilkForm
     }
     void HandleObjectAction(int action)
     {
+        if(action==1 && !menu.SandboxEnabled) return;
         if(network.Connected)
         {
             SendPlayerState();
@@ -814,14 +884,129 @@ internal sealed class GameWindow : SilkForm
                 R=menu.CubeColor.X,G=menu.CubeColor.Y,B=menu.CubeColor.Z });
             return;
         }
-        if(action==2) physics.Clear();
+        if(action==2) { physics.Clear();localSandbox.Clear(); }
         else
         {
             ViewPose(out Vector3 eye,out Vector3 forward);
             physics.Spawn(eye,forward,action==1,boxes,camera,menu.CubeColor);
         }
-        menu.BodyCount=physics.Bodies.Count;
+        menu.BodyCount=physics.Bodies.Count(body=>body.SandboxDeviceId==0);
         menu.Dirty=true;
+    }
+
+    void ToggleSandboxMenu()
+    {
+        if(!menu.SandboxPage && network.Connected && !menu.SandboxEnabled) return;
+        network.Send(new NetMessage { Type="release" });physics.Release();networkHolding=false;
+        menu.ToggleSandbox();
+        if(menu.Open) { wantsCapture=false;SuspendMouse(); }
+        else CloseSettings();
+    }
+
+    void ToggleSandboxPermission()
+    {
+        if(network.Connected)
+        {
+            if(network.Id==menu.NetworkHost) network.Send(new NetMessage { Type="sandbox_toggle" });
+            return;
+        }
+        menu.SandboxEnabled=!menu.SandboxEnabled;
+        menu.Dirty=true;
+    }
+
+    void SpawnSandboxItem(SandboxKind kind)
+    {
+        if(!menu.SandboxEnabled && kind!=SandboxKind.Cube) return;
+        if(kind==SandboxKind.Cube) { HandleObjectAction(0);return; }
+        if(kind==SandboxKind.GlowCube) { HandleObjectAction(1);return; }
+        if(network.Connected)
+        { SendPlayerState();network.Send(new NetMessage { Type="device_spawn",Action=(int)kind });return; }
+        ViewPose(out Vector3 eye,out Vector3 forward);
+        SandboxDevice? device=localSandbox.Spawn(kind,eye,forward,smoothYaw+motion.YawOffset,boxes);
+        if(device!=null && !physics.SpawnSandboxDevice(device,boxes,camera)) localSandbox.Remove(device.Id);
+        menu.Dirty=true;
+    }
+
+    SandboxDevice? AimedDevice()
+    {
+        ViewPose(out Vector3 eye,out Vector3 forward);
+        if(!network.Connected) return localSandbox.Aim(eye,forward);
+        SandboxDevice? best=null;float distance=6f;
+        foreach(SandboxDevice device in networkDevices)
+        {
+            Vector3 delta=device.Position-eye;
+            float along=Vector3.Dot(delta,forward);
+            if(along<0 || along>distance || Vector3.DistanceSquared(delta,forward*along)>0.42f*0.42f) continue;
+            best=device;distance=along;
+        }
+        return best;
+    }
+
+    void InteractWithDevice()
+    {
+        if(!menu.SandboxEnabled) return;
+        SandboxDevice? device=AimedDevice();
+        if(device==null) return;
+        if(network.Connected) network.Send(new NetMessage { Type="device_interact",Action=device.Id });
+        else localSandbox.Interact(device.Id);
+    }
+
+    void WireDevice()
+    {
+        if(!menu.SandboxEnabled) return;
+        SandboxDevice? device=AimedDevice();
+        if(device==null) { pendingWireId=0;return; }
+        if(pendingWireId==0) { pendingWireId=device.Id;return; }
+        if(network.Connected) network.Send(new NetMessage { Type="wire",FromId=pendingWireId,ToId=device.Id });
+        else localSandbox.Connect(pendingWireId,device.Id);
+        pendingWireId=0;
+    }
+
+    int AimedGrabbable()
+    {
+        ViewPose(out Vector3 eye,out Vector3 forward);
+        if(!network.Connected)
+        {
+            float nearest=MathF.Min(menu.PickupRange,PhysicsBodies.WallRay(eye,forward,boxes,menu.PickupRange));
+            int id=0;
+            foreach(RigidCube body in physics.Bodies)
+            {
+                Quaternion inverse=Quaternion.Inverse(body.Rotation);
+                float hit=PhysicsBodies.RayBox(Vector3.Transform(eye-body.Position,inverse),Vector3.Transform(forward,inverse),Vector3.Zero,new Vector3(body.HalfSize));
+                if(hit>=0f&&hit<nearest) { nearest=hit;id=body.Id; }
+            }
+            return id;
+        }
+        float distance=MathF.Min(menu.PickupRange,PhysicsBodies.WallRay(eye,forward,boxes,menu.PickupRange));
+        int selected=0;
+        foreach(CubeState cube in networkCubes)
+        {
+            Quaternion rotation=new(cube.Qx,cube.Qy,cube.Qz,cube.Qw);
+            if(rotation.LengthSquared()<.001f) rotation=Quaternion.Identity;
+            Quaternion inverse=Quaternion.Inverse(rotation);
+            float hit=PhysicsBodies.RayBox(Vector3.Transform(eye-new Vector3(cube.X,cube.Y,cube.Z),inverse),Vector3.Transform(forward,inverse),Vector3.Zero,new Vector3(cube.HalfSize));
+            if(hit>=0f&&hit<distance) { distance=hit;selected=cube.Id; }
+        }
+        foreach(SandboxDevice device in networkDevices)
+        {
+            Quaternion rotation=device.Rotation;
+            if(rotation.LengthSquared()<.001f) rotation=Quaternion.CreateFromAxisAngle(Vector3.UnitY,device.Yaw);
+            Quaternion inverse=Quaternion.Inverse(rotation);
+            float hit=PhysicsBodies.RayBox(Vector3.Transform(eye-device.Position,inverse),Vector3.Transform(forward,inverse),Vector3.Zero,new Vector3(.35f));
+            if(hit>=0f&&hit<distance) { distance=hit;selected=device.BodyId; }
+        }
+        return selected;
+    }
+
+    void WeldGrabbables()
+    {
+        if(!menu.SandboxEnabled) return;
+        int id=AimedGrabbable();
+        if(id==0) { pendingWeldId=0;return; }
+        if(pendingWeldId==0) { pendingWeldId=id;return; }
+        if(network.Connected) network.Send(new NetMessage { Type="weld",FromId=pendingWeldId,ToId=id });
+        else physics.TryWeld(pendingWeldId,id);
+        pendingWeldId=0;
     }
 
     void TriggerLightEvent()
@@ -838,6 +1023,7 @@ internal sealed class GameWindow : SilkForm
         if(!network.Connected) return;
         ViewPose(out Vector3 eye,out _);
         network.Send(new NetMessage { Type="state",X=eye.X,Y=eye.Y,Z=eye.Z,
+            MoveSpeed=motion.Speed,SprintBlend=motion.SprintBlend,CrouchBlend=motion.CrouchBlend,
             Yaw=smoothYaw+motion.YawOffset,Pitch=Math.Clamp(smoothPitch+motion.PitchOffset,-1.45f,1.45f),
             HoldDistance=menu.HoldDistance,PickupRange=menu.PickupRange,
             SpringFrequency=menu.SpringFrequency,SpringDamping=menu.SpringDamping,
@@ -872,7 +1058,7 @@ internal sealed class GameWindow : SilkForm
             camera=new Vector3(world.X,world.Y,world.Z);
             motion.Reset();
             networkCubes=[];
-            heldCubePrediction.Clear();
+
             visibleMonster=null;
             remotePositions.Clear();
             remoteYaws.Clear();
@@ -891,7 +1077,7 @@ internal sealed class GameWindow : SilkForm
             motion.Reset();
             crouchToggle=false;
             networkHolding=false;
-            heldCubePrediction.Clear();
+
             physics.Release();
             nextNetworkSend=0;
             BeginSpawn(true);
@@ -918,6 +1104,27 @@ internal sealed class GameWindow : SilkForm
             double now=watch.Elapsed.TotalSeconds;
             if(now>=nextNetworkSend) { SendPlayerState(); nextNetworkSend=now+0.05; }
             var snapshot=network.Snapshot();
+            SandboxDevice[] devices=snapshot.Devices;
+            if(networkDevices.Length!=devices.Length || devices.Where((device,index)=>device.Id!=networkDevices[index].Id).Any())
+                networkDevices=devices.Select(CloneDevice).ToArray();
+            else for(int i=0;i<devices.Length;i++)
+            {
+                SandboxDevice target=devices[i],current=networkDevices[i];
+                float deviceBlend=1f-MathF.Exp(-24f*dt);
+                current.X+=(target.X-current.X)*deviceBlend;
+                current.Y+=(target.Y-current.Y)*deviceBlend;
+                current.Z+=(target.Z-current.Z)*deviceBlend;
+                Quaternion currentRotation=current.Rotation,targetRotation=target.Rotation;
+                if(currentRotation.LengthSquared()<.001f) currentRotation=Quaternion.Identity;
+                if(targetRotation.LengthSquared()<.001f) targetRotation=Quaternion.Identity;
+                Quaternion rotation=Quaternion.Slerp(currentRotation,targetRotation,deviceBlend);
+                current.Qx=rotation.X;current.Qy=rotation.Y;current.Qz=rotation.Z;current.Qw=rotation.W;
+                current.Yaw=target.Yaw;current.BodyId=target.BodyId;current.State=target.State;
+                current.PressTime=target.PressTime;current.Kind=target.Kind;
+            }
+            networkWires=snapshot.Wires;
+            if(menu.SandboxEnabled!=snapshot.SandboxEnabled || menu.SandboxHost!=(snapshot.HostId==network.Id))
+            { menu.SandboxEnabled=snapshot.SandboxEnabled;menu.SandboxHost=snapshot.HostId==network.Id;menu.Dirty=true; }
             int count=snapshot.Players.Length;
             if(!menu.NetworkConnected || menu.NetworkId!=network.Id || menu.NetworkHost!=snapshot.HostId || menu.NetworkPlayers!=count)
             { menu.NetworkConnected=true;menu.NetworkId=network.Id;menu.NetworkHost=snapshot.HostId;menu.NetworkPlayers=count;menu.Dirty=true; }
@@ -946,33 +1153,32 @@ internal sealed class GameWindow : SilkForm
                 visibleMonster.Route=target.Route;
             }
             CubeState[] cubes=snapshot.Cubes;
-            if(networkCubes.Length!=cubes.Length) networkCubes=cubes.Select(CloneCube).ToArray();
+            NetMessage? pickupResult=network.ConsumePickupResult();
+            if(pickupResult!=null && pickupResult.GrabSequence==grabSequence && pickupResult.Action==0)
+                networkHolding=false;
+            if(networkCubes.Length!=cubes.Length || cubes.Where((cube,i)=>cube.Id!=networkCubes[i].Id).Any())
+                networkCubes=cubes.Select(CloneCube).ToArray();
             else for(int i=0;i<cubes.Length;i++)
             {
                 CubeState target=cubes[i], current=networkCubes[i];
                 if(current.Id!=target.Id) { networkCubes[i]=CloneCube(target);continue; }
-                if(!networkHolding || current.Id!=heldCubePrediction.CubeId)
-                {
-                    float blend=1f-MathF.Exp(-24f*dt);
-                    current.X+= (target.X-current.X)*blend;
-                    current.Y+= (target.Y-current.Y)*blend;
-                    current.Z+= (target.Z-current.Z)*blend;
-                    Quaternion qa=new(current.Qx,current.Qy,current.Qz,current.Qw);
-                    Quaternion qb=new(target.Qx,target.Qy,target.Qz,target.Qw);
-                    Quaternion q=Quaternion.Slerp(qa,qb,blend);
-                    current.Qx=q.X;current.Qy=q.Y;current.Qz=q.Z;current.Qw=q.W;
-                }
+                float blend=1f-MathF.Exp(-24f*dt);
+                current.X+= (target.X-current.X)*blend;
+                current.Y+= (target.Y-current.Y)*blend;
+                current.Z+= (target.Z-current.Z)*blend;
+                Quaternion qa=new(current.Qx,current.Qy,current.Qz,current.Qw);
+                Quaternion qb=new(target.Qx,target.Qy,target.Qz,target.Qw);
+                Quaternion q=Quaternion.Slerp(qa,qb,blend);
+                current.Qx=q.X;current.Qy=q.Y;current.Qz=q.Z;current.Qw=q.W;
                 current.HalfSize=target.HalfSize;current.Emissive=target.Emissive;
+                current.HolderId=target.HolderId;
+                current.Vx=target.Vx;current.Vy=target.Vy;current.Vz=target.Vz;current.Grounded=target.Grounded;
+                current.Ax=target.Ax;current.Ay=target.Ay;current.Az=target.Az;
+                current.SlipSpeed=target.SlipSpeed;
                 current.R=target.R;current.G=target.G;current.B=target.B;
             }
-            if(networkHolding && heldCubePrediction.Active)
-            {
-                CubeState? held=networkCubes.FirstOrDefault(cube=>cube.Id==heldCubePrediction.CubeId);
-                if(held!=null) heldCubePrediction.Apply(dt,eye,forward,ViewRotation(),
-                    menu.HoldDistance,menu.PidSmoothing,boxes,networkCubes,held);
-                else heldCubePrediction.Clear();
-            }
             var seen=new HashSet<int>();
+            remoteFootsteps.Clear();
             foreach(PlayerState player in snapshot.Players)
             {
                 if(player.Id==network.Id) continue;
@@ -986,6 +1192,8 @@ internal sealed class GameWindow : SilkForm
                     : targetYaw;
                 remoteColors[player.Id]=new Vector3(player.R,player.G,player.B);
                 remoteNames[player.Id]=player.Name;
+                remoteFootsteps.Add(new FootstepSource(player.Id,remotePositions[player.Id],player.MoveSpeed,
+                    player.SprintBlend,player.CrouchBlend));
             }
             foreach(int id in remotePositions.Keys.Where(id=>!seen.Contains(id)).ToArray())
             { remotePositions.Remove(id); remoteYaws.Remove(id);remoteColors.Remove(id);remoteNames.Remove(id); }
@@ -993,19 +1201,24 @@ internal sealed class GameWindow : SilkForm
             return;
         }
         networkCubes=[];
+        networkDevices=[];networkWires=[];
+        if(!menu.SandboxHost) { menu.SandboxHost=true;menu.SandboxEnabled=false;menu.Dirty=true; }
         remotePositions.Clear();
         remoteYaws.Clear();
         remoteColors.Clear();
         remoteNames.Clear();
+        remoteFootsteps.Clear();
         if(menu.NetworkConnected) { menu.NetworkConnected=false;menu.NetworkId=0;menu.NetworkHost=0;menu.NetworkPlayers=1;menu.Dirty=true; }
         networkHolding=false;
-        heldCubePrediction.Clear();
+
         if(!menu.MonsterControlsWritable) { menu.MonsterControlsWritable=true;menu.Dirty=true; }
         if(!menu.FlickerControlsWritable) { menu.FlickerControlsWritable=true;menu.Dirty=true; }
         physics.PickupRange=menu.PickupRange; physics.HoldDistance=menu.HoldDistance;
         physics.Frequency=menu.SpringFrequency; physics.Damping=menu.SpringDamping; physics.TargetSmoothing=menu.PidSmoothing;
         physics.SlideResistance=menu.SlideResistance;
         physics.Update(dt,eye,forward,ViewRotation(),boxes,camera);
+        physics.SyncSandboxDevices(localSandbox.Devices);
+        localSandbox.Update(dt,device=>physics.ApplyThruster(device.Position,device.Yaw,dt,device.Id));
         localMonster?.Update(dt,[new PlayerState { Id=1,X=eye.X,Y=eye.Y,Z=eye.Z,Yaw=smoothYaw }],physics.Bodies);
         visibleMonster=localMonster?.State;
         if(menu.MonsterSettings.Enabled && visibleMonster!=null &&
@@ -1019,9 +1232,17 @@ internal sealed class GameWindow : SilkForm
 
     static CubeState CloneCube(CubeState source) => new()
     {
-        Id=source.Id,
+        Id=source.Id,HolderId=source.HolderId,
         X=source.X,Y=source.Y,Z=source.Z,Qx=source.Qx,Qy=source.Qy,Qz=source.Qz,Qw=source.Qw,
+        Vx=source.Vx,Vy=source.Vy,Vz=source.Vz,Grounded=source.Grounded,
+        Ax=source.Ax,Ay=source.Ay,Az=source.Az,SlipSpeed=source.SlipSpeed,
         HalfSize=source.HalfSize,Emissive=source.Emissive,R=source.R,G=source.G,B=source.B
+    };
+    static SandboxDevice CloneDevice(SandboxDevice source) => new()
+    {
+        Id=source.Id,Kind=source.Kind,X=source.X,Y=source.Y,Z=source.Z,Yaw=source.Yaw,
+        Qx=source.Qx,Qy=source.Qy,Qz=source.Qz,Qw=source.Qw,BodyId=source.BodyId,
+        State=source.State,PressTime=source.PressTime
     };
 
     protected override void OnFrame()
@@ -1049,8 +1270,18 @@ internal sealed class GameWindow : SilkForm
             float response=target>chaseBlend?menu.FlickerSettings.FogRise:menu.FlickerSettings.FogFall;
             chaseBlend+=(target-chaseBlend)*(1f-MathF.Exp(-response*dt));
             ViewPose(out Vector3 audioEye,out _);
+            CubeSoundSource[] cubeSounds=network.Connected
+                ? networkCubes.Select(cube=>new CubeSoundSource(cube.Id,new Vector3(cube.X,cube.Y,cube.Z),
+                    new Vector3(cube.Vx,cube.Vy,cube.Vz),cube.HalfSize,cube.Grounded,cube.HolderId!=0,
+                    new Quaternion(cube.Qx,cube.Qy,cube.Qz,cube.Qw),new Vector3(cube.Ax,cube.Ay,cube.Az),
+                    cube.SlipSpeed)).ToArray()
+                : physics.Bodies.Select(cube=>new CubeSoundSource(cube.Id,cube.Position,cube.Velocity,
+                    cube.HalfSize,cube.Grounded,cube.HasHoldTarget,cube.Rotation,cube.AngularVelocity,
+                    PhysicsBodies.ContactSlipSpeed(cube))).ToArray();
+            CubeImpactEvent[] impacts=network.Connected?network.ConsumeCubeImpacts():physics.DrainCubeImpacts();
             audio?.Update(audioEye,smoothYaw+motion.YawOffset,activeFixtures,menu.Lights,
-                visibleMonster,menu.MonsterSettings.Enabled,motion.Speed,motion.SprintBlend,motion.CrouchBlend,dt);
+                visibleMonster,menu.MonsterSettings.Enabled,motion.Speed,motion.SprintBlend,motion.CrouchBlend,dt,
+                remoteFootsteps,cubeSounds,impacts,boxes);
             Render();
         }
     }
@@ -1180,7 +1411,8 @@ internal sealed class GameWindow : SilkForm
     }
     void PrepareObjectFrames(Vector3 eye,Vector3 right,Vector3 up,Vector3 forward)
     {
-        int count=network.Connected?networkCubes.Length:physics.Bodies.Count;
+        int cubeCount=network.Connected?networkCubes.Length:physics.Bodies.Count;
+        int count=network.Connected?cubeCount+networkDevices.Length:cubeCount;
         if(!menu.ShowObjectFrames||count==0)
         { if(menu.ObjectFrames.Length>0) { menu.ObjectFrames=[];menu.Dirty=true; } return; }
         float nearest=MathF.Min(menu.PickupRange,PhysicsBodies.WallRay(eye,forward,boxes,menu.PickupRange));
@@ -1196,10 +1428,18 @@ internal sealed class GameWindow : SilkForm
             Quaternion rotation;
             if(network.Connected)
             {
-                CubeState cube=networkCubes[i];
-                position=new Vector3(cube.X,cube.Y,cube.Z);
-                half=cube.HalfSize;id=cube.Id;
-                rotation=new Quaternion(cube.Qx,cube.Qy,cube.Qz,cube.Qw);
+                if(i<cubeCount)
+                {
+                    CubeState cube=networkCubes[i];
+                    position=new Vector3(cube.X,cube.Y,cube.Z);
+                    half=cube.HalfSize;id=cube.Id;
+                    rotation=new Quaternion(cube.Qx,cube.Qy,cube.Qz,cube.Qw);
+                }
+                else
+                {
+                    SandboxDevice device=networkDevices[i-cubeCount];
+                    position=device.Position;half=.35f;id=device.BodyId;rotation=device.Rotation;
+                }
                 rotation=rotation.LengthSquared()<0.001f?Quaternion.Identity:Quaternion.Normalize(rotation);
             }
             else
@@ -1218,6 +1458,22 @@ internal sealed class GameWindow : SilkForm
         menu.ObjectFrames=found&&ProjectCubeFrame(hitPosition,hitRotation,hitHalf,eye,right,up,forward,out RectangleF bounds)
             ?[bounds]:[];
         menu.Dirty=true;
+    }
+    void PrepareSandboxWires(Vector3 eye,Vector3 right,Vector3 up,Vector3 forward)
+    {
+        IReadOnlyList<SandboxDevice> devices=network.Connected?networkDevices:localSandbox.Devices;
+        IReadOnlyList<SandboxWire> wires=network.Connected?networkWires:localSandbox.Wires;
+        if(wires.Count==0) { if(menu.SandboxWires.Length>0) { menu.SandboxWires=[];menu.Dirty=true; } return; }
+        var byId=devices.ToDictionary(device=>device.Id);
+        var segments=new List<(PointF A,PointF B,Color Ink)>();
+        foreach(SandboxWire wire in wires)
+        {
+            if(!byId.TryGetValue(wire.From,out SandboxDevice? from) || !byId.TryGetValue(wire.To,out SandboxDevice? to)) continue;
+            if(!ProjectDebug(from.Position+Vector3.UnitY*.22f,eye,right,up,forward,out PointF a) ||
+               !ProjectDebug(to.Position+Vector3.UnitY*.22f,eye,right,up,forward,out PointF b)) continue;
+            segments.Add((a,b,from.State?Color.FromArgb(82,232,156):Color.FromArgb(104,126,139)));
+        }
+        menu.SandboxWires=segments.ToArray();menu.Dirty=true;
     }
     void UploadOverlay()
     {
@@ -1364,6 +1620,7 @@ internal sealed class GameWindow : SilkForm
         PrepareMonsterOverlay(viewPosition,rolledRight,rolledUp,forward);
         PreparePlayerTags(viewPosition,rolledRight,rolledUp,forward);
         PrepareObjectFrames(viewPosition,rolledRight,rolledUp,forward);
+        PrepareSandboxWires(viewPosition,rolledRight,rolledUp,forward);
         Gl.DrawArrays(0x0004,0,3);
         RunPostProcessing();
         if(menu.Dirty) UploadOverlay();

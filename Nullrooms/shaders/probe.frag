@@ -17,7 +17,7 @@ uniform int objectCount;
 uniform sampler2D objectMap;
 vec4 objectData(int index) { return texelFetch(objectMap,ivec2(0,index),0); }
 vec3 objectColor(int index) { return texelFetch(objectMap,ivec2(2,index),0).rgb; }
-bool objectEmissive(int index) { return texelFetch(objectMap,ivec2(2,index),0).a > 0.5; }
+bool objectEmissive(int index) { float code=texelFetch(objectMap,ivec2(2,index),0).a; return code>0.5 && code<1.5 || code>10.25 && code<10.75; }
 
 const float PI=3.141592653589793;
 const float WORLD=192.0;
@@ -134,6 +134,9 @@ void main() {
     }
     // Diffuse reflection from the yellow wall and carpet materials.
     vec3 tint=vec3(0.67,0.64,0.47);
-    vec3 bounce=weights>0.0 ? neighbors/weights*tint*(0.48*bounceStrength) : vec3(0.0);
+    // A bounded diffuse radiance cache: direct light is propagated through
+    // connected open space every time an emitter changes, like a lightweight
+    // software Lumen final gather.
+    vec3 bounce=weights>0.0 ? neighbors/weights*tint*(0.58*bounceStrength) : vec3(0.0);
     fragColor=vec4(min(direct+bounce,vec3(20.0)),1.0);
 }

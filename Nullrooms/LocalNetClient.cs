@@ -22,12 +22,17 @@ internal sealed class LocalNetClient : IDisposable
     ClientWebSocket? webSocket;
     NetMessage? pendingWorld;
     NetMessage? pendingRespawn;
+    NetMessage? pendingPickupResult;
+    readonly Queue<CubeImpactEvent> pendingCubeImpacts = new();
     int pendingFlicker;
     PlayerState[] players = [];
     CubeState[] cubes = [];
     MonsterState? monster;
     MonsterTuning? monsterTuning;
     FlickerTuning? flickerTuning;
+    SandboxDevice[] devices=[];
+    SandboxWire[] wires=[];
+    bool sandboxEnabled;
     int id, connected, hostId;
     string status="OFFLINE";
 
@@ -134,7 +139,8 @@ internal sealed class LocalNetClient : IDisposable
         lock(stateLock)
         {
             players=[];cubes=[];monster=null;monsterTuning=null;flickerTuning=null;
-            hostId=0;pendingWorld=null;pendingRespawn=null;
+            hostId=0;pendingWorld=null;pendingRespawn=null;pendingPickupResult=null;
+            pendingCubeImpacts.Clear();
         }
         Interlocked.Exchange(ref pendingFlicker,0);
     }
@@ -152,6 +158,7 @@ internal sealed class LocalNetClient : IDisposable
         }
         else if(message.Type=="world") { lock(stateLock) pendingWorld=message; }
         else if(message.Type=="respawn") { lock(stateLock) pendingRespawn=message; }
+        else if(message.Type=="pickup_result") { lock(stateLock) pendingPickupResult=message; }
         else if(message.Type=="flicker") Interlocked.Exchange(ref pendingFlicker,1);
         else if(message.Type=="snapshot")
         {
@@ -160,6 +167,9 @@ internal sealed class LocalNetClient : IDisposable
                 players=message.Players;cubes=message.Cubes;monster=message.Monster;
                 monsterTuning=message.MonsterTuning;flickerTuning=message.FlickerTuning;
                 hostId=message.HostId;
+                devices=message.Devices;wires=message.Wires;sandboxEnabled=message.SandboxEnabled;
+                foreach(CubeImpactEvent impact in message.CubeImpacts) pendingCubeImpacts.Enqueue(impact);
+                while(pendingCubeImpacts.Count>128) pendingCubeImpacts.Dequeue();
             }
         }
     }
@@ -224,10 +234,31 @@ internal sealed class LocalNetClient : IDisposable
 
     internal bool ConsumeFlicker() => Interlocked.Exchange(ref pendingFlicker,0)!=0;
 
-    internal (PlayerState[] Players, CubeState[] Cubes, MonsterState? Monster,
-        MonsterTuning? MonsterTuning,FlickerTuning? FlickerTuning,int HostId) Snapshot()
+    internal NetMessage? ConsumePickupResult()
     {
-        lock(stateLock) return (players, cubes, monster, monsterTuning, flickerTuning,hostId);
+        lock(stateLock)
+        {
+            NetMessage? result=pendingPickupResult;
+            pendingPickupResult=null;
+            return result;
+        }
+    }
+
+    internal CubeImpactEvent[] ConsumeCubeImpacts()
+    {
+        lock(stateLock)
+        {
+            CubeImpactEvent[] events=pendingCubeImpacts.ToArray();
+            pendingCubeImpacts.Clear();
+            return events;
+        }
+    }
+
+    internal (PlayerState[] Players, CubeState[] Cubes, MonsterState? Monster,
+        MonsterTuning? MonsterTuning,FlickerTuning? FlickerTuning,int HostId,
+        SandboxDevice[] Devices,SandboxWire[] Wires,bool SandboxEnabled) Snapshot()
+    {
+        lock(stateLock) return (players, cubes, monster, monsterTuning, flickerTuning,hostId,devices,wires,sandboxEnabled);
     }
 
     public void Dispose()

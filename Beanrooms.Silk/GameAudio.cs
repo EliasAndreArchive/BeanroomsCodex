@@ -1,18 +1,22 @@
 using System.IO;
 using System.Diagnostics;
 using System.Numerics;
+using System.Drawing;
 
 namespace Beanrooms;
 
 internal sealed class GameAudio : IDisposable
 {
     AudioSystem? system;
-    AudioClip? spawnClip,clickClip,hoverClip;
+    AudioClip? spawnClip,clickClip,hoverClip,lampClip;
     AudioVoice? spawn,click,hover;
-    LoopingSound? lamps,monster,walking,running,crouching;
+    LoopingSound[]? lamps;
+    LoopingSound? monster;
+    PhysicalSounds? physical;
     readonly Stopwatch clock = Stopwatch.StartNew();
     double lastClick = -1, lastHover = -1;
     bool available;
+    VercidiumAcoustics? acoustics;
 
     internal GameAudio()
     {
@@ -22,12 +26,21 @@ internal sealed class GameAudio : IDisposable
             spawnClip=system.Load("spawn-boom.mp3");spawn=new AudioVoice(spawnClip);spawn.Set(0.8);
             clickClip=system.Load("ui-click.wav");click=new AudioVoice(clickClip);click.Set(0.55);
             hoverClip=system.Load("ui-hover.wav");hover=new AudioVoice(hoverClip);hover.Set(0.35);
-            lamps=new(system,"lamp-buzz.mp3");monster=new(system,"monster.wav");
-            walking=new(system,"walking.mp3");running=new(system,"running.wav");
-            crouching=new(system,"crouch-walking.mp3");
+            AudioClip loadedLamp=system.Load("lamp-buzz.mp3");
+            lampClip=loadedLamp;
+            lamps=Enumerable.Range(0,4).Select(_=>new LoopingSound(loadedLamp)).ToArray();
+            monster=new(system,"monster.wav");
+            physical=new PhysicalSounds(system);
             available=true;
         }
-        catch(Exception) { Dispose(); }
+        catch(Exception ex)
+        {
+            Console.Error.WriteLine($"Game audio could not start: {ex}");
+            try { File.WriteAllText(Path.Combine(AppContext.BaseDirectory,"audio-error.log"),ex.ToString()); }
+            catch(IOException) { }
+            catch(UnauthorizedAccessException) { }
+            Dispose();
+        }
     }
 
     internal void PlaySpawn()
@@ -52,31 +65,65 @@ internal sealed class GameAudio : IDisposable
         hover!.Play();
     }
 
+    internal void SetWorld(IReadOnlyList<RectangleF> walls)
+    {
+        acoustics?.Dispose();
+        acoustics=null;
+        try { acoustics=new VercidiumAcoustics(walls,Math.Max(1,system?.Reverb?.GroupCapacity??1)); }
+        catch(Exception ex) { Console.Error.WriteLine($"Vercidium audio unavailable: {ex.Message}"); }
+    }
+
     internal void Update(Vector3 listener,float yaw,IReadOnlyList<Vector2> fixtures,bool lightsOn,
-        MonsterState? eye,bool monsterOn,float speed,float sprintBlend,float crouchBlend,float dt)
+        MonsterState? eye,bool monsterOn,float speed,float sprintBlend,float crouchBlend,float dt,
+        IReadOnlyList<FootstepSource> remotePlayers,IReadOnlyList<CubeSoundSource> cubes,
+        IReadOnlyList<CubeImpactEvent> impacts,IReadOnlyList<RectangleF> walls)
     {
         if(!available) return;
         Vector2 listenerXZ=new(listener.X,listener.Z);
         Vector2 right=new(MathF.Cos(yaw),-MathF.Sin(yaw));
-        float lampEnergy=0f, lampPan=0f;
-        if(lightsOn) foreach(Vector2 fixture in fixtures)
+        var nearbyLamps=lightsOn?fixtures.Select(fixture=>
+            (Position:fixture,DistanceSquared:Vector2.DistanceSquared(fixture,listenerXZ)))
+            .Where(fixture=>fixture.DistanceSquared<400f)
+            .OrderBy(fixture=>fixture.DistanceSquared).Take(lamps!.Length).ToArray():[];
+        List<AcousticSource> sources=[];
+        if(monsterOn&&eye!=null) sources.Add(new(AcousticSourceIds.Monster,new Vector3(eye.X,eye.Y,eye.Z)));
+        foreach(var lamp in nearbyLamps)
+            sources.Add(new(AcousticSourceIds.Lamp(lamp.Position),new Vector3(lamp.Position.X,3.15f,lamp.Position.Y)));
+        foreach(FootstepSource player in remotePlayers.OrderBy(player=>Vector3.DistanceSquared(player.Position,listener)).Take(8))
+            sources.Add(new(AcousticSourceIds.Player(player.Id),player.Position-new Vector3(0f,1.4f,0f)));
+        foreach(CubeSoundSource cube in cubes.OrderBy(cube=>Vector3.DistanceSquared(cube.Position,listener)).Take(8))
+            sources.Add(new(AcousticSourceIds.Cube(cube.Id),cube.Position));
+        VercidiumAcoustics.Filter FilterFor(int id)=>acoustics?.FilterFor(id)??VercidiumAcoustics.Filter.Clear;
+        int GroupFor(int id)=>acoustics?.GroupFor(id)??-1;
+        if(acoustics!=null)
         {
-            Vector2 offset=fixture-listenerXZ;
-            float distanceSquared=offset.LengthSquared();
-            if(distanceSquared>900f) continue;
-            float strength=1f/(1f+distanceSquared/40f);
-            lampEnergy+=strength;
-            lampPan+=strength*Vector2.Dot(offset,right)/MathF.Sqrt(MathF.Max(distanceSquared,1f));
+            try
+            {
+                acoustics.Update(listener,sources);
+                system?.Reverb?.SetRoom(acoustics.Room);
+                system?.Reverb?.SetGroups(acoustics.Groups);
+            }
+            catch(Exception ex)
+            {
+                Console.Error.WriteLine($"Vercidium audio stopped: {ex.Message}");
+                acoustics.Dispose();acoustics=null;
+            }
         }
-        lamps!.SetTarget(Math.Clamp(lampEnergy*0.11f,0f,0.32f),
-            lampEnergy>0f ? Math.Clamp(lampPan/lampEnergy*0.75f,-0.85f,0.85f) : 0f);
-
-        float motion=Math.Clamp(speed/1.2f,0f,1f);
-        float crouch=Math.Clamp(crouchBlend,0f,1f);
-        float sprint=Math.Clamp(sprintBlend,0f,1f)*(1f-crouch);
-        walking!.SetTarget(0.42f*motion*(1f-sprint)*(1f-crouch));
-        running!.SetTarget(0.46f*motion*sprint);
-        crouching!.SetTarget(0.40f*motion*crouch);
+        VercidiumAcoustics.Filter monsterFilter=FilterFor(AcousticSourceIds.Monster);
+        monster!.SetHighFrequencyGain(monsterFilter.HighRatio);
+        monster.SetReverbGroup(GroupFor(AcousticSourceIds.Monster));
+        for(int i=0;i<lamps!.Length;i++)
+        {
+            if(i>=nearbyLamps.Length) { lamps[i].SetTarget(0f);continue; }
+            Vector2 offset=nearbyLamps[i].Position-listenerXZ;
+            float distance=MathF.Sqrt(nearbyLamps[i].DistanceSquared+2.16f);
+            float gain=0.22f/(1f+nearbyLamps[i].DistanceSquared/28f);
+            float pan=Vector2.Dot(offset,right)/MathF.Max(distance,0.1f)*0.8f;
+            VercidiumAcoustics.Filter lampFilter=FilterFor(AcousticSourceIds.Lamp(nearbyLamps[i].Position));
+            lamps[i].SetHighFrequencyGain(lampFilter.HighRatio);
+            lamps[i].SetReverbGroup(GroupFor(AcousticSourceIds.Lamp(nearbyLamps[i].Position)));
+            lamps[i].SetTarget(gain*lampFilter.Gain,Math.Clamp(pan,-0.85f,0.85f));
+        }
 
         if(!monsterOn || eye==null) monster!.SetTarget(0);
         else
@@ -84,17 +131,22 @@ internal sealed class GameAudio : IDisposable
             Vector2 toMonster=new(eye.X-listener.X,eye.Z-listener.Z);
             float distance=toMonster.Length();
             float proximity=Math.Clamp((42f-distance)/39f,0f,1f);
-            monster!.SetTarget(0.8f*proximity*proximity,
+            monster.SetTarget(0.8f*proximity*proximity*monsterFilter.Gain,
                 distance>0.1f ? Math.Clamp(Vector2.Dot(toMonster,right)/distance*0.8f,-0.85f,0.85f) : 0f);
         }
-        lamps.Update(dt); monster!.Update(dt); walking.Update(dt); running.Update(dt); crouching.Update(dt);
+        foreach(LoopingSound lamp in lamps) lamp.Update(dt);
+        monster!.Update(dt);
+        physical!.Update(listener,yaw,new FootstepSource(0,listener,speed,sprintBlend,crouchBlend),
+            remotePlayers,cubes,impacts,dt,FilterFor,GroupFor,walls);
     }
 
     public void Dispose()
     {
+        acoustics?.Dispose();acoustics=null;
         spawn?.Dispose();click?.Dispose();hover?.Dispose();
-        lamps?.Dispose();monster?.Dispose();walking?.Dispose();running?.Dispose();crouching?.Dispose();
-        spawnClip?.Dispose();clickClip?.Dispose();hoverClip?.Dispose();system?.Dispose();
+        if(lamps!=null) foreach(LoopingSound lamp in lamps) lamp.Dispose();
+        monster?.Dispose();physical?.Dispose();
+        lampClip?.Dispose();spawnClip?.Dispose();clickClip?.Dispose();hoverClip?.Dispose();system?.Dispose();
         available=false;
     }
 }

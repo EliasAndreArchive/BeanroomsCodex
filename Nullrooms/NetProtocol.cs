@@ -6,6 +6,10 @@ internal sealed class NetMessage
     public int Id { get; set; }
     public int Seed { get; set; }
     public int Action { get; set; }
+    public int GrabSequence { get; set; }
+    public float MoveSpeed { get; set; }
+    public float SprintBlend { get; set; }
+    public float CrouchBlend { get; set; }
     public int RespawnId { get; set; }
     public float FlickerAge { get; set; } = -1f;
     public float X { get; set; }
@@ -25,10 +29,16 @@ internal sealed class NetMessage
     public string Name { get; set; } = "";
     public PlayerState[] Players { get; set; } = [];
     public CubeState[] Cubes { get; set; } = [];
+    public CubeImpactEvent[] CubeImpacts { get; set; } = [];
     public MonsterState? Monster { get; set; }
     public MonsterTuning? MonsterTuning { get; set; }
     public FlickerTuning? FlickerTuning { get; set; }
     public int HostId { get; set; }
+    public bool SandboxEnabled { get; set; }
+    public SandboxDevice[] Devices { get; set; } = [];
+    public SandboxWire[] Wires { get; set; } = [];
+    public int FromId { get; set; }
+    public int ToId { get; set; }
 }
 
 internal sealed class FlickerTuning
@@ -173,6 +183,9 @@ internal sealed class PlayerState
     public float Y { get; set; }
     public float Z { get; set; }
     public float Yaw { get; set; }
+    public float MoveSpeed { get; set; }
+    public float SprintBlend { get; set; }
+    public float CrouchBlend { get; set; }
     public string Name { get; set; } = "BEAN";
     public float R { get; set; } = 0.78f;
     public float G { get; set; } = 0.76f;
@@ -182,9 +195,20 @@ internal sealed class PlayerState
 internal sealed class CubeState
 {
     public int Id { get; set; }
+    public int HolderId { get; set; }
     public float X { get; set; }
     public float Y { get; set; }
     public float Z { get; set; }
+    public float Vx { get; set; }
+    public float Vy { get; set; }
+    public float Vz { get; set; }
+    public float Ax { get; set; }
+    public float Ay { get; set; }
+    public float Az { get; set; }
+    public bool Grounded { get; set; }
+    // Speed of the floor contact points relative to the floor, not the cube centre.
+    // The server measures it so online clients can play scraping without local physics.
+    public float SlipSpeed { get; set; }
     public float Qx { get; set; }
     public float Qy { get; set; }
     public float Qz { get; set; }
@@ -194,4 +218,13 @@ internal sealed class CubeState
     public float R { get; set; }
     public float G { get; set; }
     public float B { get; set; }
+}
+
+internal sealed class CubeImpactEvent
+{
+    public int CubeId { get; set; }
+    public float X { get; set; }
+    public float Y { get; set; }
+    public float Z { get; set; }
+    public float Strength { get; set; }
 }

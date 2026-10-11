@@ -1,6 +1,8 @@
 # Beanrooms
 
-Beanrooms is a low resolution 4:3 desktop game with procedural rooms, path traced and hybrid lighting, Bepu physics, and online multiplayer. The client uses Silk.NET/GLFW, OpenGL 4.3 and OpenAL Soft. The dedicated server and Render WebSocket bridge are included.
+Beanrooms is a low resolution 4:3 desktop game with procedural rooms, path traced and hybrid lighting, Bepu physics, and online multiplayer. The client uses Silk.NET/GLFW, OpenGL 4.3, OpenAL Soft for playback, and Vercidium Audio v1.10.1 for raytraced source filtering and EAX room reverb on every sound. Nearby spatial sounds use Vercidium's grouped room effects; local, UI, and untracked distant sounds use the listener room. The dedicated server and Render WebSocket bridge are included. Vercidium's DLL, API XML, and license are in `Beanrooms.Silk/ThirdParty/VercidiumAudio/`.
+
+Varied concrete footsteps play for the local and online players. Cubes make spatial wood impact and floor scraping sounds; each cube corner is tracked against the floor, walls, and other cubes, so a landing corner clicks while a resting cube stays quiet, and scrapes follow the floor contact points, so pivoting on an edge stays quiet. Online cube scraping uses a server-measured contact slip speed. A landing sound is inferred from cube motion if an online impact message is missing. Nearby ceiling lights each emit a spatial hum. Sound source licenses are in `Nullrooms/assets/SFX-LICENSES.md`. The server simulates online cube grabs and throws, and clients display its snapshots. Sandbox mode works in solo and is host-controlled online. Deploy the updated client and server together for full online sound state.
 
 ## Run the client
 

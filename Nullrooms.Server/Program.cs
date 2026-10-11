@@ -44,13 +44,15 @@ internal sealed class LocalServer : IDisposable
     readonly ConcurrentDictionary<int, Peer> peers = new();
     readonly ConcurrentQueue<(int Id, NetMessage Message)> incoming = new();
     readonly PhysicsBodies physics = new();
+    readonly SandboxWorld sandbox = new();
+    bool sandboxEnabled;
     readonly MonsterTuning monsterSettings = new();
     readonly FlickerTuning flickerSettings = new();
     readonly CancellationTokenSource stop = new();
     readonly Stopwatch clock=Stopwatch.StartNew();
     List<RectangleF> walls = [];
     MonsterBrain? monster;
-    int nextId, holderId, seed = 82317;
+    int nextId, seed = 82317;
     double nextFlickerEvent,lastFlickerEvent=double.NegativeInfinity;
 
     internal LocalServer(IPAddress listenAddress,int port,int healthPort=0)
@@ -63,9 +65,9 @@ internal sealed class LocalServer : IDisposable
     void ResetWorld()
     {
         physics.Clear();
+        sandbox.Clear();
         walls = WorldLayout.Generate(seed).Walls;
         monster = new MonsterBrain(seed,walls,monsterSettings);
-        holderId=0;
     }
 
     Vector2 SpawnForPlayerSlot(int slot) =>
@@ -100,23 +102,22 @@ internal sealed class LocalServer : IDisposable
             if(flickerSettings.RandomEvents && now>=nextFlickerEvent) BroadcastLightEvent(now);
             while(accumulator>=Step)
             {
+                sandbox.Update(Step,device=>physics.ApplyThruster(device.Position,device.Yaw,Step,device.Id));
                 Vector3 eye=new(96f,1.68f,96f), forward=Vector3.UnitZ;
                 Quaternion rotation=Quaternion.Identity;
-                if(holderId!=0 && peers.TryGetValue(holderId,out Peer? holder))
-                {
-                    eye=new Vector3(holder.X,holder.Y,holder.Z);
-                    forward=LookDirection(holder.Yaw,holder.Pitch);
-                    rotation=CameraOrientation.FromAngles(holder.Yaw,holder.Pitch);
-                    physics.HoldDistance=holder.HoldDistance;
-                    physics.Frequency=holder.SpringFrequency;
-                    physics.Damping=holder.SpringDamping;
-                    physics.TargetSmoothing=holder.PidSmoothing;
-                    physics.SlideResistance=holder.SlideResistance;
-                }
+                foreach(Peer peer in peers.Values)
+                    if(physics.HeldBy(peer.Id)) { physics.SlideResistance=peer.SlideResistance;break; }
                 // The server has no rigid-body work until the first cube is spawned.
                 // Avoid building hundreds of Bepu wall colliders while an idle free
                 // instance is trying to accept its first player.
-                if(physics.Bodies.Count>0) physics.Update(Step,eye,forward,rotation,walls,eye);
+                if(physics.Bodies.Count>0) physics.Update(Step,eye,forward,rotation,walls,eye,id=>
+                {
+                    if(!peers.TryGetValue(id,out Peer? holder)) return null;
+                    return new GrabInput(new Vector3(holder.X,holder.Y,holder.Z),
+                        LookDirection(holder.Yaw,holder.Pitch),CameraOrientation.FromAngles(holder.Yaw,holder.Pitch),
+                        holder.HoldDistance,holder.SpringFrequency,holder.SpringDamping,holder.PidSmoothing);
+                });
+                physics.SyncSandboxDevices(sandbox.Devices);
                 monster?.Update(Step,peers.Values.Select(peer=>new PlayerState
                 {
                     Id=peer.Id,X=peer.X,Y=peer.Y,Z=peer.Z,Yaw=peer.Yaw
@@ -201,7 +202,7 @@ internal sealed class LocalServer : IDisposable
             peer.X=point.X;peer.Y=1.68f;peer.Z=point.Y;
             peer.RespawnId++;
             peer.RespawnProtectedUntil=now+2.5;
-            if(holderId==peer.Id) { physics.Release();holderId=0; }
+            physics.Release(peer.Id);
             peer.Send(new NetMessage { Type="respawn",RespawnId=peer.RespawnId,
                 X=peer.X,Y=peer.Y,Z=peer.Z });
             Console.WriteLine($"Monster caught player {peer.Id}; respawned at {peer.X:0.0}, {peer.Z:0.0}");
@@ -229,7 +230,7 @@ internal sealed class LocalServer : IDisposable
             {
                 case "disconnect":
                     peers.TryRemove(entry.Id,out _);
-                    if(holderId==entry.Id) { physics.Release(); holderId=0; }
+                    physics.Release(entry.Id);
                     Console.WriteLine($"Player {entry.Id} disconnected ({peers.Count} total)");
                     break;
                 case "state":
@@ -244,6 +245,9 @@ internal sealed class LocalServer : IDisposable
                         }
                         peer.Yaw=message.Yaw;
                         peer.Pitch=Math.Clamp(message.Pitch,-1.45f,1.45f);
+                        peer.MoveSpeed=float.IsFinite(message.MoveSpeed)?Math.Clamp(message.MoveSpeed,0f,10f):0f;
+                        peer.SprintBlend=float.IsFinite(message.SprintBlend)?Math.Clamp(message.SprintBlend,0f,1f):0f;
+                        peer.CrouchBlend=float.IsFinite(message.CrouchBlend)?Math.Clamp(message.CrouchBlend,0f,1f):0f;
                         string name=new string((message.Name??"").ToUpperInvariant()
                             .Where(c=>char.IsAsciiLetterOrDigit(c)||c==' '||c=='-').Take(12).ToArray()).Trim();
                         peer.Name=name.Length>0?name:$"BEAN{peer.Id}";
@@ -273,29 +277,57 @@ internal sealed class LocalServer : IDisposable
                     }
                     break;
                 case "pickup":
-                    if(holderId==0)
+                    if(!physics.HeldBy(peer.Id))
                     {
                         Vector3 eye=new(peer.X,peer.Y,peer.Z);
                         Quaternion rotation=CameraOrientation.FromAngles(peer.Yaw,peer.Pitch);
                         physics.PickupRange=peer.PickupRange;
                         physics.HoldDistance=peer.HoldDistance;
-                        if(physics.TryPickup(eye,LookDirection(peer.Yaw,peer.Pitch),rotation,walls))
-                            holderId=peer.Id;
+                        physics.TryPickup(eye,LookDirection(peer.Yaw,peer.Pitch),rotation,walls,peer.Id);
                     }
+                    peer.Send(new NetMessage { Type="pickup_result",Action=physics.HeldCubeId(peer.Id),
+                        GrabSequence=message.GrabSequence });
                     break;
                 case "release":
-                    if(holderId==peer.Id) { physics.Release(); holderId=0; }
+                    physics.Release(peer.Id);
                     break;
                 case "spawn":
                     {
+                        if(message.Action==1 && !sandboxEnabled) break;
                         Vector3 eye=new(peer.X,peer.Y,peer.Z);
                         Vector3 color=new(Math.Clamp(message.R,0f,1f),Math.Clamp(message.G,0f,1f),Math.Clamp(message.B,0f,1f));
                         physics.Spawn(eye,LookDirection(peer.Yaw,peer.Pitch),message.Action==1,walls,eye,color);
                         break;
                     }
+                case "sandbox_toggle":
+                    if(peer.Id==peers.Keys.Min()) sandboxEnabled=!sandboxEnabled;
+                    break;
+                case "device_spawn":
+                    if(sandboxEnabled && Enum.IsDefined((SandboxKind)message.Action))
+                    {
+                        SandboxDevice? device=sandbox.Spawn((SandboxKind)message.Action,new Vector3(peer.X,peer.Y,peer.Z),
+                            LookDirection(peer.Yaw,peer.Pitch),peer.Yaw,walls);
+                        if(device!=null && !physics.SpawnSandboxDevice(device,walls,new Vector3(peer.X,peer.Y,peer.Z)))
+                            sandbox.Remove(device.Id);
+                    }
+                    break;
+                case "device_interact":
+                    if(sandboxEnabled && sandbox.Devices.Any(d=>d.Id==message.Action &&
+                        Vector3.DistanceSquared(d.Position,new Vector3(peer.X,peer.Y,peer.Z))<6f*6f))
+                        sandbox.Interact(message.Action);
+                    break;
+                case "wire":
+                    if(sandboxEnabled && sandbox.Devices.Any(d=>d.Id==message.FromId &&
+                        Vector3.DistanceSquared(d.Position,new Vector3(peer.X,peer.Y,peer.Z))<6f*6f))
+                        sandbox.Connect(message.FromId,message.ToId);
+                    break;
+                case "weld":
+                    if(sandboxEnabled && physics.Bodies.Any(body=>body.Id==message.FromId &&
+                        Vector3.DistanceSquared(body.Position,new Vector3(peer.X,peer.Y,peer.Z))<6f*6f))
+                        physics.TryWeld(message.FromId,message.ToId);
+                    break;
                 case "clear":
-                    physics.Clear();
-                    holderId=0;
+                    if(peer.Id==peers.Keys.Min()) { physics.Clear();sandbox.Clear(); }
                     break;
                 case "regen":
                     if(peer.Id!=peers.Keys.Min()) break;
@@ -323,17 +355,24 @@ internal sealed class LocalServer : IDisposable
         PlayerState[] players=peers.Values.Select(peer=>new PlayerState
         {
             Id=peer.Id,X=peer.X,Y=peer.Y,Z=peer.Z,Yaw=peer.Yaw,
+            MoveSpeed=peer.MoveSpeed,SprintBlend=peer.SprintBlend,CrouchBlend=peer.CrouchBlend,
             Name=peer.Name,R=peer.R,G=peer.G,B=peer.B
         }).ToArray();
-        CubeState[] cubes=physics.Bodies.Select(body=>new CubeState
+        CubeState[] cubes=physics.Bodies.Where(body=>body.SandboxDeviceId==0).Select(body=>new CubeState
         {
             Id=body.Id,
+            HolderId=physics.HolderOf(body),
             X=body.Position.X,Y=body.Position.Y,Z=body.Position.Z,
+            Vx=body.Velocity.X,Vy=body.Velocity.Y,Vz=body.Velocity.Z,Grounded=body.Grounded,
+            Ax=body.AngularVelocity.X,Ay=body.AngularVelocity.Y,Az=body.AngularVelocity.Z,
+            SlipSpeed=PhysicsBodies.ContactSlipSpeed(body),
             Qx=body.Rotation.X,Qy=body.Rotation.Y,Qz=body.Rotation.Z,Qw=body.Rotation.W,
             HalfSize=body.HalfSize,Emissive=body.Emissive,
             R=body.Color.X,G=body.Color.Y,B=body.Color.Z
         }).ToArray();
         var message=new NetMessage { Type="snapshot",Seed=seed,Players=players,Cubes=cubes,
+            SandboxEnabled=sandboxEnabled,Devices=sandbox.Devices.ToArray(),Wires=sandbox.Wires.ToArray(),
+            CubeImpacts=physics.DrainCubeImpacts(),
             HostId=players.Select(player=>player.Id).DefaultIfEmpty(0).Min(),
             MonsterTuning=monsterSettings.Clone(),
             FlickerTuning=flickerSettings.Clone(),
@@ -370,6 +409,7 @@ internal sealed class Peer : IDisposable
     NetMessage? latestSnapshot;
     internal int Id { get; }
     internal float X=96f,Y=1.68f,Z=96f,Yaw=0.63f,Pitch,HoldDistance=2.25f;
+    internal float MoveSpeed,SprintBlend,CrouchBlend;
     internal string Name;
     internal float R=0.78f,G=0.76f,B=0.70f;
     internal float PickupRange=5f,SpringFrequency=8.5f,SpringDamping=1.35f,PidSmoothing=18f,SlideResistance=4.5f;

@@ -1,23 +1,29 @@
 using System.Diagnostics;
 using Silk.NET.OpenAL;
 using NLayer;
+using System.Runtime.InteropServices;
 
 namespace Beanrooms;
 
 internal unsafe sealed class AudioSystem : IDisposable
 {
     internal readonly AL Al;
+    internal readonly OpenAlFilters? Filters;
+    internal readonly OpenAlReverb? Reverb;
     readonly ALContext contextApi;
     readonly Device* device;
     readonly Context* context;
     internal AudioSystem()
     {
         contextApi=ALContext.GetApi();
-        device=contextApi.OpenDevice("");
+        device=contextApi.OpenDevice(null);
         if(device==null) throw new Exception("No OpenAL audio device");
         context=contextApi.CreateContext(device,null);
         if(context==null || !contextApi.MakeContextCurrent(context)) throw new Exception("Could not start OpenAL audio");
         Al=AL.GetApi();
+        Filters=OpenAlFilters.TryCreate(Al);
+        if(contextApi.IsExtensionPresent(device,"ALC_EXT_EFX"))
+            Reverb=OpenAlReverb.TryCreate(Al);
     }
     internal AudioClip Load(string name)
     {
@@ -74,6 +80,7 @@ internal unsafe sealed class AudioSystem : IDisposable
     }
     public void Dispose()
     {
+        Reverb?.Dispose();
         Al.Dispose();
         contextApi.MakeContextCurrent((Context*)null);
         contextApi.DestroyContext(context);
@@ -92,21 +99,90 @@ internal sealed class AudioVoice : IDisposable
 {
     readonly AudioClip clip;
     readonly uint source;
+    uint filter;
     internal AudioVoice(AudioClip clip)
     {
         this.clip=clip;
         source=clip.System.Al.GenSource();
         clip.System.Al.SetSourceProperty(source,SourceInteger.Buffer,clip.Buffer);
         clip.System.Al.SetSourceProperty(source,SourceBoolean.SourceRelative,true);
+        clip.System.Reverb?.Attach(source);
     }
     internal void Play() { Stop();clip.System.Al.SourcePlay(source); }
     internal void Stop() => clip.System.Al.SourceStop(source);
+    internal bool IsPlaying
+    {
+        get
+        {
+            clip.System.Al.GetSourceProperty(source,GetSourceInteger.SourceState,out int state);
+            return state==(int)SourceState.Playing;
+        }
+    }
+    internal void SetPitch(float pitch) => clip.System.Al.SetSourceProperty(source,SourceFloat.Pitch,
+        Math.Clamp(pitch,0.7f,1.3f));
     internal void Set(double gain,double pan=0)
     {
         clip.System.Al.SetSourceProperty(source,SourceFloat.Gain,(float)Math.Clamp(gain,0,1));
         clip.System.Al.SetSourceProperty(source,SourceVector3.Position,(float)Math.Clamp(pan,-1,1),0f,-1f);
     }
-    public void Dispose() { Stop();clip.System.Al.DeleteSource(source); }
+    internal void SetHighFrequencyGain(float ratio)
+    {
+        OpenAlFilters? api=clip.System.Filters;
+        if(api==null) return;
+        if(filter==0) filter=api.Create(source,clip.System.Al);
+        if(filter!=0) api.SetHighFrequencyGain(filter,ratio);
+    }
+    internal void SetReverbGroup(int group) => clip.System.Reverb?.Attach(source,group);
+    public void Dispose()
+    {
+        Stop();clip.System.Al.DeleteSource(source);
+        if(filter!=0) clip.System.Filters?.Delete(filter);
+    }
+}
+
+// EFX is optional. Devices without it keep Vercidium's overall attenuation.
+internal sealed class OpenAlFilters
+{
+    [UnmanagedFunctionPointer(CallingConvention.Cdecl)] delegate void GenFilters(int count,out uint filter);
+    [UnmanagedFunctionPointer(CallingConvention.Cdecl)] delegate void DeleteFilters(int count,ref uint filter);
+    [UnmanagedFunctionPointer(CallingConvention.Cdecl)] delegate void FilterInteger(uint filter,int parameter,int value);
+    [UnmanagedFunctionPointer(CallingConvention.Cdecl)] delegate void FilterFloat(uint filter,int parameter,float value);
+
+    readonly GenFilters gen;
+    readonly DeleteFilters delete;
+    readonly FilterInteger integer;
+    readonly FilterFloat floating;
+
+    OpenAlFilters(GenFilters gen,DeleteFilters delete,FilterInteger integer,FilterFloat floating)
+    { this.gen=gen;this.delete=delete;this.integer=integer;this.floating=floating; }
+
+    internal static OpenAlFilters? TryCreate(AL al)
+    {
+        IntPtr gen=al.GetProcAddress("alGenFilters");
+        IntPtr delete=al.GetProcAddress("alDeleteFilters");
+        IntPtr integer=al.GetProcAddress("alFilteri");
+        IntPtr floating=al.GetProcAddress("alFilterf");
+        if(gen==IntPtr.Zero||delete==IntPtr.Zero||integer==IntPtr.Zero||floating==IntPtr.Zero) return null;
+        return new OpenAlFilters(Marshal.GetDelegateForFunctionPointer<GenFilters>(gen),
+            Marshal.GetDelegateForFunctionPointer<DeleteFilters>(delete),
+            Marshal.GetDelegateForFunctionPointer<FilterInteger>(integer),
+            Marshal.GetDelegateForFunctionPointer<FilterFloat>(floating));
+    }
+
+    internal uint Create(uint source,AL al)
+    {
+        gen(1,out uint filter);
+        if(filter==0) return 0;
+        integer(filter,0x8001,0x0001); // AL_FILTER_TYPE = AL_FILTER_LOWPASS
+        floating(filter,0x0001,1f); // AL_LOWPASS_GAIN
+        al.SetSourceProperty(source,(SourceInteger)0x20005,filter); // AL_DIRECT_FILTER
+        return filter;
+    }
+
+    internal void SetHighFrequencyGain(uint filter,float ratio)
+        => floating(filter,0x0002,Math.Clamp(ratio,0f,1f)); // AL_LOWPASS_GAINHF
+
+    internal void Delete(uint filter) => delete(1,ref filter);
 }
 
 // Keep the original two-voice, equal-power crossfade and eased volume targets.
@@ -114,14 +190,17 @@ internal sealed class LoopingSound : IDisposable
 {
     const double CrossfadeSeconds=0.4;
     readonly AudioClip clip;
+    readonly bool ownsClip;
     readonly AudioVoice[] voices;
     readonly Stopwatch clock=Stopwatch.StartNew();
     int active;
     bool crossing;
     double startedAt,crossingAt,volume,balance,targetVolume,targetBalance;
-    internal LoopingSound(AudioSystem system,string filename)
+    internal LoopingSound(AudioSystem system,string filename) : this(system.Load(filename))
+    { ownsClip=true; }
+    internal LoopingSound(AudioClip sharedClip)
     {
-        clip=system.Load(filename);
+        clip=sharedClip;
         voices=[new AudioVoice(clip),new AudioVoice(clip)];
         voices[0].Set(0);
         voices[0].Play();startedAt=clock.Elapsed.TotalSeconds;
@@ -138,6 +217,15 @@ internal sealed class LoopingSound : IDisposable
     {
         targetVolume=Math.Clamp(gain,0,1);
         targetBalance=Math.Clamp(pan,-1,1);
+    }
+    internal double TargetVolume => targetVolume;
+    internal void SetHighFrequencyGain(float ratio)
+    {
+        foreach(var voice in voices) voice.SetHighFrequencyGain(ratio);
+    }
+    internal void SetReverbGroup(int group)
+    {
+        foreach(var voice in voices) voice.SetReverbGroup(group);
     }
     internal void Update(float dt)
     {
@@ -159,5 +247,5 @@ internal sealed class LoopingSound : IDisposable
         }
         else voices[active].Set(volume,balance);
     }
-    public void Dispose() { foreach(var voice in voices) voice.Dispose();clip.Dispose(); }
+    public void Dispose() { foreach(var voice in voices) voice.Dispose();if(ownsClip) clip.Dispose(); }
 }

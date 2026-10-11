@@ -21,6 +21,16 @@ and **Escape** to release the mouse. The title menu has solo and online play.
 The online connection uses the same WebSocket protocol and join key as the
 previous Windows client.
 
+Sandbox mode is available in solo and online. In solo, toggle it in
+**Tab → Session → Sandbox Mode** and press **B** to open the sandbox browser.
+Online, only the host can change that setting; guests cannot. Cubes remain
+available everywhere with **F** (glow cubes require sandbox mode). Sandbox
+devices are physical and can be grabbed like cubes. In sandbox sessions, use
+**E** on a button or lever, **G** to toggle the wire tool and click a source
+then target, or **K** to toggle the weld tool and click two nearby grabbable
+objects. Fixed path tracing is the default renderer. Realtime GI is
+available in the settings menu when a faster dynamic diffuse radiance cache is useful.
+
 Build standalone packages:
 
 ```powershell
