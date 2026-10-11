@@ -5,10 +5,23 @@ namespace Beanrooms;
 
 internal sealed class DebugMenu
 {
+    internal enum MenuView { Pause, Categories, Settings, Help }
+    internal MenuView View = MenuView.Pause;
+    MenuView settingsReturn=MenuView.Categories;
+    internal int CategorySelected, ScrollRow;
     internal bool Open, TitleScreen, SettingsFromTitle, Dithering = true, PaletteReduction = true, PostEnabled = true, AutoExposure, Bloom = true, Lights = true, Vsync = true, Dirty = true, Volumetrics = true;
     internal bool SandboxPage, PonderPage, SandboxEnabled, SandboxHost=true, SandboxSupported=true, WireTool, WeldTool;
+    bool ponderFromHelp;
     internal int PonderStep;
     internal string ToolStatus="";
+    internal double ToolStatusUntil;
+    internal string ObjectPrompt="";
+    internal bool ShowFps;
+    internal void SetToolStatus(string message)
+    { ToolStatus=message;ToolStatusUntil=DateTimeOffset.UtcNow.ToUnixTimeMilliseconds()/1000.0+3.0;Dirty=true; }
+    internal void RefreshTransient()
+    { if(ToolStatus.Length>0 && DateTimeOffset.UtcNow.ToUnixTimeMilliseconds()/1000.0>=ToolStatusUntil)
+      { ToolStatus="";Dirty=true; } }
     internal int SandboxCategory, SandboxSelected, SandboxScroll;
     internal Action<SandboxKind>? SandboxSpawn;
     internal Action? SandboxToggle;
@@ -86,8 +99,10 @@ internal sealed class DebugMenu
     internal void TogglePonder()
     {
         FinishEditing();
-        if(Open&&PonderPage) { Open=false;PonderPage=false; }
-        else { Open=true;PonderPage=true;SandboxPage=false;TitleScreen=false; }
+        if(Open&&PonderPage)
+        { PonderPage=false;Open=ponderFromHelp;ponderFromHelp=false; }
+        else
+        { ponderFromHelp=Open&&View==MenuView.Help;Open=true;PonderPage=true;SandboxPage=false;TitleScreen=false; }
         Dirty=true;InteractionSound?.Invoke();
     }
     internal void MovePonder(int direction)
@@ -121,6 +136,7 @@ internal sealed class DebugMenu
     internal bool MonsterDebug;
     internal bool ShowDebugOverlay;
     internal bool ShowObjectFrames = true;
+    internal bool ShowPlayerTags = true, ShowWiresInPlay;
     internal bool MonsterControlsWritable = true;
     internal bool FlickerControlsWritable = true;
     internal bool MovementControlsWritable = true;
@@ -172,9 +188,10 @@ internal sealed class DebugMenu
     static readonly int[] SampleChoices = { 16, 32, 64, 128, 256 };
     static readonly (string Name,int Page)[] Tabs =
     {
-        ("SESSION",9), ("IMAGE",0), ("POST FX",7), ("LIGHTS",1),
-        ("FLICKER",8), ("CAMERA",3), ("MOVEMENT",2), ("PHYSICS",4),
-        ("MONSTER",5), ("NETWORK",6)
+        ("DISPLAY",1), ("PICTURE",0), ("POST FX",7),
+        ("CAMERA",3), ("HUD",10), ("MOVEMENT",2),
+        ("PHYSICS",4), ("MONSTER",5),
+        ("FLICKER",8), ("PROFILE + ONLINE",6)
     };
     static readonly Dictionary<char,int[]> Glyphs = new()
     {
@@ -209,12 +226,13 @@ internal sealed class DebugMenu
         new[] { "RENDER MODE", "PATH SAMPLES", "PATH BOUNCES", "BOUNCE LIGHT", "AO STRENGTH", "LIGHT INTENSITY", "LIGHT DENSITY", "RESOLUTION", "FIXTURES", "FPS LIMIT", "VSYNC", "VOLUMETRICS", "FOG DENSITY", "FOG STEPS", "PROBE GRID", "PROBE BOUNCES", "DIRECT SAMPLES" },
         new[] { "WALK SPEED", "SPRINT X", "CROUCH X", "ACCELERATION", "DECELERATION", "STANCE SMOOTH", "SPRINT SMOOTH", "CROUCH HEIGHT", "STEP LENGTH" },
         new[] { "MOUSE SENS", "IDLE SHAKE", "WALK SHAKE", "SPRINT SHAKE", "CROUCH SHAKE", "HEAD BOB", "SWAY AMOUNT", "STRAFE ROLL", "TURN ROLL", "MOVE PITCH", "LOOK SMOOTH" },
-        new[] { "PICKUP RANGE", "HOLD DIST", "SPRING FREQ", "SPRING DAMP", "HOLD SMOOTH", "SLIDE RESIST", "GRID SNAP", "SNAP STEP", "CUBE COUNT", "DEBUG UI", "OBJECT FRAMES" },
+        new[] { "PICKUP RANGE", "HOLD DIST", "SPRING FREQ", "SPRING DAMP", "HOLD SMOOTH", "SLIDE RESIST", "GRID SNAP", "SNAP STEP", "CUBE COUNT" },
         new[] { "MONSTER", "ROAM SPEED", "SEARCH SPEED", "CHASE SPEED", "CHASE TURN", "SEARCH TURN", "ROAM TURN", "SIGHT RANGE", "SIGHT ANGLE", "SEARCH RADIUS", "ROAM RADIUS" },
         new[] { "PLAYER NAME", "BEAN COLOR", "RED", "GREEN", "BLUE", "PHOTON REGION", "JOIN KEY", "CONNECT", "DISCONNECT", "CONNECTION", "PLAYER ID", "PLAYERS", "ROLE" },
         new[] { "POST FX", "TONEMAP", "EXPOSURE", "AUTO EXPOSURE", "BRIGHTEN SPEED", "DARKEN SPEED", "BLOOM", "BLOOM STRENGTH", "BLOOM THRESHOLD", "BLOOM RADIUS" },
         new[] { "MINOR FLICKER", "MINOR INTERVAL", "MINOR CHANCE", "MINOR DURATION", "RANDOM EVENTS", "EVENT INTERVAL", "EVENT LENGTH", "EVENT SPEED MIN", "EVENT SPEED MAX", "EVENT OFF CHANCE", "CHASE FLICKER", "CHASE FOG", "CHASE FOG MAX", "FOG RISE", "FOG FALL", "CHASE RED", "CHASE RED CHANCE", "BLACKOUT CHANCE" },
-        new[] { "RESUME", "LEAVE MULTIPLAYER", "MAIN MENU", "QUIT GAME", "CONNECTION", "PLAYERS", "ROLE", "SANDBOX MODE" }
+        new[] { "RESUME", "ONLINE", "SETTINGS", "HELP", "LEAVE ROOM", "MAIN MENU", "QUIT GAME", "SANDBOX MODE" },
+        new[] { "FPS COUNTER", "OBJECT BRACKETS", "PLAYER NAMES", "WIRES IN PLAY", "DEBUG INFO", "MONSTER VECTORS" }
     };
 
     internal void Toggle()
@@ -222,11 +240,25 @@ internal sealed class DebugMenu
         if(PonderPage) { TogglePonder();return; }
         if(SandboxPage) { ToggleSandbox();return; }
         FinishEditing();
-        if(Open && SettingsFromTitle && !TitleScreen) ShowTitle();
-        else if(Open && TitleScreen && TitlePage==1) ShowTitle();
-        else { Open=!Open;TitleScreen=false;SettingsFromTitle=false; }
+        if(TitleScreen) { if(TitlePage==1) ShowTitle();return; }
+        if(Open && SettingsFromTitle) { ShowTitle();return; }
+        Open=!Open;TitleScreen=false;SettingsFromTitle=false;
+        if(Open) { View=MenuView.Pause;Page=9;Selected=0; }
         dragging=-1;hoveredItem=-1;Dirty=true;InteractionSound?.Invoke();
     }
+    internal void Back()
+    {
+        FinishEditing();
+        if(TitleScreen) { if(TitlePage==1) ShowTitle();return; }
+        if(View==MenuView.Settings) { View=settingsReturn;Dirty=true;return; }
+        if(View is MenuView.Categories or MenuView.Help)
+        { if(SettingsFromTitle) ShowTitle(); else { View=MenuView.Pause;Page=9;Selected=0;Dirty=true; } return; }
+        Toggle();
+    }
+    internal void OpenCategories()
+    { FinishEditing();TitleScreen=false;View=MenuView.Categories;CategorySelected=0;Dirty=true;InteractionSound?.Invoke(); }
+    internal void OpenHelp()
+    { FinishEditing();TitleScreen=false;View=MenuView.Help;Dirty=true;InteractionSound?.Invoke(); }
     internal void ShowTitle()
     {
         FinishEditing(); Open=true;TitleScreen=true;SettingsFromTitle=false;
@@ -242,16 +274,20 @@ internal sealed class DebugMenu
     }
     internal void ShowSettingsFromTitle()
     {
-        FinishEditing();TitleScreen=false;SettingsFromTitle=true;SetPage(0);
+        FinishEditing();TitleScreen=false;SettingsFromTitle=true;OpenCategories();
     }
     internal void SetPage(int page)
     {
         if(page==2 && !MovementControlsWritable) return;
-        FinishEditing(); Page=Math.Clamp(page,0,9); Selected=0;
+        if(page!=9 && View!=MenuView.Settings)
+            settingsReturn=View==MenuView.Pause?MenuView.Pause:MenuView.Categories;
+        FinishEditing(); Page=Math.Clamp(page,0,10); Selected=0;ScrollRow=0;
+        View=Page==9?MenuView.Pause:MenuView.Settings;
         dragging=-1;hoveredItem=-1;Dirty=true;InteractionSound?.Invoke();
     }
     internal void CyclePage(int step)
     {
+        if(View!=MenuView.Settings) return;
         int index=Array.FindIndex(Tabs,tab=>tab.Page==Page);
         for(int offset=1;offset<=Tabs.Length;offset++)
         {
@@ -296,6 +332,7 @@ internal sealed class DebugMenu
         SnapHold=defaults.SnapHold;SnapStep=defaults.SnapStep;
         CubeColorIndex=defaults.CubeColorIndex;CubeMaterialIndex=defaults.CubeMaterialIndex;
         ShowDebugOverlay=defaults.ShowDebugOverlay; ShowObjectFrames=defaults.ShowObjectFrames;
+        ShowFps=defaults.ShowFps;ShowPlayerTags=defaults.ShowPlayerTags;ShowWiresInPlay=defaults.ShowWiresInPlay;
         MonsterDebug=defaults.MonsterDebug;
         if(MonsterControlsWritable) MonsterSettings.CopyFrom(defaults.MonsterSettings);
         if(FlickerControlsWritable) FlickerSettings.CopyFrom(defaults.FlickerSettings);
@@ -358,12 +395,31 @@ internal sealed class DebugMenu
             if(next!=TitleSelected) InteractionSound?.Invoke();
             TitleSelected=next;Dirty=true;return;
         }
+        if(View==MenuView.Categories)
+        { CategorySelected=Math.Clamp(CategorySelected+step,0,Tabs.Length-1);Dirty=true;InteractionSound?.Invoke();return; }
+        if(View==MenuView.Help) return;
         int selected=Math.Clamp(Selected + step, 0, Labels[Page].Length - 1);
         if(selected!=Selected) InteractionSound?.Invoke(); Selected=selected; Dirty=true;
+        EnsureVisible();
+    }
+    void EnsureVisible()
+    {
+        if(View!=MenuView.Settings) return;
+        if(Selected<ScrollRow) ScrollRow=Selected;
+        else if(Selected>=ScrollRow+VisibleRows) ScrollRow=Selected-VisibleRows+1;
+    }
+    const int VisibleRows=11;
+    static int CategoryY(int index) => 44+index*16+(index>=5?16:0);
+    static int CategoryAt(int y)
+    {
+        for(int i=0;i<Tabs.Length;i++) if(y>=CategoryY(i)-2 && y<CategoryY(i)+12) return i;
+        return -1;
     }
     internal void AdjustSelected(int direction)
     {
         if(TitleScreen) ActivateTitleSelection();
+        else if(View==MenuView.Categories) SetPage(Tabs[CategorySelected].Page);
+        else if(View==MenuView.Help) Back();
         else Adjust(Selected,direction);
     }
     void ActivateTitleSelection()
@@ -422,20 +478,22 @@ internal sealed class DebugMenu
             if(titleRow>=0) { TitleSelected=titleRow;ActivateTitleSelection(); }
             return;
         }
-        if (y>=2 && y<14)
+        if(y>=2 && y<14 && x>=270)
+        { if(x>=307) Back(); else if(View==MenuView.Settings) { ResetDefaults();InteractionSound?.Invoke(); } return; }
+        if(View==MenuView.Categories)
         {
-            if(x>=307) { Toggle(); return; }
-            if(x>=270 && x<307) { ResetDefaults(); InteractionSound?.Invoke(); return; }
-        }
-        int tab=TabAt(x,y);
-        if(tab>=0)
-        {
-            SetPage(Tabs[tab].Page);
+            int category=CategoryAt(y);
+            if(x>=20 && x<305 && y>=44 && category>=0 && category<Tabs.Length)
+            { CategorySelected=category;SetPage(Tabs[category].Page); }
             return;
         }
-        int row = (y - 54) / RowPitch;
-        if (y < 54 || row < 0 || row >= Labels[Page].Length || x < 15 || x >= 305) return;
+        if(View==MenuView.Help) { Back();return; }
+        int row=View==MenuView.Pause?(y-55)/20:ScrollRow+(y-43)/15;
+        if ((View==MenuView.Pause && (y<55||y>=215)) ||
+            (View==MenuView.Settings && (y<43||y>=43+VisibleRows*15)) ||
+            row<0 || row>=Labels[Page].Length || x<15 || x>=305) return;
         Selected = row;
+        if(View==MenuView.Pause) { Adjust(row,1);return; }
         if (IsSlider(row) && x >= 155 && x <= 254)
         {
             dragging = row;
@@ -456,15 +514,23 @@ internal sealed class DebugMenu
             { TitleSelected=row;Dirty=true;HoverSound?.Invoke(); }
             return;
         }
+        if(View==MenuView.Categories)
+        {
+            int row=CategoryAt(y);
+            if(y>=44 && x>=20 && x<305 && row>=0 && row<Tabs.Length && CategorySelected!=row)
+            { CategorySelected=row;Dirty=true;HoverSound?.Invoke(); }
+            return;
+        }
+        if(View==MenuView.Help) return;
         if (dragging < 0)
         {
             int hovered=-1;
             if(y>=2 && y<14 && x>=270 && x<307) hovered=109;
             else if(y>=2 && y<14 && x>=307) hovered=110;
-            else if(TabAt(x,y) is int tab && tab>=0) hovered=100+tab;
-            else if(x>=15 && x<305 && y>=54)
+            else if(x>=15 && x<305 && y>=(View==MenuView.Pause?55:43) &&
+                    y<(View==MenuView.Pause?215:43+VisibleRows*15))
             {
-                int row=(y-54)/RowPitch;
+                int row=View==MenuView.Pause?(y-55)/20:ScrollRow+(y-43)/15;
                 if(row>=0 && row<Labels[Page].Length) hovered=row;
             }
             if(hovered!=hoveredItem)
@@ -485,6 +551,8 @@ internal sealed class DebugMenu
     internal void MouseWheel(int delta)
     {
         if(SandboxPage) { ScrollSandbox(-Math.Sign(delta));return; }
+        if(View==MenuView.Settings)
+        { ScrollRow=Math.Clamp(ScrollRow-Math.Sign(delta),0,Math.Max(0,Labels[Page].Length-VisibleRows));Dirty=true; }
     }
     int TitleRowAt(int x,int y)
     {
@@ -500,17 +568,7 @@ internal sealed class DebugMenu
         if(y>=178 && y<192) return 3;
         return -1;
     }
-    int RowPitch => Page is 1 or 8 ? 10 : Page is 4 or 6 ? 12 : 14;
-
-    static int TabAt(int x,int y)
-    {
-        if(x<12 || x>=312 || y<17 || y>=51) return -1;
-        int column=(x-12)/75;
-        int row=(y-17)/12;
-        if((x-12)%75>=70 || (y-17)%12>=10) return -1;
-        int index=row*4+column;
-        return index<Tabs.Length?index:-1;
-    }
+    int RowPitch => 15;
 
     bool IsSlider(int row) => Page switch
     {
@@ -522,6 +580,7 @@ internal sealed class DebugMenu
         7 => row is 2 or 4 or 5 or 7 or 8 or 9,
         8 => row is 1 or 2 or 3 or 5 or 6 or 7 or 8 or 9 or 12 or 13 or 14 or 16 or 17,
         9 => false,
+        10 => false,
         _ => true
     };
     bool IsChoice(int row) => Page switch
@@ -627,8 +686,18 @@ internal sealed class DebugMenu
                 case 5: SlideResistance=Math.Clamp(SlideResistance+direction*0.1f,0f,12f); break;
                 case 6: SnapHold=!SnapHold;break;
                 case 7: SnapStep=Math.Clamp(SnapStep+direction*.05f,.05f,1f);break;
-                case 9: ShowDebugOverlay=!ShowDebugOverlay; break;
-                case 10: ShowObjectFrames=!ShowObjectFrames; break;
+            }
+        }
+        else if(Page==10)
+        {
+            switch(row)
+            {
+                case 0: ShowFps=!ShowFps;break;
+                case 1: ShowObjectFrames=!ShowObjectFrames;break;
+                case 2: ShowPlayerTags=!ShowPlayerTags;break;
+                case 3: ShowWiresInPlay=!ShowWiresInPlay;break;
+                case 4: ShowDebugOverlay=!ShowDebugOverlay;break;
+                case 5: MonsterDebug=!MonsterDebug;break;
             }
         }
         else if(Page == 5)
@@ -667,10 +736,14 @@ internal sealed class DebugMenu
         }
         else if(Page == 9)
         {
-            // The server validates the sender. Do not use a stale client-side host
-            // flag to prevent a host from issuing the request.
             if(row==7 && (!NetworkConnected || SandboxSupported)) SandboxToggle?.Invoke();
-            else if(row<4) SessionAction?.Invoke(row);
+            else if(row==0) SessionAction?.Invoke(0);
+            else if(row==1) SetPage(6);
+            else if(row==2) OpenCategories();
+            else if(row==3) OpenHelp();
+            else if(row==4 && NetworkConnected) SessionAction?.Invoke(1);
+            else if(row==5) SessionAction?.Invoke(2);
+            else if(row==6) SessionAction?.Invoke(3);
             else return;
         }
         else if(Page == 7)
@@ -736,13 +809,15 @@ internal sealed class DebugMenu
 
     string Value(int row)
     {
+        if(Page==10) return (row switch
+        {
+            0=>ShowFps,1=>ShowObjectFrames,2=>ShowPlayerTags,
+            3=>ShowWiresInPlay,4=>ShowDebugOverlay,5=>MonsterDebug,_=>false
+        })?"ON":"OFF";
         if(Page == 9) return row switch
         {
-            0 => "PLAY", 1 => NetworkConnected || NetworkRemote ? "LEAVE" : "OFFLINE",
-            2 => "OPEN", 3 => "EXIT",
-            4 => NetworkConnected ? (NetworkRemote ? "ONLINE" : "LOCAL") : NetworkStatus,
-            5 => NetworkConnected ? NetworkPlayers.ToString() : "1",
-            6 => NetworkConnected ? (NetworkId==NetworkHost ? "HOST" : "GUEST") : "SOLO",
+            0 => "PLAY",1=>"OPEN",2=>"OPEN",3=>"OPEN",
+            4 => NetworkConnected ? "LEAVE" : "OFFLINE",5=>"OPEN",6=>"EXIT",
             7 => NetworkConnected&&!SandboxSupported ? "SERVER UPDATE REQUIRED" : SandboxEnabled ? "ON" : "OFF",
             _ => ""
         };
@@ -812,7 +887,7 @@ internal sealed class DebugMenu
             2 => $"{SpringFrequency:0.0}",3 => $"{SpringDamping:0.00}",
             4 => $"{PidSmoothing:0.0}",5 => $"{SlideResistance:0.0}",
             6 => SnapHold?"ON":"OFF",7 => $"{SnapStep:0.00}",8 => $"{BodyCount}",
-            9 => ShowDebugOverlay ? "ON" : "OFF",10 => ShowObjectFrames ? "ON" : "OFF",_ => ""
+            _ => ""
         };
         if (Page == 0) return row switch
         {
@@ -998,6 +1073,23 @@ internal sealed class DebugMenu
             x += 6;
         }
     }
+
+    static void DrawSelection(Graphics g,Brush focus,Brush accent,int y,int left=14,int width=292)
+    {
+        g.FillRectangle(focus,left,y-3,width,13);
+        g.FillRectangle(accent,left,y-3,2,13);
+    }
+
+    static void DrawDivider(Graphics g,Brush divider,int y,int left=14,int width=292)
+        => g.FillRectangle(divider,left,y,width,1);
+
+    static void DrawValueBox(Graphics g,Brush outline,int x,int y,int width=35)
+    {
+        g.FillRectangle(outline,x,y,width,1);
+        g.FillRectangle(outline,x,y+11,width,1);
+        g.FillRectangle(outline,x,y,1,12);
+        g.FillRectangle(outline,x+width-1,y,1,12);
+    }
     static void DrawFrameCorners(Graphics g,Brush brush,RectangleF bounds,int offset)
     {
         int left=(int)bounds.Left+offset,top=(int)bounds.Top+offset;
@@ -1014,13 +1106,6 @@ internal sealed class DebugMenu
     }
     void DrawPonder(Graphics g,Brush white,Brush paleBlue,Brush green)
     {
-        g.FillRectangle(new SolidBrush(Color.FromArgb(218,5,10,13)),18,24,284,194);
-        using var border=new Pen(Color.FromArgb(120,84,224,160));
-        g.DrawLine(border,new PointF(18,24),new PointF(302,24));
-        g.DrawLine(border,new PointF(302,24),new PointF(302,218));
-        g.DrawLine(border,new PointF(302,218),new PointF(18,218));
-        g.DrawLine(border,new PointF(18,218),new PointF(18,24));
-        for(int y=28;y<216;y+=4) g.FillRectangle(new SolidBrush(Color.FromArgb(18,130,220,180)),20,y,280,1);
         string[] titles=["PONDER: BUILD GRID","PONDER: WIRE POWER","PONDER: WELD SHAPES","PONDER: MATERIALS"];
         string[] details=["PLACE DEVICES ON THE 5X5X5 GRID","G CONNECTS OUTPUT TO INPUT","K JOINS ANY TWO GRABBABLES","SELECT CONCRETE WOOD METAL PLASTIC"];
         PixelText(g,titles[PonderStep],green,28,34);
@@ -1060,6 +1145,9 @@ internal sealed class DebugMenu
         using var paleBlue = new SolidBrush(Color.FromArgb(170, 211, 231));
         using var green = new SolidBrush(Color.FromArgb(84, 224, 160));
         using var unfilled = new SolidBrush(Color.FromArgb(130, 160, 171));
+        using var focus = new SolidBrush(Color.FromArgb(135, 8, 23, 20));
+        using var divider = new SolidBrush(Color.FromArgb(125, 142, 184, 187));
+        using var toggleOutline = new SolidBrush(Color.FromArgb(195, 170, 211, 231));
         if(Open && PonderPage)
         {
             DrawPonder(g,white,paleBlue,green);
@@ -1067,6 +1155,7 @@ internal sealed class DebugMenu
         else if(Open && SandboxPage)
         {
             PixelText(g,"BEANROOMS MENU",paleBlue,12,4);
+            DrawDivider(g,divider,29);
             PixelText(g,"X",white,310,4);
             for(int category=0;category<SandboxCategories.Length;category++)
                 PixelText(g,SandboxCategories[category],category==SandboxCategory?green:white,
@@ -1080,10 +1169,12 @@ internal sealed class DebugMenu
                 bool focused=row==SandboxSelected;
                 bool spawnable=SandboxEnabled || items[row]==SandboxKind.Cube;
                 Brush ink=spawnable?focused?green:white:unfilled;
-                PixelText(g,$"{row+1}.",ink,21,y+3);
+                if(focused) DrawSelection(g,focus,green,y+3,14);
+                PixelText(g,focused?">":" ",ink,21,y+3);
                 PixelText(g,SandboxName(items[row]),ink,44,y+3);
-                string value=spawnable?focused?"SPAWN <":"SPAWN":"LOCKED";
+                string value=spawnable?"SPAWN >":"LOCKED";
                 PixelText(g,value,ink,316-value.Length*6,y+3);
+                if(slot<SandboxRows-1) DrawDivider(g,divider,y+12,20,280);
             }
             if(SandboxScroll>0) PixelText(g,"^",paleBlue,8,SandboxTop-1);
             if(SandboxScroll<SandboxMaxScroll) PixelText(g,"v",paleBlue,8,SandboxTop+SandboxRows*SandboxPitch-3);
@@ -1093,6 +1184,7 @@ internal sealed class DebugMenu
             PixelText(g,"< "+CubeMaterial.ToString().ToUpperInvariant()+" >",green,215,171);
             PixelText(g,"CLEAR CUBES",white,21,189);
             PixelText(g,"CLEAR",white,274,189);
+            DrawDivider(g,divider,210);
             string detail=SandboxDetail(items[SandboxSelected]);
             PixelText(g,detail.Length>22?detail[..22]:detail,paleBlue,13,215);
             PixelText(g,NetworkConnected?(SandboxHost?"HOST CONTROLS":"GUEST CONTROLS"):"LOCAL SANDBOX",paleBlue,251,215);
@@ -1101,6 +1193,7 @@ internal sealed class DebugMenu
         else if(Open && TitleScreen)
         {
             PixelText(g,TitlePage==0?"BEANROOMS MENU":"BEANROOMS ONLINE",paleBlue,12,4);
+            DrawDivider(g,divider,27);
             if(TitlePage==0)
             {
                 PixelText(g,"SELECT MODE",white,44,43);
@@ -1109,72 +1202,156 @@ internal sealed class DebugMenu
                 {
                     string label=options[row];
                     Brush ink=row==TitleSelected?green:white;
-                    PixelText(g,$"{row+1}.",ink,21,72+row*24);
+                    if(row==TitleSelected) DrawSelection(g,focus,green,72+row*24,14);
+                    PixelText(g,row==TitleSelected?">":" ",ink,21,72+row*24);
                     PixelText(g,label,ink,44,72+row*24);
+                    DrawDivider(g,divider,84+row*24,20,280);
                 }
                 PixelText(g,"UP DOWN SELECT  ENTER CONFIRM",paleBlue,13,225);
             }
             else
             {
-                PixelText(g,"1.",TitleSelected==0?green:white,21,70);
+                if(TitleSelected==0) DrawSelection(g,focus,green,70,14);
+                if(TitleSelected==1) DrawSelection(g,focus,green,125,14);
+                if(TitleSelected==2) DrawSelection(g,focus,green,160,14);
+                PixelText(g,TitleSelected==0?">":" ",TitleSelected==0?green:white,21,70);
                 PixelText(g,"PHOTON ROOM",TitleSelected==0?green:white,44,70);
                 string masked=JoinKey.Length==0?"ENTER KEY":new string('*',Math.Min(JoinKey.Length,20));
                 PixelText(g,masked+(EditingJoinKey?"-":""),TitleSelected==0?green:white,44,83);
-                PixelText(g,"2.",TitleSelected==1?green:white,21,125);
+                PixelText(g,TitleSelected==1?">":" ",TitleSelected==1?green:white,21,125);
                 PixelText(g,"CONNECT",TitleSelected==1?green:white,44,125);
-                PixelText(g,"3.",TitleSelected==2?green:white,21,160);
+                PixelText(g,TitleSelected==2?">":" ",TitleSelected==2?green:white,21,160);
                 PixelText(g,"BACK",TitleSelected==2?green:white,44,160);
                 PixelText(g,"STATUS "+(NetworkConnected?"ONLINE":NetworkStatus),paleBlue,13,225);
             }
         }
         else if (Open)
         {
-            PixelText(g,"BEANROOMS MENU",paleBlue,12,4);
-            PixelText(g,"RESET",white,270,4);
-            PixelText(g,"X",white,310,4);
-            for(int tab=0;tab<Tabs.Length;tab++)
-                PixelText(g,Tabs[tab].Name,Tabs[tab].Page==2&&!MovementControlsWritable?unfilled:
-                    Page==Tabs[tab].Page?green:white,
-                    12+(tab%4)*75,17+(tab/4)*12);
-            for (int row=0; row<Labels[Page].Length; row++)
+            if(View==MenuView.Pause)
             {
-                int y = 54 + row * RowPitch;
-                int textOffset = Page is 1 or 8 ? 1 : 3;
-                bool focused=row==Selected;
-                bool locked=Page==5&&!MonsterControlsWritable ||
-                    Page==8&&!FlickerControlsWritable ||
-                    Page==2&&!MovementControlsWritable ||
-                    Page==9&&row==1&&!NetworkConnected&&!NetworkRemote ||
-                    Page==9&&row==7&&NetworkConnected&&!SandboxSupported;
-                Brush ink=locked?unfilled:focused?green:white;
-                PixelText(g,$"{row+1}.",ink,21,y+textOffset);
-                PixelText(g,Labels[Page][row],ink,44,y+textOffset);
-                if (IsSlider(row))
+                PixelText(g,"PAUSED",paleBlue,13,8);
+                PixelText(g,NetworkConnected?$"ONLINE {NetworkPlayers}P":"SOLO",paleBlue,230,8);
+                DrawDivider(g,divider,27);
+                for(int row=0;row<Labels[9].Length;row++)
                 {
-                    int filled=(int)MathF.Round(Math.Clamp(Fraction(row),0f,1f)*20f);
-                    for(int tick=0;tick<20;tick++)
-                        g.FillRectangle(tick<filled ? ink : unfilled,155+tick*5,y+textOffset+3,4,4);
+                    bool locked=row==4&&!NetworkConnected || row==7&&NetworkConnected&&!SandboxSupported;
+                    Brush ink=locked?unfilled:row==Selected?green:white;
+                    int y=59+row*20;
+                    if(row==Selected) DrawSelection(g,focus,green,y,18,284);
+                    PixelText(g,row==Selected?">":" ",ink,26,y);
+                    PixelText(g,Labels[9][row],ink,50,y);
+                    if(row==7)
+                    {
+                        string value=Value(row);
+                        DrawValueBox(g,toggleOutline,273,y-3);
+                        PixelText(g,value,ink,292-value.Length*3,y);
+                    }
+                    if(row<Labels[9].Length-1) DrawDivider(g,divider,y+12,25,270);
                 }
-                string value=Value(row);
-                if(IsChoice(row)) value="< "+value+" >";
-                PixelText(g,value,ink,316-value.Length*6,y+textOffset);
+                PixelText(g,"TAB RESUME  ENTER SELECT",paleBlue,13,225);
             }
-            PixelText(g,$"SEED {DebugSeed}",paleBlue,110,225);
-            PixelText(g,$"FPS {Math.Clamp(FpsValue,0,999):000}",white,13,225);
-            if((Page==5&&!MonsterControlsWritable)||(Page==8&&!FlickerControlsWritable))
-                PixelText(g,"HOST ONLY",paleBlue,251,225);
-            if(Page==2&&!MovementControlsWritable)
-                PixelText(g,"SOLO ONLY",paleBlue,251,225);
+            else if(View==MenuView.Categories)
+            {
+                PixelText(g,"SETTINGS",paleBlue,13,8);
+                PixelText(g,"<",white,310,8);
+                DrawDivider(g,divider,27);
+                PixelText(g,"EVERYDAY",paleBlue,24,32);
+                DrawDivider(g,divider,126,24,276);
+                PixelText(g,"ADVANCED",paleBlue,24,128);
+                for(int index=0;index<Tabs.Length;index++)
+                {
+                    int y=CategoryY(index);
+                    Brush ink=Tabs[index].Page==2&&!MovementControlsWritable?unfilled:
+                        index==CategorySelected?green:white;
+                    if(index==CategorySelected) DrawSelection(g,focus,green,y,18,284);
+                    PixelText(g,index==CategorySelected?">":" ",ink,25,y);
+                    PixelText(g,Tabs[index].Name,ink,50,y);
+                    PixelText(g,">",ink,301,y);
+                    if((Tabs[index].Page==5&&!MonsterControlsWritable) ||
+                       (Tabs[index].Page==8&&!FlickerControlsWritable))
+                        PixelText(g,"HOST",paleBlue,266,y);
+                    if(index!=4 && index!=Tabs.Length-1) DrawDivider(g,divider,y+11,24,276);
+                }
+                PixelText(g,"UP DOWN  ENTER OPEN  ESC BACK",paleBlue,13,225);
+            }
+            else if(View==MenuView.Help)
+            {
+                PixelText(g,"CONTROLS",paleBlue,13,8);
+                PixelText(g,"<",white,310,8);
+                DrawDivider(g,divider,27);
+                string[] help=
+                [
+                    "WASD MOVE   SHIFT SPRINT", "C CROUCH   MOUSE LOOK",
+                    "LMB HOLD   WHEEL DISTANCE", "RMB + MOUSE ROTATE HELD",
+                    "E USE   F SPAWN CUBE", "TAB PAUSE   ESC RELEASE",
+                    "F11 FULLSCREEN", "B BUILD BROWSER (SANDBOX)",
+                    "G WIRE   K WELD", "Y COPY   V PLACE   O GUIDE"
+                ];
+                for(int i=0;i<help.Length;i++) PixelText(g,help[i],white,20,41+i*17);
+                DrawDivider(g,divider,91);
+                DrawDivider(g,divider,159);
+                PixelText(g,"ESC BACK",paleBlue,13,225);
+            }
+            else
+            {
+                string heading=Tabs.First(tab=>tab.Page==Page).Name;
+                PixelText(g,heading,paleBlue,13,8);
+                PixelText(g,"RESET",white,270,8);
+                PixelText(g,"<",white,310,8);
+                DrawDivider(g,divider,27);
+                if(ScrollRow>0) PixelText(g,"^",paleBlue,306,31);
+                for(int slot=0;slot<VisibleRows;slot++)
+                {
+                    int row=ScrollRow+slot;
+                    if(row>=Labels[Page].Length) break;
+                    int y=43+slot*RowPitch;
+                    bool locked=Page==5&&!MonsterControlsWritable ||
+                        Page==8&&!FlickerControlsWritable ||
+                        Page==2&&!MovementControlsWritable ||
+                        Page==6&&row==8&&!NetworkConnected;
+                    Brush ink=locked?unfilled:row==Selected?green:white;
+                    if(row==Selected) DrawSelection(g,focus,green,y,12,296);
+                    PixelText(g,row==Selected?">":" ",ink,18,y);
+                    PixelText(g,Labels[Page][row],ink,44,y);
+                    if(IsSlider(row))
+                    {
+                        int filled=(int)MathF.Round(Math.Clamp(Fraction(row),0f,1f)*20f);
+                        for(int tick=0;tick<20;tick++)
+                            g.FillRectangle(tick<filled?ink:unfilled,155+tick*5,y+3,4,4);
+                    }
+                    string value=Value(row);
+                    if(IsChoice(row)) value="< "+value+" >";
+                    if(value is "ON" or "OFF")
+                    {
+                        DrawValueBox(g,toggleOutline,276,y-3,33);
+                        PixelText(g,value,ink,292-value.Length*3,y);
+                    }
+                    else
+                    {
+                        bool action=Page==6 && row is (7 or 8);
+                        if(action) value=value+" >";
+                        PixelText(g,value,ink,316-value.Length*6,y);
+                    }
+                    if(slot<VisibleRows-1) DrawDivider(g,divider,y+11,18,284);
+                }
+                if(ScrollRow+VisibleRows<Labels[Page].Length) PixelText(g,"V",paleBlue,306,210);
+                PixelText(g,"ESC BACK  Q/E PAGES",paleBlue,13,225);
+                if(Page==5&&!MonsterControlsWritable || Page==8&&!FlickerControlsWritable)
+                    PixelText(g,"HOST ONLY",paleBlue,252,225);
+                if(Page==2&&!MovementControlsWritable) PixelText(g,"SOLO ONLY",paleBlue,252,225);
+            }
+            DrawDivider(g,divider,218);
         }
         else
         {
+            if(ShowFps) PixelText(g,$"FPS {Math.Clamp(FpsValue,0,999):000}",white,13,10);
             if(WireTool)
                 PixelText(g,"WIRE TOOL: CLICK SOURCE, THEN TARGET",green,13,225);
             else if(WeldTool)
                 PixelText(g,"WELD TOOL: CLICK TWO OBJECTS",green,13,225);
             else if(!string.IsNullOrEmpty(ToolStatus))
                 PixelText(g,ToolStatus,green,13,225);
-            foreach(var tag in PlayerTags)
+            if(ShowPlayerTags) foreach(var tag in PlayerTags)
             {
                 using var brush=new SolidBrush(tag.Ink);
                 PixelText(g,tag.Label,brush,(int)tag.At.X-tag.Label.Length*3,(int)tag.At.Y);
@@ -1183,8 +1360,11 @@ internal sealed class DebugMenu
             {
                 DrawFrameCorners(g,Brushes.Black,frame,1);
                 DrawFrameCorners(g,white,frame,0);
+                if(ObjectPrompt.Length>0)
+                    PixelText(g,ObjectPrompt,white,Math.Clamp((int)frame.Left,5,315-ObjectPrompt.Length*6),
+                        Math.Clamp((int)frame.Bottom+3,10,211));
             }
-            foreach(var wire in SandboxWires)
+            if(WireTool||ShowWiresInPlay) foreach(var wire in SandboxWires)
             {
                 using var pen=new Pen(wire.Ink);
                 g.DrawLine(pen,wire.A,wire.B);

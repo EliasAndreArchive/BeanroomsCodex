@@ -2,6 +2,25 @@ using Beanrooms;
 using StbImageSharp;
 using System.Drawing;
 
+if(args.Contains("--ui-preview"))
+{
+    string folder=Path.Combine("publish","ui-preview");
+    Directory.CreateDirectory(folder);
+    var preview=new DebugMenu { Open=true };
+    void Save(string name)
+    { using var bitmap=preview.Draw();File.WriteAllBytes(Path.Combine(folder,name+".bgra"),bitmap.Pixels); }
+    preview.ShowTitle();Save("title");
+    preview.LeaveTitle();preview.Open=true;preview.SetPage(9);Save("pause");
+    preview.OpenCategories();Save("categories");
+    preview.SetPage(1);Save("display");
+    for(int i=0;i<16;i++) preview.Select(1);
+    Save("display-bottom");
+    preview.SetPage(8);for(int i=0;i<17;i++) preview.Select(1);
+    Save("flicker-bottom");
+    preview.OpenHelp();Save("help");
+    return;
+}
+
 var menu=new DebugMenu();
 var blackoutTuning=new FlickerTuning { MinorEnabled=false,EventDuration=2f };
 var blackoutCheck=new LightFlicker(0,blackoutTuning);
@@ -27,6 +46,21 @@ menu.SetPage(4);menu.Selected=6;menu.AdjustSelected(1);
 if(!menu.SnapHold) throw new Exception("Physics menu did not toggle grid snap");
 menu.Selected=7;float snapStep=menu.SnapStep;menu.AdjustSelected(1);
 if(menu.SnapStep<=snapStep) throw new Exception("Physics menu did not adjust snap step");
+menu.SetPage(9);menu.Selected=2;menu.AdjustSelected(1);
+if(menu.View!=DebugMenu.MenuView.Categories) throw new Exception("Pause settings did not open categories");
+menu.Select(1);menu.AdjustSelected(1);
+if(menu.View!=DebugMenu.MenuView.Settings || menu.Page!=0) throw new Exception("Settings category did not open its page");
+menu.SetPage(8);
+for(int i=0;i<17;i++) menu.Select(1);
+if(menu.ScrollRow==0 || menu.Selected!=17) throw new Exception("Long settings page did not scroll to its last row");
+using(var scrolled=menu.Draw())
+    if(scrolled.Width!=320 || scrolled.Height!=240) throw new Exception("Scrolled menu dimensions changed");
+menu.Back();menu.Back();
+if(menu.View!=DebugMenu.MenuView.Pause) throw new Exception("Settings did not return to pause");
+menu.Selected=3;menu.AdjustSelected(1);
+if(menu.View!=DebugMenu.MenuView.Help) throw new Exception("Pause help did not open");
+menu.Back();
+if(menu.View!=DebugMenu.MenuView.Pause) throw new Exception("Help did not return to pause");
 using(var staleClient=new LocalNetClient())
 {
     var receive=typeof(LocalNetClient).GetMethod("ReceiveMessage",

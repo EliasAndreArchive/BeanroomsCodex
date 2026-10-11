@@ -178,7 +178,7 @@ internal sealed class GameWindow : SilkForm
         };
         menu.InteractionSound=()=>audio?.PlayClick();
         menu.HoverSound=()=>audio?.PlayHover();
-        Text = "BEANROOMS  |  WASD move  •  F cube  •  Y copy  •  V place  •  O ponder  •  T light event  •  Tab menu  •  F11 full screen";
+        Text = "BEANROOMS";
         menu.ObjectAction = HandleObjectAction;
         menu.SandboxSpawn = SpawnSandboxItem;
         menu.SandboxToggle = ToggleSandboxPermission;
@@ -205,6 +205,8 @@ internal sealed class GameWindow : SilkForm
                 else if(e.KeyCode is Keys.Right or Keys.Down or Keys.Enter or Keys.Space) menu.MovePonder(1);
                 e.Handled=true;return;
             }
+            if(menu.Open && menu.View==DebugMenu.MenuView.Help && e.KeyCode==Keys.O)
+            { TogglePonderScreen();e.Handled=true;return; }
             if(!menu.Open && e.KeyCode==Keys.B)
             {
                 if(!sandboxToggleKeyDown) { sandboxToggleKeyDown=true;ToggleSandboxMenu(); }
@@ -245,7 +247,7 @@ internal sealed class GameWindow : SilkForm
                     e.Handled=handled;
                     return;
                 }
-                if(e.KeyCode == Keys.Escape) ToggleSettings();
+                if(e.KeyCode == Keys.Escape) ToggleSettings(back:true);
                 else if(e.KeyCode == Keys.Q) menu.CyclePage(-1);
                 else if(e.KeyCode == Keys.E) menu.CyclePage(1);
                 else if(e.KeyCode == Keys.Up) menu.Select(-1);
@@ -820,14 +822,14 @@ internal sealed class GameWindow : SilkForm
     void CaptureMouse() { if (ready && wantsCapture && !active && Focused) { active=true; CaptureCursor(); } }
     void SuspendMouse() { if (active) { active=false; ReleaseCursor(); } keys.Clear(); }
     void ReleaseMouse() { wantsCapture=false; SuspendMouse(); }
-    void ToggleSettings()
+    void ToggleSettings(bool back=false)
     {
         bool opening=!menu.Open;
         networkHolding=false;
 
         network.Send(new NetMessage { Type="release" });
         physics.Release();
-        menu.Toggle();
+        if(back) menu.Back(); else menu.Toggle();
         if(opening && !menu.TitleScreen) menu.SetPage(9);
         if(menu.Open) { wantsCapture=false; SuspendMouse(); }
         else CloseSettings();
@@ -1100,7 +1102,7 @@ internal sealed class GameWindow : SilkForm
         {
             copiedDeviceKind=device.Kind;
             copiedCube=false;
-            menu.ToolStatus=$"COPIED {device.Kind.ToString().ToUpperInvariant()} • V PLACE";
+            menu.SetToolStatus($"COPIED {device.Kind.ToString().ToUpperInvariant()}  V PLACE");
             menu.Dirty=true;
             return;
         }
@@ -1118,7 +1120,7 @@ internal sealed class GameWindow : SilkForm
             if(cube==null||cube.Plank||cube.SandboxDeviceId!=0) return;
             copiedCube=true;copiedEmissive=cube.Emissive;copiedMaterial=cube.Material;copiedColor=cube.Color;copiedDeviceKind=null;
         }
-        menu.ToolStatus=$"COPIED {(copiedEmissive?"GLOW ":"")}CUBE • V PLACE";
+        menu.SetToolStatus($"COPIED {(copiedEmissive?"GLOW ":"")}CUBE  V PLACE");
         menu.Dirty=true;
     }
 
@@ -1584,7 +1586,7 @@ internal sealed class GameWindow : SilkForm
         int deviceCount=network.Connected?networkDevices.Length:localDevices.Length;
         int count=cubeCount+deviceCount;
         if(!menu.ShowObjectFrames||count==0)
-        { if(menu.ObjectFrames.Length>0) { menu.ObjectFrames=[];menu.Dirty=true; } return; }
+        { if(menu.ObjectFrames.Length>0) { menu.ObjectFrames=[];menu.ObjectPrompt="";menu.Dirty=true; } return; }
         int heldId=network.Connected
             ? networkHolding?networkHeldId:networkCubes.FirstOrDefault(cube=>cube.HolderId==network.Id)?.Id??0
             : physics.Held?.Id??0;
@@ -1644,6 +1646,7 @@ internal sealed class GameWindow : SilkForm
         }
         menu.ObjectFrames=found&&ProjectCubeFrame(hitPosition,hitRotation,hitHalf,eye,right,up,forward,out RectangleF bounds)
             ?[bounds]:[];
+        menu.ObjectPrompt=menu.ObjectFrames.Length==0?"":heldId!=0?"LMB HOLD":"LMB GRAB";
         menu.Dirty=true;
     }
     void PrepareSandboxWires(Vector3 eye,Vector3 right,Vector3 up,Vector3 forward)
@@ -1677,6 +1680,7 @@ internal sealed class GameWindow : SilkForm
     }
     void UploadOverlay()
     {
+        menu.RefreshTransient();
         using var image = menu.Draw();
         var data = image.LockBits(new Rectangle(0,0,image.Width,image.Height),ImageLockMode.ReadOnly,PixelFormat.Format32bppArgb);
         try
@@ -1823,6 +1827,7 @@ internal sealed class GameWindow : SilkForm
         Gl.DrawArrays(0x0004,0,3);
         sceneTexture=renderTexture;
         RunPostProcessing();
+        menu.RefreshTransient();
         if(menu.Dirty) UploadOverlay();
         Gl.Viewport(0,0,FramebufferSize.Width,FramebufferSize.Height);
         Gl.UseProgram(displayProgram);
@@ -1856,7 +1861,7 @@ internal sealed class GameWindow : SilkForm
             fpsValue=(int)Math.Round(reportFrames/elapsed);
             frameMs=(float)(elapsed*1000.0/Math.Max(reportFrames,1));
             menu.FpsValue=fpsValue;
-            Text=$"BEANROOMS  |  {(network.Connected?$"{(remoteServer?"ONLINE":"LOCAL")} {remotePositions.Count+1} PLAYERS  •  ":"")}{menu.RenderModeName}  •  {width}×{height}  •  {fpsValue} FPS  •  WASD move  •  F cube  •  Y copy  •  V place  •  T flicker  •  LMB carry  •  Tab menu  •  F11 full screen";
+            Text="BEANROOMS";
             reportFrames=0; reportTime=watch.Elapsed.TotalSeconds;
         }
         if(watch.Elapsed.TotalSeconds-lastDebugTime>=0.2)
