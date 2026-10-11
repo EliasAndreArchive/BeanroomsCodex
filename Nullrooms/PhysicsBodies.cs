@@ -390,8 +390,13 @@ internal sealed class PhysicsBodies : IDisposable
         if(!weldedPairs.Add(pair)) return false;
         RigidCube? first=Bodies.FirstOrDefault(body=>body.Id==firstId);
         RigidCube? second=Bodies.FirstOrDefault(body=>body.Id==secondId);
-        if(first==null||second==null||first.HasHoldTarget||second.HasHoldTarget||
-           Vector3.DistanceSquared(first.Position,second.Position)>2.25f*2.25f)
+        if(first==null||second==null||first.HasHoldTarget||second.HasHoldTarget)
+        { weldedPairs.Remove(pair);return false; }
+        // Measure reach from each body's true rotated shape, so two wide pallets
+        // can be welded from their opposite boards instead of being limited by a cube-only centre radius.
+        Vector3 reach=Extents(first)+Extents(second)+new Vector3(.35f);
+        Vector3 separation=Vector3.Abs(first.Position-second.Position);
+        if(separation.X>reach.X||separation.Y>reach.Y||separation.Z>reach.Z)
         { weldedPairs.Remove(pair);return false; }
         Quaternion inverse=Quaternion.Inverse(first.Rotation);
         var weld=new Weld

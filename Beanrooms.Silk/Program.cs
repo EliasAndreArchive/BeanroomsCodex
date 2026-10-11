@@ -1030,7 +1030,6 @@ internal sealed class GameWindow : SilkForm
 
     void WeldGrabbables()
     {
-        if(!menu.SandboxEnabled) return;
         int id=AimedGrabbable();
         if(id==0) { pendingWeldId=0;return; }
         if(pendingWeldId==0) { pendingWeldId=id;return; }

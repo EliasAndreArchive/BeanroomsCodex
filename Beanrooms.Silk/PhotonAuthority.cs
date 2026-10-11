@@ -157,7 +157,7 @@ internal sealed class PhotonAuthority : IDisposable
                         sandbox.Connect(message.FromId,message.ToId);
                     break;
                 case "weld":
-                    if(sandboxEnabled&&physics.Bodies.Any(b=>b.Id==message.FromId&&
+                    if(physics.Bodies.Any(b=>b.Id==message.FromId&&
                         Vector3.DistanceSquared(b.Position,new Vector3(peer.X,peer.Y,peer.Z))<6f*6f))
                         physics.TryWeld(message.FromId,message.ToId);
                     break;

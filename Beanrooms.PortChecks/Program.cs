@@ -242,6 +242,15 @@ using(var physics=new PhysicsBodies())
 }
 using(var physics=new PhysicsBodies())
 {
+    if(!physics.SpawnCornerPlank(new System.Numerics.Vector3(10f,.14f,10f),0f,[],System.Numerics.Vector3.Zero) ||
+       !physics.SpawnCornerPlank(new System.Numerics.Vector3(12.05f,.14f,10f),0f,[],System.Numerics.Vector3.Zero))
+        throw new Exception("Pallet weld test could not place pallets");
+    RigidCube[] pallets=physics.Bodies.Where(body=>body.Plank).ToArray();
+    if(!physics.TryWeld(pallets[0].Id,pallets[1].Id))
+        throw new Exception("Nearby wooden pallets could not be welded");
+}
+using(var physics=new PhysicsBodies())
+{
     // A powered piston uses its facing direction to push the nearest free body.
     var piston=new SandboxDevice { Id=1,Kind=SandboxKind.Piston,X=10f,Y=.36f,Z=10f,Qw=1f };
     if(!physics.SpawnSandboxDevice(piston,[],System.Numerics.Vector3.Zero))
