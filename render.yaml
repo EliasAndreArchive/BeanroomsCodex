@@ -1,0 +1,10 @@
+services:
+  - type: web
+    name: beanrooms-game
+    runtime: docker
+    plan: free
+    region: frankfurt
+    healthCheckPath: /health
+    envVars:
+      - key: BEANROOMS_JOIN_KEY
+        sync: false

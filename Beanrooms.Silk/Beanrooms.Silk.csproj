@@ -1,0 +1,38 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net8.0</TargetFramework>
+    <AssemblyName>Beanrooms</AssemblyName>
+    <Product>Beanrooms</Product>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+  </PropertyGroup>
+  <ItemGroup>
+    <PackageReference Include="BepuPhysics" Version="2.4.0" />
+    <PackageReference Include="Silk.NET.Windowing" Version="2.23.0" />
+    <PackageReference Include="Silk.NET.Windowing.Glfw" Version="2.23.0" />
+    <PackageReference Include="Silk.NET.Input" Version="2.23.0" />
+    <PackageReference Include="Silk.NET.OpenAL" Version="2.23.0" />
+    <PackageReference Include="Silk.NET.OpenAL.Soft.Native" Version="1.23.1" />
+    <PackageReference Include="StbImageSharp" Version="2.30.16" />
+    <PackageReference Include="NLayer" Version="3.0.0" />
+  </ItemGroup>
+  <ItemGroup>
+    <AssemblyAttribute Include="System.Runtime.CompilerServices.InternalsVisibleToAttribute">
+      <_Parameter1>Beanrooms.PortChecks</_Parameter1>
+    </AssemblyAttribute>
+    <Compile Include="../Nullrooms/CameraOrientation.cs" Link="CameraOrientation.cs" />
+    <Compile Include="../Nullrooms/LightFlicker.cs" Link="LightFlicker.cs" />
+    <Compile Include="../Nullrooms/LocalNetClient.cs" Link="LocalNetClient.cs" />
+    <Compile Include="../Nullrooms/MonsterBrain.cs" Link="MonsterBrain.cs" />
+    <Compile Include="../Nullrooms/NetProtocol.cs" Link="NetProtocol.cs" />
+    <Compile Include="../Nullrooms/PhysicsBodies.cs" Link="PhysicsBodies.cs" />
+    <Compile Include="../Nullrooms/PlayerMotion.cs" Link="PlayerMotion.cs" />
+    <Compile Include="../Nullrooms/SpawnTransition.cs" Link="SpawnTransition.cs" />
+    <Compile Include="../Nullrooms/WorldLayout.cs" Link="WorldLayout.cs" />
+    <None Include="../Nullrooms/shaders/*.frag" Link="shaders/%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" />
+    <None Include="../Nullrooms/shaders/*.vert" Link="shaders/%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" />
+    <None Include="../Nullrooms/assets/*" Link="assets/%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+</Project>

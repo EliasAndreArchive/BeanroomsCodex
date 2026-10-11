@@ -1,0 +1,12 @@
+**/bin/
+**/obj/
+.vs/
+.idea/
+*.user
+*.suo
+*.log
+*.zip
+*.tar.gz
+.env
+.env.*
+!*.env.example

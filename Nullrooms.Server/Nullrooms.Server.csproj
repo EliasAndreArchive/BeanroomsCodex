@@ -1,0 +1,18 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net8.0</TargetFramework>
+    <AssemblyName>Beanrooms.Server</AssemblyName>
+    <Product>Beanrooms Server</Product>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+  </PropertyGroup>
+  <ItemGroup>
+    <Compile Include="..\Nullrooms\NetProtocol.cs" Link="NetProtocol.cs" />
+    <Compile Include="..\Nullrooms\WorldLayout.cs" Link="WorldLayout.cs" />
+    <Compile Include="..\Nullrooms\MonsterBrain.cs" Link="MonsterBrain.cs" />
+    <Compile Include="..\Nullrooms\PhysicsBodies.cs" Link="PhysicsBodies.cs" />
+    <Compile Include="..\Nullrooms\CameraOrientation.cs" Link="CameraOrientation.cs" />
+    <PackageReference Include="BepuPhysics" Version="2.4.0" />
+  </ItemGroup>
+</Project>
