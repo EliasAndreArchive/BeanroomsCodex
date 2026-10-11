@@ -51,11 +51,14 @@ internal sealed class DebugMenu
     }
     internal int TitlePage, TitleSelected;
     internal int RenderMode = 2, ProbeQuality = 2, ProbeBounces = 4, HybridDirectSamples = 4;
-    internal string RenderModeName => RenderMode switch { 0 => "Preview", 1 => "Realtime GI", _ => "Path traced fixed" };
+    internal string RenderModeName => RenderMode == 1 ? "Realtime GI" : "Path traced fixed";
     internal int Temperature, PaletteSteps = 16, Samples = 32, Bounces = 2, ResolutionIndex, FpsLimit;
     internal int TonemapMode = 2;
     internal float Exposure = 2f, Saturation = 1f, Contrast = 1f;
     internal float BrightenSpeed = 1.25f, DarkenSpeed = 2.2f, BloomStrength = 0.1f, BloomThreshold = 0.85f, BloomRadius = 1.9f;
+    internal bool Denoise;
+    internal float DenoiseStrength=0.55f;
+    internal int DenoiseRadius=1;
     internal float RedMix = 1f, GreenMix = 1f, BlueMix = 1f;
     internal float BounceStrength = 1.75f, AO = 0.9f, LightIntensity = 1f, LightDensity = 0.65f, FogDensity = 0.008f;
     internal int FogSteps = 8;
@@ -109,13 +112,15 @@ internal sealed class DebugMenu
         ("ORANGE", new Vector3(1f,0.36f,0.08f))
     };
     internal Vector3 CubeColor => CubeColors[CubeColorIndex].Color;
+    internal void CycleCubeColor(int direction)
+    { CubeColorIndex=(CubeColorIndex+direction+CubeColors.Length)%CubeColors.Length;Dirty=true;InteractionSound?.Invoke(); }
     int dragging = -1;
     int hoveredItem = -1;
     static readonly int[] SampleChoices = { 16, 32, 64, 128, 256 };
     static readonly (string Name,int Page)[] Tabs =
     {
         ("SESSION",9), ("IMAGE",0), ("POST FX",7), ("LIGHTS",1),
-        ("FLICKER",8), ("CAMERA",3), ("MOVEMENT",2), ("OBJECTS",4),
+        ("FLICKER",8), ("CAMERA",3), ("MOVEMENT",2), ("PHYSICS",4),
         ("MONSTER",5), ("NETWORK",6)
     };
     static readonly Dictionary<char,int[]> Glyphs = new()
@@ -151,11 +156,11 @@ internal sealed class DebugMenu
         new[] { "RENDER MODE", "PATH SAMPLES", "PATH BOUNCES", "BOUNCE LIGHT", "AO STRENGTH", "LIGHT INTENSITY", "LIGHT DENSITY", "RESOLUTION", "FIXTURES", "FPS LIMIT", "VSYNC", "VOLUMETRICS", "FOG DENSITY", "FOG STEPS", "PROBE GRID", "PROBE BOUNCES", "DIRECT SAMPLES" },
         new[] { "WALK SPEED", "SPRINT X", "CROUCH X", "ACCELERATION", "DECELERATION", "STANCE SMOOTH", "SPRINT SMOOTH", "CROUCH HEIGHT", "STEP LENGTH" },
         new[] { "MOUSE SENS", "IDLE SHAKE", "WALK SHAKE", "SPRINT SHAKE", "CROUCH SHAKE", "HEAD BOB", "SWAY AMOUNT", "STRAFE ROLL", "TURN ROLL", "MOVE PITCH", "LOOK SMOOTH" },
-        new[] { "SPAWN CUBE", "SPAWN GLOW", "CLEAR CUBES", "PICKUP RANGE", "HOLD DIST", "SPRING FREQ", "SPRING DAMP", "HOLD SMOOTH", "CUBE COUNT", "CUBE COLOR", "SLIDE RESIST", "DEBUG UI", "OBJECT FRAMES" },
+        new[] { "PICKUP RANGE", "HOLD DIST", "SPRING FREQ", "SPRING DAMP", "HOLD SMOOTH", "SLIDE RESIST", "CUBE COUNT", "DEBUG UI", "OBJECT FRAMES" },
         new[] { "MONSTER", "ROAM SPEED", "SEARCH SPEED", "CHASE SPEED", "CHASE TURN", "SEARCH TURN", "ROAM TURN", "SIGHT RANGE", "SIGHT ANGLE", "SEARCH RADIUS", "ROAM RADIUS" },
         new[] { "PLAYER NAME", "BEAN COLOR", "RED", "GREEN", "BLUE", "SERVER", "JOIN KEY", "CONNECT", "DISCONNECT", "CONNECTION", "PLAYER ID", "PLAYERS", "ROLE" },
-        new[] { "POST FX", "TONEMAP", "EXPOSURE", "AUTO EXPOSURE", "BRIGHTEN SPEED", "DARKEN SPEED", "BLOOM", "BLOOM STRENGTH", "BLOOM THRESHOLD", "BLOOM RADIUS" },
-        new[] { "MINOR FLICKER", "MINOR INTERVAL", "MINOR CHANCE", "MINOR DURATION", "RANDOM EVENTS", "EVENT INTERVAL", "EVENT LENGTH", "EVENT SPEED MIN", "EVENT SPEED MAX", "EVENT OFF CHANCE", "CHASE FLICKER", "CHASE FOG", "CHASE FOG MAX", "FOG RISE", "FOG FALL", "CHASE RED", "CHASE RED CHANCE" },
+        new[] { "POST FX", "TONEMAP", "EXPOSURE", "AUTO EXPOSURE", "BRIGHTEN SPEED", "DARKEN SPEED", "BLOOM", "BLOOM STRENGTH", "BLOOM THRESHOLD", "BLOOM RADIUS", "SPATIAL DENOISE", "DENOISE STRENGTH", "DENOISE RADIUS" },
+        new[] { "MINOR FLICKER", "MINOR INTERVAL", "MINOR CHANCE", "MINOR DURATION", "RANDOM EVENTS", "EVENT INTERVAL", "EVENT LENGTH", "EVENT SPEED MIN", "EVENT SPEED MAX", "EVENT OFF CHANCE", "CHASE FLICKER", "CHASE FOG", "CHASE FOG MAX", "FOG RISE", "FOG FALL", "CHASE RED", "CHASE RED CHANCE", "BLACKOUT CHANCE" },
         new[] { "RESUME", "LEAVE MULTIPLAYER", "MAIN MENU", "QUIT GAME", "CONNECTION", "PLAYERS", "ROLE", "SANDBOX MODE" }
     };
 
@@ -212,6 +217,7 @@ internal sealed class DebugMenu
         BrightenSpeed=defaults.BrightenSpeed; DarkenSpeed=defaults.DarkenSpeed;
         Bloom=defaults.Bloom; BloomStrength=defaults.BloomStrength;
         BloomThreshold=defaults.BloomThreshold; BloomRadius=defaults.BloomRadius;
+        Denoise=defaults.Denoise;DenoiseStrength=defaults.DenoiseStrength;DenoiseRadius=defaults.DenoiseRadius;
         RenderMode=defaults.RenderMode; ProbeQuality=defaults.ProbeQuality;
         ProbeBounces=defaults.ProbeBounces; HybridDirectSamples=defaults.HybridDirectSamples;
         Samples=defaults.Samples; Bounces=defaults.Bounces;
@@ -333,6 +339,8 @@ internal sealed class DebugMenu
         if(SandboxPage)
         {
             if(y<14 && x>=307) { ToggleSandbox();return; }
+            if(y>=148 && y<164) { CycleCubeColor(x<155?-1:1);return; }
+            if(y>=168 && y<184) { ObjectAction?.Invoke(2);Dirty=true;InteractionSound?.Invoke();return; }
             if(y>=17 && y<29 && x>=12)
             {
                 int category=(x-12)/75;
@@ -449,18 +457,17 @@ internal sealed class DebugMenu
     {
         0 => row is 2 or 3 or 4 or 5 or 6 or 7 or 8,
         1 => row is 1 or 2 or 3 or 4 or 5 or 6 or 7 or 9 or 12 or 13 or 14 or 15 or 16,
-        4 => row is 3 or 4 or 5 or 6 or 7 or 10,
+        4 => row is 0 or 1 or 2 or 3 or 4 or 5,
         5 => row > 0,
         6 => row is 2 or 3 or 4,
-        7 => row is 2 or 4 or 5 or 7 or 8 or 9,
-        8 => row is 1 or 2 or 3 or 5 or 6 or 7 or 8 or 9 or 12 or 13 or 14 or 16,
+        7 => row is 2 or 4 or 5 or 7 or 8 or 9 or 11 or 12,
+        8 => row is 1 or 2 or 3 or 5 or 6 or 7 or 8 or 9 or 12 or 13 or 14 or 16 or 17,
         9 => false,
         _ => true
     };
     bool IsChoice(int row) => Page switch
     {
         1 => row==0,
-        4 => row==9,
         6 => row==1,
         7 => row==1,
         _ => false
@@ -512,7 +519,7 @@ internal sealed class DebugMenu
         {
             switch (row)
             {
-                case 0: RenderMode = (RenderMode + direction + 3) % 3; break;
+                case 0: RenderMode = RenderMode == 1 ? 2 : 1; break;
                 case 1:
                     int sampleIndex = Array.IndexOf(SampleChoices, Samples);
                     Samples = SampleChoices[Math.Clamp(sampleIndex + direction, 0, SampleChoices.Length - 1)];
@@ -553,16 +560,14 @@ internal sealed class DebugMenu
         {
             switch(row)
             {
-                case 0: case 1: case 2: ObjectAction?.Invoke(row); break;
-                case 3: PickupRange=Math.Clamp(PickupRange+direction*0.1f,2f,8f); break;
-                case 4: HoldDistance=Math.Clamp(HoldDistance+direction*0.1f,1.2f,4f); break;
-                case 5: SpringFrequency=Math.Clamp(SpringFrequency+direction*0.1f,2f,18f); break;
-                case 6: SpringDamping=Math.Clamp(SpringDamping+direction*0.01f,0.3f,2f); break;
-                case 7: PidSmoothing=Math.Clamp(PidSmoothing+direction*0.1f,4f,30f); break;
-                case 9: CubeColorIndex=(CubeColorIndex+direction+CubeColors.Length)%CubeColors.Length; break;
-                case 10: SlideResistance=Math.Clamp(SlideResistance+direction*0.1f,0f,12f); break;
-                case 11: ShowDebugOverlay=!ShowDebugOverlay; break;
-                case 12: ShowObjectFrames=!ShowObjectFrames; break;
+                case 0: PickupRange=Math.Clamp(PickupRange+direction*0.1f,2f,8f); break;
+                case 1: HoldDistance=Math.Clamp(HoldDistance+direction*0.1f,0.35f,6f); break;
+                case 2: SpringFrequency=Math.Clamp(SpringFrequency+direction*0.1f,2f,18f); break;
+                case 3: SpringDamping=Math.Clamp(SpringDamping+direction*0.01f,0.3f,2f); break;
+                case 4: PidSmoothing=Math.Clamp(PidSmoothing+direction*0.1f,4f,30f); break;
+                case 5: SlideResistance=Math.Clamp(SlideResistance+direction*0.1f,0f,12f); break;
+                case 7: ShowDebugOverlay=!ShowDebugOverlay; break;
+                case 8: ShowObjectFrames=!ShowObjectFrames; break;
             }
         }
         else if(Page == 5)
@@ -621,6 +626,9 @@ internal sealed class DebugMenu
                 case 7: BloomStrength=Math.Clamp(BloomStrength+direction*0.01f,0f,2f);break;
                 case 8: BloomThreshold=Math.Clamp(BloomThreshold+direction*0.01f,0.25f,4f);break;
                 case 9: BloomRadius=Math.Clamp(BloomRadius+direction*0.01f,0.5f,4f);break;
+                case 10: Denoise=!Denoise;break;
+                case 11: DenoiseStrength=Math.Clamp(DenoiseStrength+direction*0.01f,0f,1f);break;
+                case 12: DenoiseRadius=Math.Clamp(DenoiseRadius+direction,1,2);break;
             }
         }
         else if(Page == 8)
@@ -644,6 +652,7 @@ internal sealed class DebugMenu
                 case 14: FlickerSettings.FogFall=Math.Clamp(FlickerSettings.FogFall+direction*0.1f,0.2f,8f);break;
                 case 15: FlickerSettings.ChaseRed=!FlickerSettings.ChaseRed;break;
                 case 16: FlickerSettings.ChaseRedChance=Math.Clamp(FlickerSettings.ChaseRedChance+direction*0.01f,0.08f,1f);break;
+                case 17: FlickerSettings.BlackoutChance=Math.Clamp(FlickerSettings.BlackoutChance+direction*0.01f,0f,1f);break;
             }
         }
         else
@@ -698,6 +707,7 @@ internal sealed class DebugMenu
             14 => $"{FlickerSettings.FogFall:0.0}",
             15 => FlickerSettings.ChaseRed?"ON":"OFF",
             16 => $"{FlickerSettings.ChaseRedChance*100f:0}%",
+            17 => $"{FlickerSettings.BlackoutChance*100f:0}%",
             _ => ""
         };
         if(Page == 7) return row switch
@@ -707,7 +717,9 @@ internal sealed class DebugMenu
             2 => $"{Exposure:0.00}",3 => AutoExposure?"ON":"OFF",
             4 => $"{BrightenSpeed:0.00}",5 => $"{DarkenSpeed:0.00}",
             6 => Bloom?"ON":"OFF",7 => $"{BloomStrength:0.00}",
-            8 => $"{BloomThreshold:0.00}",9 => $"{BloomRadius:0.00}",_ => ""
+            8 => $"{BloomThreshold:0.00}",9 => $"{BloomRadius:0.00}",
+            10 => Denoise?"ON":"OFF",11 => $"{DenoiseStrength:0.00}",
+            12 => DenoiseRadius.ToString(),_ => ""
         };
         if(Page == 6) return row switch
         {
@@ -740,14 +752,11 @@ internal sealed class DebugMenu
         };
         if(Page == 4) return row switch
         {
-            0 or 1 => "SPAWN", 2 => "CLEAR", 3 => $"{PickupRange:0.0}",
-            4 => $"{HoldDistance:0.0}", 5 => $"{SpringFrequency:0.0}",
-            6 => $"{SpringDamping:0.00}", 7 => $"{PidSmoothing:0.0}",
-            8 => $"{BodyCount}", 9 => CubeColors[CubeColorIndex].Name,
-            10 => $"{SlideResistance:0.0}",
-            11 => ShowDebugOverlay ? "ON" : "OFF",
-            12 => ShowObjectFrames ? "ON" : "OFF",
-            13 => "RESET", _ => ""
+            0 => $"{PickupRange:0.0}",1 => $"{HoldDistance:0.0}",
+            2 => $"{SpringFrequency:0.0}",3 => $"{SpringDamping:0.00}",
+            4 => $"{PidSmoothing:0.0}",5 => $"{SlideResistance:0.0}",
+            6 => $"{BodyCount}",7 => ShowDebugOverlay ? "ON" : "OFF",
+            8 => ShowObjectFrames ? "ON" : "OFF",_ => ""
         };
         if (Page == 0) return row switch
         {
@@ -792,7 +801,7 @@ internal sealed class DebugMenu
         };
         return row switch
         {
-            0 => RenderMode switch { 0 => "PREVIEW", 1 => "HYBRID GI", _ => "PATH TRACED FIXED" },
+            0 => RenderMode == 1 ? "HYBRID GI" : "PATH TRACED FIXED",
             1 => $"{Samples} SPP",
             2 => Bounces.ToString(),
             3 => $"{BounceStrength:0.00}",
@@ -828,6 +837,7 @@ internal sealed class DebugMenu
             13 => (FlickerSettings.FogRise-0.2f)/7.8f,
             14 => (FlickerSettings.FogFall-0.2f)/7.8f,
             16 => (FlickerSettings.ChaseRedChance-0.08f)/0.92f,
+            17 => FlickerSettings.BlackoutChance,
             _ => 0f
         };
         if(Page == 7) return row switch
@@ -835,7 +845,8 @@ internal sealed class DebugMenu
             2 => (Exposure-0.25f)/2.75f,
             4 => (BrightenSpeed-0.1f)/7.9f,5 => (DarkenSpeed-0.1f)/7.9f,
             7 => BloomStrength/2f,8 => (BloomThreshold-0.25f)/3.75f,
-            9 => (BloomRadius-0.5f)/3.5f,_ => 0f
+            9 => (BloomRadius-0.5f)/3.5f,11 => DenoiseStrength,
+            12 => DenoiseRadius-1f,_ => 0f
         };
         if(Page == 6) return row switch
         { 2 => (PlayerRed-0.05f)/0.95f,3 => (PlayerGreen-0.05f)/0.95f,4 => (PlayerBlue-0.05f)/0.95f,_ => 0f };
@@ -855,10 +866,9 @@ internal sealed class DebugMenu
         };
         if(Page == 4) return row switch
         {
-            3 => (PickupRange-2f)/6f, 4 => (HoldDistance-1.2f)/2.8f,
-            5 => (SpringFrequency-2f)/16f, 6 => (SpringDamping-0.3f)/1.7f,
-            7 => (PidSmoothing-4f)/26f,
-            10 => SlideResistance/12f, _ => 0f
+            0 => (PickupRange-2f)/6f, 1 => (HoldDistance-0.35f)/5.65f,
+            2 => (SpringFrequency-2f)/16f, 3 => (SpringDamping-0.3f)/1.7f,
+            4 => (PidSmoothing-4f)/26f,5 => SlideResistance/12f,_ => 0f
         };
         if (Page == 0) return row switch
         {
@@ -978,6 +988,10 @@ internal sealed class DebugMenu
                 string value=spawnable?focused?"SPAWN <":"SPAWN":"LOCKED";
                 PixelText(g,value,ink,316-value.Length*6,y+3);
             }
+            PixelText(g,"CUBE COLOR",white,21,151);
+            PixelText(g,"< "+CubeColors[CubeColorIndex].Name+" >",green,215,151);
+            PixelText(g,"CLEAR CUBES",white,21,171);
+            PixelText(g,"CLEAR",white,274,171);
             string detail=SandboxDetail(items[SandboxSelected]);
             PixelText(g,detail.Length>22?detail[..22]:detail,paleBlue,13,225);
             PixelText(g,NetworkConnected?(SandboxHost?"HOST CONTROLS":"GUEST CONTROLS"):"LOCAL SANDBOX",paleBlue,251,225);

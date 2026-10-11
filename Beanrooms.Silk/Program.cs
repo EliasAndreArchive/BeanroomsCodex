@@ -99,8 +99,8 @@ internal sealed class GameWindow : SilkForm
     int seed = 82317;
     int width = 320, height = 240;
     int frames, worldTexture, fixtureTexture, objectTexture, wallTexture, floorTexture, ceilingTexture, faceTexture, eyeTexture, overlayTexture;
-    int pathProgram, probeProgram, displayProgram, exposureProgram, bloomExtractProgram, bloomBlurProgram, framebuffer;
-    int renderTexture, bloomA, bloomB, exposureA, exposureB, exposureCurrent;
+    int pathProgram, probeProgram, displayProgram, denoiseProgram, exposureProgram, bloomExtractProgram, bloomBlurProgram, framebuffer;
+    int renderTexture, denoiseTexture, sceneTexture, bloomA, bloomB, exposureA, exposureB, exposureCurrent;
     int probeDirect, probeA, probeB, probeResult, probeSize;
     bool probeDirty = true;
     int lastProbeSettings;
@@ -131,6 +131,9 @@ internal sealed class GameWindow : SilkForm
     CubeState[] networkCubes = [];
     double nextNetworkSend;
     bool networkHolding;
+    int networkHeldId;
+    bool rotatingHeld;
+    float grabYaw,grabPitch;
     int grabSequence;
     int respawnId;
     double localRespawnProtectedUntil;
@@ -245,19 +248,18 @@ internal sealed class GameWindow : SilkForm
             if (e.KeyCode == Keys.Escape) ReleaseMouse();
         };
         KeyPress += (_, e) => { if(menu.Open && menu.EditingText) { if(menu.EditingName) menu.EditNameCharacter(e.KeyChar); else menu.EditConnectionCharacter(e.KeyChar);e.Handled=true; } };
-        KeyUp += (_, e) => { keys.Remove(e.KeyCode); if(e.KeyCode==Keys.B) sandboxToggleKeyDown=false; if(e.KeyCode==Keys.G) wireToggleKeyDown=false; if(e.KeyCode==Keys.K) weldToggleKeyDown=false; if(menu.Open) return; if(e.KeyCode==Keys.E) InteractWithDevice(); if (e.KeyCode == Keys.C) crouchToggle=!crouchToggle; if (e.KeyCode == Keys.R) Regenerate(); if (e.KeyCode == Keys.F) HandleObjectAction(0); if (e.KeyCode == Keys.T) TriggerLightEvent(); if (e.KeyCode == Keys.P) { menu.RenderMode=(menu.RenderMode+1)%3; menu.Dirty=true; } if (e.KeyCode == Keys.D1) { menu.ResolutionIndex=0; menu.Dirty=true; } if (e.KeyCode == Keys.D2) { menu.ResolutionIndex=1; menu.Dirty=true; } if (e.KeyCode == Keys.D3) { menu.ResolutionIndex=2; menu.Dirty=true; } if(menu.MovementControlsWritable && e.KeyCode==Keys.OemOpenBrackets) { menu.WalkSpeed=Math.Max(1f,menu.WalkSpeed-0.4f); menu.Dirty=true; } if(menu.MovementControlsWritable && e.KeyCode==Keys.OemCloseBrackets) { menu.WalkSpeed=Math.Min(8f,menu.WalkSpeed+0.4f); menu.Dirty=true; } if(e.KeyCode==Keys.OemMinus) { menu.MouseSensitivity=Math.Max(0.0004f,menu.MouseSensitivity*0.85f); menu.Dirty=true; } if(e.KeyCode==Keys.Oemplus) { menu.MouseSensitivity=Math.Min(0.005f,menu.MouseSensitivity*1.15f); menu.Dirty=true; } };
+        KeyUp += (_, e) => { keys.Remove(e.KeyCode); if(e.KeyCode==Keys.B) sandboxToggleKeyDown=false; if(e.KeyCode==Keys.G) wireToggleKeyDown=false; if(e.KeyCode==Keys.K) weldToggleKeyDown=false; if(menu.Open) return; if(e.KeyCode==Keys.E) InteractWithDevice(); if (e.KeyCode == Keys.C) crouchToggle=!crouchToggle; if (e.KeyCode == Keys.R) Regenerate(); if (e.KeyCode == Keys.F) HandleObjectAction(0); if (e.KeyCode == Keys.T) TriggerLightEvent(); if (e.KeyCode == Keys.P) { menu.RenderMode=menu.RenderMode==1?2:1; menu.Dirty=true; } if (e.KeyCode == Keys.D1) { menu.ResolutionIndex=0; menu.Dirty=true; } if (e.KeyCode == Keys.D2) { menu.ResolutionIndex=1; menu.Dirty=true; } if (e.KeyCode == Keys.D3) { menu.ResolutionIndex=2; menu.Dirty=true; } if(menu.MovementControlsWritable && e.KeyCode==Keys.OemOpenBrackets) { menu.WalkSpeed=Math.Max(1f,menu.WalkSpeed-0.4f); menu.Dirty=true; } if(menu.MovementControlsWritable && e.KeyCode==Keys.OemCloseBrackets) { menu.WalkSpeed=Math.Min(8f,menu.WalkSpeed+0.4f); menu.Dirty=true; } if(e.KeyCode==Keys.OemMinus) { menu.MouseSensitivity=Math.Max(0.0004f,menu.MouseSensitivity*0.85f); menu.Dirty=true; } if(e.KeyCode==Keys.Oemplus) { menu.MouseSensitivity=Math.Min(0.005f,menu.MouseSensitivity*1.15f); menu.Dirty=true; } };
         KeyUp += (_, e) => {
             if(menu.Open) return;
             if(e.KeyCode==Keys.M) { menu.MonsterDebug=!menu.MonsterDebug;menu.Dirty=true; }
             if(e.KeyCode==Keys.H) { menu.ShowDebugOverlay=!menu.ShowDebugOverlay;menu.Dirty=true; }
-            if(e.KeyCode==Keys.V) { menu.Volumetrics=!menu.Volumetrics;menu.Dirty=true; }
         };
-        MouseDown += (_, e) => { if(menu.Open) { if(TryMenuPoint(e.Location,out Point point)) menu.MouseDown(point.X,point.Y); if(!menu.Open) CloseSettings(); return; } wantsCapture=true; CaptureMouse(); if(e.Button==MouseButtons.Left && active) { if(menu.WireTool) { WireDevice();return; } if(menu.WeldTool) { WeldGrabbables();return; } if(network.Connected) { networkHolding=true; SendPlayerState(); network.Send(new NetMessage { Type="pickup",GrabSequence=++grabSequence }); } else { ViewPose(out Vector3 eye,out Vector3 forward); physics.HoldDistance=menu.HoldDistance; physics.TryPickup(eye,forward,ViewRotation(),boxes); } } };
+        MouseDown += (_, e) => { if(menu.Open) { if(TryMenuPoint(e.Location,out Point point)) menu.MouseDown(point.X,point.Y); if(!menu.Open) CloseSettings(); return; } wantsCapture=true; CaptureMouse(); if(e.Button==MouseButtons.Right) rotatingHeld=true; if(e.Button==MouseButtons.Left && active) { if(menu.WireTool) { WireDevice();return; } if(menu.WeldTool) { WeldGrabbables();return; } grabYaw=grabPitch=0f; if(network.Connected) { networkHolding=true;networkHeldId=0; SendPlayerState(); network.Send(new NetMessage { Type="pickup",GrabSequence=++grabSequence }); } else { ViewPose(out Vector3 eye,out Vector3 forward); physics.HoldDistance=menu.HoldDistance; physics.TryPickup(eye,forward,ViewRotation(),boxes); } } };
         MouseMove += (_, e) => { if(menu.Open && TryMenuPoint(e.Location,out Point point)) menu.MouseMove(point.X,point.Y); };
-        MouseWheel += (_, e) => { if(!menu.Open && (physics.Held!=null || networkHolding)) { menu.HoldDistance=Math.Clamp(menu.HoldDistance+Math.Sign(e.Delta)*0.2f,1.2f,4f); menu.Dirty=true; } };
-        MouseUp += (_, e) => { menu.MouseUp(); if(e.Button==MouseButtons.Left) { if(network.Connected) network.Send(new NetMessage { Type="release" }); else physics.Release(); networkHolding=false; } };
+        MouseWheel += (_, e) => { if(!menu.Open && e.Delta!=0) { int step=Math.Sign(e.Delta); if(network.Connected) { if(networkHolding || networkCubes.Any(cube=>cube.HolderId==network.Id && network.Id!=0)) network.Send(new NetMessage { Type="grab_scroll",Action=step }); } else physics.NudgeGrabDistance(0,step*0.2f); } };
+        MouseUp += (_, e) => { menu.MouseUp(); if(e.Button==MouseButtons.Right) rotatingHeld=false; if(e.Button==MouseButtons.Left) { if(network.Connected) network.Send(new NetMessage { Type="release" }); else physics.Release(); networkHolding=false;networkHeldId=0;grabYaw=grabPitch=0f; } };
         Activated += (_, _) => { if(ready && wantsCapture) BeginInvoke(new Action(CaptureMouse)); };
-        Deactivate += (_, _) => { networkHolding=false; network.Send(new NetMessage { Type="release" }); physics.Release(); SuspendMouse(); };
+        Deactivate += (_, _) => { networkHolding=false;rotatingHeld=false; network.Send(new NetMessage { Type="release" }); physics.Release(); SuspendMouse(); };
         FormClosed += (_, _) => { audio?.Dispose(); network.Dispose(); physics.Dispose(); ReleaseMouse(); };
     }
 
@@ -283,6 +285,8 @@ internal sealed class GameWindow : SilkForm
                     case Keys.Down: menu.SelectSandbox(1); return true;
                     case Keys.Left: menu.CycleSandboxCategory(-1); return true;
                     case Keys.Right: menu.CycleSandboxCategory(1); return true;
+                    case Keys.C: menu.CycleCubeColor(1); return true;
+                    case Keys.X: HandleObjectAction(2); return true;
                     case Keys.Enter or Keys.Space: SpawnSandboxItem(menu.SelectedSandboxItem); return true;
                 }
             }
@@ -341,6 +345,7 @@ internal sealed class GameWindow : SilkForm
             pathProgram = Compile("screen.vert", "pathtrace.frag");
             probeProgram = Compile("screen.vert", "probe.frag");
             displayProgram = Compile("screen.vert", "display.frag");
+            denoiseProgram = Compile("screen.vert", "denoise.frag");
             exposureProgram = Compile("screen.vert", "exposure.frag");
             bloomExtractProgram = Compile("screen.vert", "bloom_extract.frag");
             bloomBlurProgram = Compile("screen.vert", "bloom_blur.frag");
@@ -423,6 +428,11 @@ internal sealed class GameWindow : SilkForm
         Gl.TexParameteri(0x0DE1,0x2802,0x812F); Gl.TexParameteri(0x0DE1,0x2803,0x812F);
         Gl.TexImage2D(0x0DE1,0,0x881A,width,height,0,0x1908,0x1406,IntPtr.Zero);
         Gl.GenerateMipmap(0x0DE1);
+        if(denoiseTexture!=0) Gl.DeleteTexture(denoiseTexture);
+        denoiseTexture=Gl.GenTexture();Gl.BindTexture(0x0DE1,denoiseTexture);
+        Gl.TexParameteri(0x0DE1,0x2801,0x2600);Gl.TexParameteri(0x0DE1,0x2800,0x2600);
+        Gl.TexParameteri(0x0DE1,0x2802,0x812F);Gl.TexParameteri(0x0DE1,0x2803,0x812F);
+        Gl.TexImage2D(0x0DE1,0,0x881A,width,height,0,0x1908,0x1406,IntPtr.Zero);
         CreateBloomTargets();
     }
 
@@ -847,6 +857,12 @@ internal sealed class GameWindow : SilkForm
     {
         if(dx==0 && dy==0) return;
         dx=Math.Clamp(dx,-100,100); dy=Math.Clamp(dy,-100,100);
+        if(rotatingHeld && (physics.Held!=null || networkHolding || networkCubes.Any(cube=>cube.HolderId==network.Id && network.Id!=0)))
+        {
+            grabYaw=MathF.IEEERemainder(grabYaw+dx*menu.MouseSensitivity,MathF.Tau);
+            grabPitch=Math.Clamp(grabPitch-dy*menu.MouseSensitivity,-1.5f,1.5f);
+            return;
+        }
         float yawChange=dx*menu.MouseSensitivity;
         yaw += yawChange;
         mouseYawDelta += yawChange;
@@ -1033,7 +1049,7 @@ internal sealed class GameWindow : SilkForm
         network.Send(new NetMessage { Type="state",X=eye.X,Y=eye.Y,Z=eye.Z,
             MoveSpeed=motion.Speed,SprintBlend=motion.SprintBlend,CrouchBlend=motion.CrouchBlend,
             Yaw=smoothYaw+motion.YawOffset,Pitch=Math.Clamp(smoothPitch+motion.PitchOffset,-1.45f,1.45f),
-            HoldDistance=menu.HoldDistance,PickupRange=menu.PickupRange,
+            HoldDistance=menu.HoldDistance,PickupRange=menu.PickupRange,GrabYaw=grabYaw,GrabPitch=grabPitch,
             SpringFrequency=menu.SpringFrequency,SpringDamping=menu.SpringDamping,
             PidSmoothing=menu.PidSmoothing,SlideResistance=menu.SlideResistance,
             MonsterTuning=menu.MonsterSettings.Clone(),FlickerTuning=menu.FlickerSettings.Clone(),
@@ -1056,12 +1072,14 @@ internal sealed class GameWindow : SilkForm
         { menu.NetworkStatus=connectionStatus;menu.Dirty=true; }
         if(menu.TitleScreen && menu.TitlePage==1 && network.Connected)
         { menu.LeaveTitle();CloseSettings(); }
-        if(network.ConsumeFlicker()) flicker.Trigger(watch.Elapsed.TotalSeconds);
+        NetMessage? lightEvent=network.ConsumeFlicker();
+        if(lightEvent!=null) flicker.Trigger(watch.Elapsed.TotalSeconds,lightEvent.BlackoutAfter);
         NetMessage? world=network.ConsumeWorld();
         if(world!=null)
         {
+            flicker.Restore(watch.Elapsed.TotalSeconds,world.Blackout,world.BlackoutAfter);
             if(world.FlickerAge>=0f && world.FlickerAge<menu.FlickerSettings.EventDuration)
-                flicker.Trigger(watch.Elapsed.TotalSeconds-world.FlickerAge);
+                flicker.Trigger(watch.Elapsed.TotalSeconds-world.FlickerAge,world.BlackoutAfter);
             if(seed!=world.Seed) { seed=world.Seed; GenerateWorld(); }
             camera=new Vector3(world.X,world.Y,world.Z);
             motion.Reset();
@@ -1170,8 +1188,11 @@ internal sealed class GameWindow : SilkForm
             }
             CubeState[] cubes=snapshot.Cubes;
             NetMessage? pickupResult=network.ConsumePickupResult();
-            if(pickupResult!=null && pickupResult.GrabSequence==grabSequence && pickupResult.Action==0)
-                networkHolding=false;
+            if(pickupResult!=null && pickupResult.GrabSequence==grabSequence)
+            {
+                networkHeldId=networkHolding?pickupResult.Action:0;
+                if(pickupResult.Action==0) networkHolding=false;
+            }
             if(networkCubes.Length!=cubes.Length || cubes.Where((cube,i)=>cube.Id!=networkCubes[i].Id).Any())
                 networkCubes=cubes.Select(CloneCube).ToArray();
             else for(int i=0;i<cubes.Length;i++)
@@ -1231,6 +1252,7 @@ internal sealed class GameWindow : SilkForm
         if(!menu.MonsterControlsWritable) { menu.MonsterControlsWritable=true;menu.Dirty=true; }
         if(!menu.FlickerControlsWritable) { menu.FlickerControlsWritable=true;menu.Dirty=true; }
         physics.PickupRange=menu.PickupRange; physics.HoldDistance=menu.HoldDistance;
+        physics.RotateYaw=grabYaw;physics.RotatePitch=grabPitch;
         physics.Frequency=menu.SpringFrequency; physics.Damping=menu.SpringDamping; physics.TargetSmoothing=menu.PidSmoothing;
         physics.SlideResistance=menu.SlideResistance;
         physics.Update(dt,eye,forward,ViewRotation(),boxes,camera);
@@ -1437,7 +1459,12 @@ internal sealed class GameWindow : SilkForm
         int count=cubeCount+deviceCount;
         if(!menu.ShowObjectFrames||count==0)
         { if(menu.ObjectFrames.Length>0) { menu.ObjectFrames=[];menu.Dirty=true; } return; }
-        float nearest=MathF.Min(menu.PickupRange,PhysicsBodies.WallRay(eye,forward,boxes,menu.PickupRange));
+        int heldId=network.Connected
+            ? networkHolding?networkHeldId:networkCubes.FirstOrDefault(cube=>cube.HolderId==network.Id)?.Id??0
+            : physics.Held?.Id??0;
+        float nearest=heldId==0
+            ? MathF.Min(menu.PickupRange,PhysicsBodies.WallRay(eye,forward,boxes,menu.PickupRange))
+            : float.PositiveInfinity;
         Vector3 hitPosition=default;
         Quaternion hitRotation=Quaternion.Identity;
         float hitHalf=0f;
@@ -1481,10 +1508,11 @@ internal sealed class GameWindow : SilkForm
                 position=cube.Position;half=cube.HalfSize;id=cube.Id;
                 rotation=cube.Rotation;
             }
+            if(heldId!=0 && id!=heldId) continue;
             Quaternion inverse=Quaternion.Inverse(rotation);
             float t=PhysicsBodies.RayBox(Vector3.Transform(eye-position,inverse),
                 Vector3.Transform(forward,inverse),Vector3.Zero,new Vector3(half));
-            if(t<0f||t>=nearest) continue;
+            if(heldId==0 && (t<0f||t>=nearest)) continue;
             nearest=t;hitPosition=position;hitRotation=rotation;
             hitHalf=half*scale;found=true;
         }
@@ -1502,11 +1530,24 @@ internal sealed class GameWindow : SilkForm
         foreach(SandboxWire wire in wires)
         {
             if(!byId.TryGetValue(wire.From,out SandboxDevice? from) || !byId.TryGetValue(wire.To,out SandboxDevice? to)) continue;
-            if(!ProjectDebug(from.Position+Vector3.UnitY*.22f,eye,right,up,forward,out PointF a) ||
-               !ProjectDebug(to.Position+Vector3.UnitY*.22f,eye,right,up,forward,out PointF b)) continue;
+            Vector3 start=from.Position+Vector3.UnitY*.22f;
+            Vector3 end=to.Position+Vector3.UnitY*.22f;
+            float da=Vector3.Dot(start-eye,forward),db=Vector3.Dot(end-eye,forward);
+            if(da<0.25f && db<0.25f) continue;
+            if(da<0.25f) start=Vector3.Lerp(start,end,(0.25f-da)/(db-da));
+            else if(db<0.25f) end=Vector3.Lerp(end,start,(0.25f-db)/(da-db));
+            PointF a=ProjectWirePoint(start,eye,right,up,forward);
+            PointF b=ProjectWirePoint(end,eye,right,up,forward);
             segments.Add((a,b,from.State?Color.FromArgb(82,232,156):Color.FromArgb(104,126,139)));
         }
         menu.SandboxWires=segments.ToArray();menu.Dirty=true;
+    }
+    static PointF ProjectWirePoint(Vector3 point,Vector3 eye,Vector3 right,Vector3 up,Vector3 forward)
+    {
+        Vector3 delta=point-eye;
+        float depth=MathF.Max(0.25f,Vector3.Dot(delta,forward));
+        return new PointF(160f+Vector3.Dot(delta,right)*240f/(depth*1.55f),
+            120f-Vector3.Dot(delta,up)*240f/(depth*1.55f));
     }
     void UploadOverlay()
     {
@@ -1526,14 +1567,14 @@ internal sealed class GameWindow : SilkForm
         lastExposureTime=now;
         if(menu.PostEnabled && menu.AutoExposure)
         {
-            Bind(0,renderTexture);
+            Bind(0,sceneTexture);
             Gl.GenerateMipmap(0x0DE1);
             int previous=exposureCurrent==0?exposureA:exposureB;
             int next=exposureCurrent==0?exposureB:exposureA;
             Gl.FramebufferTexture2D(0x8D40,0x8CE0,0x0DE1,next,0);
             Gl.Viewport(0,0,1,1);
             Gl.UseProgram(exposureProgram);
-            Bind(0,renderTexture);Uniform1(exposureProgram,"sceneTex",0);
+            Bind(0,sceneTexture);Uniform1(exposureProgram,"sceneTex",0);
             Bind(1,previous);Uniform1(exposureProgram,"previousExposure",1);
             Uniform1f(exposureProgram,"brightenSpeed",menu.BrightenSpeed);
             Uniform1f(exposureProgram,"darkenSpeed",menu.DarkenSpeed);
@@ -1547,7 +1588,7 @@ internal sealed class GameWindow : SilkForm
             Gl.Viewport(0,0,w,h);
             Gl.FramebufferTexture2D(0x8D40,0x8CE0,0x0DE1,bloomA,0);
             Gl.UseProgram(bloomExtractProgram);
-            Bind(0,renderTexture);Uniform1(bloomExtractProgram,"sceneTex",0);
+            Bind(0,sceneTexture);Uniform1(bloomExtractProgram,"sceneTex",0);
             Uniform1f(bloomExtractProgram,"threshold",menu.BloomThreshold);
             Gl.DrawArrays(0x0004,0,3);
             BlurBloom(bloomA,bloomB,1f,0f,w,h);
@@ -1564,6 +1605,21 @@ internal sealed class GameWindow : SilkForm
         Uniform2(bloomBlurProgram,"texelSize",1f/w,1f/h);
         Uniform1f(bloomBlurProgram,"radius",menu.BloomRadius);
         Gl.DrawArrays(0x0004,0,3);
+    }
+    void RunDenoise()
+    {
+        sceneTexture=renderTexture;
+        if(!menu.Denoise || menu.RenderMode!=2) return;
+        Gl.BindFramebuffer(0x8D40,framebuffer);
+        Gl.FramebufferTexture2D(0x8D40,0x8CE0,0x0DE1,denoiseTexture,0);
+        Gl.Viewport(0,0,width,height);
+        Gl.UseProgram(denoiseProgram);
+        Bind(0,renderTexture);Uniform1(denoiseProgram,"sceneTex",0);
+        Uniform1f(denoiseProgram,"strength",menu.DenoiseStrength);
+        Uniform1(denoiseProgram,"radius",menu.DenoiseRadius);
+        Gl.DrawArrays(0x0004,0,3);
+        Gl.BindFramebuffer(0x8D40,0);
+        sceneTexture=denoiseTexture;
     }
     void Render()
     {
@@ -1603,7 +1659,6 @@ internal sealed class GameWindow : SilkForm
             [menu.MonsterSettings.Enabled ? monster?.X??-100f : -100f,
              monster?.Y??1.5f,monster?.Z??-100f,monster?.Yaw??0f]);
         Uniform1(pathProgram,"frameIndex",frames); Uniform1(pathProgram,"lightsEnabled",menu.Lights?1:0); Uniform1(pathProgram,"worldSeed",seed);
-        Uniform1(pathProgram,"previewMode",menu.RenderMode==0?1:0);
         Uniform1(pathProgram,"hybridMode",menu.RenderMode==1?1:0);
         Uniform1(pathProgram,"fixedPathMode",menu.RenderMode==2?1:0);
         Uniform1(pathProgram,"probeSize",probeSize);
@@ -1655,11 +1710,12 @@ internal sealed class GameWindow : SilkForm
         PrepareObjectFrames(viewPosition,rolledRight,rolledUp,forward);
         PrepareSandboxWires(viewPosition,rolledRight,rolledUp,forward);
         Gl.DrawArrays(0x0004,0,3);
+        RunDenoise();
         RunPostProcessing();
         if(menu.Dirty) UploadOverlay();
         Gl.Viewport(0,0,FramebufferSize.Width,FramebufferSize.Height);
         Gl.UseProgram(displayProgram);
-        Bind(0,renderTexture); Uniform1(displayProgram,"accumulation",0);
+        Bind(0,sceneTexture); Uniform1(displayProgram,"accumulation",0);
         Bind(1,overlayTexture); Uniform1(displayProgram,"overlayTexture",1);
         Bind(2,bloomA);Uniform1(displayProgram,"bloomTexture",2);
         Bind(3,exposureCurrent==0?exposureA:exposureB);Uniform1(displayProgram,"exposureTexture",3);
@@ -1708,7 +1764,7 @@ internal sealed class GameWindow : SilkForm
                 $"EYE {(menu.MonsterSettings.Enabled ? visibleMonster?.Mode switch { 2=>"CHASE",1=>"SEARCH",_=>"ROAM" } : "OFF")}",
                 $"M VECTORS {(menu.MonsterDebug?"ON":"OFF")}",
                 $"H DEBUG {(menu.ShowDebugOverlay?"ON":"OFF")}",
-                $"V FOG {(menu.Volumetrics?"ON":"OFF")} {menu.FogSteps}STEP"
+                $"FOG {(menu.Volumetrics?"ON":"OFF")} {menu.FogSteps}STEP"
             ];
             if(menu.ShowDebugOverlay||menu.Open) menu.Dirty=true;
         }

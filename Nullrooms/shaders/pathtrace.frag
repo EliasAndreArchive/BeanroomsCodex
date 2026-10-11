@@ -16,7 +16,6 @@ uniform vec2 resolution;
 uniform int frameIndex;
 uniform int lightsEnabled;
 uniform int worldSeed;
-uniform int previewMode;
 uniform int hybridMode;
 uniform int fixedPathMode;
 uniform int probeSize;
@@ -254,7 +253,7 @@ Hit trace(vec3 ro, vec3 rd, float limit) {
                 if(all(greaterThanEqual(texcoord,vec2(0.0))) && all(lessThanEqual(texcoord,vec2(1.0)))) {
                     float lod=max(0.0,log2(t*320.0/(resolution.y*2.7)));
                     vec4 texel=textureLod(eyeTex,texcoord,lod);
-                    float alphaThreshold=previewMode!=0 || hybridMode!=0 ?
+                    float alphaThreshold=hybridMode!=0 ?
                         fract(sin(dot(floor(gl_FragCoord.xy),vec2(12.9898,78.233)))*43758.5453) : rand();
                     if(texel.a>alphaThreshold) {
                         h.t=t; h.material=10; h.normal=normal;
@@ -512,29 +511,6 @@ float ambientOcclusion(Hit h) {
     return clamp(1.0 - aoStrength * contact,0.2,1.0);
 }
 
-vec3 previewIllumination(Hit h) {
-    ivec2 base = ivec2(floor(h.pos.xz / SPACING + 0.5));
-    vec3 illumination = vec3(0.08);
-    for (int z=-2; z<=2; z++) for (int x=-2; x<=2; x++) {
-        ivec2 id = base + ivec2(x,z);
-        if (!fixtureOn(id)) continue;
-        vec2 center = fixtureCenter(id);
-        float fade = smoothLightRange(length(vec3(center.x, CEILING, center.y) - h.pos), 8.0, 24.0);
-        vec3 toward = vec3(center.x,CEILING-0.02,center.y) - h.pos;
-        float distanceSquared = dot(toward,toward);
-        float facing = max(dot(h.normal,normalize(toward)),0.0);
-        illumination += fade * fixtureEmission(id) * 0.55 * lightIntensity / (distanceSquared + 5.0) * (0.22 + 0.78*facing);
-    }
-    for(int object=0;object<objectCount;object++) {
-        if(!objectEmissive(object)) continue;
-        vec3 toward=objectData(object).xyz-h.pos;
-        float d2=dot(toward,toward);
-        float rangeFade=smoothLightRange(sqrt(d2),7.0,16.0);
-        illumination+=objectColor(object)*3.5*objectData(object).w*objectData(object).w*rangeFade*max(dot(h.normal,normalize(toward)),0.0)/(d2+0.6);
-    }
-    return min(illumination,vec3(1.25));
-}
-
 bool probeBlocked(vec2 a,vec2 b) {
     vec2 delta=b-a;
     float distance=length(delta);
@@ -678,22 +654,6 @@ void main() {
     vec3 ro = cameraPos;
     Hit primary = trace(ro,rd,150.0);
     vec4 fog=volumetricLight(ro,rd,primary.t);
-    if(previewMode != 0) {
-        Hit h = primary;
-        vec3 surfaceColor;
-        if(h.material == 0) surfaceColor=vec3(0.015,0.014,0.012);
-        else if(h.material == 3 && panelAt(h.pos)) surfaceColor=fixtureEmissionAt(h.pos)*0.24*lightIntensity;
-        else if(h.material == 5) surfaceColor=h.baseColor*vec3(6.0,7.0,10.0);
-        else if(h.material == 10) surfaceColor=h.baseColor*3.0+vec3(0.002);
-        else {
-            vec3 albedo = materialColor(h);
-            float shade = 0.54 + 0.22 * max(dot(h.normal, normalize(vec3(0.35,0.85,0.42))),0.0);
-            float distanceFade = mix(1.0,0.57,clamp(h.t/45.0,0.0,1.0));
-            surfaceColor=albedo * shade * distanceFade * previewIllumination(h) * ambientOcclusion(h);
-        }
-        fragColor=vec4(surfaceColor*fog.a+fog.rgb,1.0);
-        return;
-    }
     if(hybridMode != 0) {
         Hit h=primary;
         vec3 surfaceColor;

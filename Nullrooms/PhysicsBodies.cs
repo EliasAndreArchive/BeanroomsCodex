@@ -25,7 +25,7 @@ internal sealed class RigidCube
 }
 
 internal readonly record struct GrabInput(Vector3 Eye,Vector3 Forward,Quaternion Rotation,
-    float HoldDistance,float Frequency,float Damping,float Smoothing);
+    float HoldDistance,float Frequency,float Damping,float Smoothing,float RotateYaw=0f,float RotatePitch=0f);
 
 internal struct PhysicsNarrowPhaseCallbacks : INarrowPhaseCallbacks
 {
@@ -110,6 +110,7 @@ internal sealed class PhysicsBodies : IDisposable
         internal required RigidCube Cube;
         internal Vector3 LocalPoint;
         internal float DistanceOffset;
+        internal float LastHoldDistance;
         internal Quaternion TargetOrientation;
         internal ConstraintHandle Linear, Angular;
         internal bool Active;
@@ -121,6 +122,13 @@ internal sealed class PhysicsBodies : IDisposable
     internal int HolderOf(RigidCube cube) => grabs.FirstOrDefault(pair=>pair.Value.Cube==cube).Key;
     internal bool HeldBy(int holderId) => grabs.ContainsKey(holderId);
     internal int HeldCubeId(int holderId) => grabs.TryGetValue(holderId,out Grab? grab) ? grab.Cube.Id : 0;
+    internal bool NudgeGrabDistance(int holderId,float delta)
+    {
+        if(!grabs.TryGetValue(holderId,out Grab? grab)) return false;
+        float desired=Math.Clamp(grab.LastHoldDistance+grab.DistanceOffset+delta,0.35f,6f);
+        grab.DistanceOffset=desired-grab.LastHoldDistance;
+        return true;
+    }
     internal void ApplyThruster(Vector3 position,float yaw,float dt,int sourceDeviceId=0)
     {
         RigidCube? cube=Bodies.Where(body=>!body.HasHoldTarget && body.SandboxDeviceId!=sourceDeviceId)
@@ -130,6 +138,7 @@ internal sealed class PhysicsBodies : IDisposable
         reference.Velocity.Linear+=new Vector3(MathF.Sin(yaw),0f,MathF.Cos(yaw))*10f*dt;
     }
     internal float PickupRange = 5f, HoldDistance = 2.25f, Frequency = 8.5f, Damping = 1.35f, TargetSmoothing = 18f, SlideResistance = 4.5f;
+    internal float RotateYaw,RotatePitch;
 
     const float Step = 1f / 120f;
     const float Ceiling = 3.4f;
@@ -384,7 +393,7 @@ internal sealed class PhysicsBodies : IDisposable
         Quaternion pickupOrientation = Quaternion.Normalize(simulation.Bodies[candidate.Handle].Pose.Orientation);
         var grab=new Grab { Cube=candidate,
             LocalPoint=Vector3.Transform(hit-candidate.Position,Quaternion.Inverse(pickupOrientation)),
-            DistanceOffset=nearest-HoldDistance,TargetOrientation=pickupOrientation };
+            DistanceOffset=nearest-HoldDistance,LastHoldDistance=HoldDistance,TargetOrientation=pickupOrientation };
         grabs.Add(holderId,grab);
         candidate.HoldTarget = hit;
         candidate.HoldTargetVelocity = Vector3.Zero;
@@ -449,7 +458,7 @@ internal sealed class PhysicsBodies : IDisposable
     }
 
     internal void Update(float dt, Vector3 eye, Vector3 forward, Quaternion cameraRotation, IReadOnlyList<RectangleF> walls, Vector3 player,
-        Func<int,GrabInput?>? onlineInput=null)
+        Func<int,GrabInput?>? onlineInput=null,IReadOnlyList<Vector3>? playerPositions=null)
     {
         EnsureEnvironment(walls);
         accumulator = Math.Min(accumulator + Math.Clamp(dt, 0f, 0.05f), 0.1);
@@ -459,17 +468,33 @@ internal sealed class PhysicsBodies : IDisposable
             {
                 Grab grab=pair.Value;
                 GrabInput? input=onlineInput==null
-                    ? new GrabInput(eye,forward,cameraRotation,HoldDistance,Frequency,Damping,TargetSmoothing)
+                    ? new GrabInput(eye,forward,cameraRotation,HoldDistance,Frequency,Damping,TargetSmoothing,RotateYaw,RotatePitch)
                     : onlineInput(pair.Key);
                 if(input==null) { Release(pair.Key); continue; }
                 GrabInput current=input.Value;
                 RigidCube cube=grab.Cube;
-                Quaternion desiredOrientation=Quaternion.Normalize(current.Rotation*cube.CarryRotationOffset);
+                grab.LastHoldDistance=current.HoldDistance;
+                Quaternion handRotation=Quaternion.CreateFromYawPitchRoll(current.RotateYaw,current.RotatePitch,0f);
+                Quaternion desiredOrientation=Quaternion.Normalize(current.Rotation*handRotation*cube.CarryRotationOffset);
                 Vector3 desiredTarget=current.Eye+current.Forward*MathF.Max(0f,current.HoldDistance+grab.DistanceOffset);
                 Vector3 worldGrabOffset=Vector3.Transform(grab.LocalPoint,desiredOrientation);
                 float halfHeight=RotatedExtents(cube.HalfSize,desiredOrientation).Y;
                 float centerY=Math.Clamp(desiredTarget.Y-worldGrabOffset.Y,halfHeight+0.005f,Ceiling-halfHeight-0.005f);
                 desiredTarget.Y=centerY+worldGrabOffset.Y;
+                Vector3 center=desiredTarget-worldGrabOffset;
+                Vector3 extents=RotatedExtents(cube.HalfSize,desiredOrientation);
+                foreach(Vector3 playerPosition in playerPositions??[player])
+                {
+                    if(center.Y-extents.Y>2.15f) continue;
+                    Vector2 away=new(center.X-playerPosition.X,center.Z-playerPosition.Z);
+                    float clearance=MathF.Max(extents.X,extents.Z)+0.42f;
+                    if(away.LengthSquared()>=clearance*clearance) continue;
+                    Vector2 normal=away.LengthSquared()>0.0001f?Vector2.Normalize(away):
+                        Vector2.Normalize(new Vector2(current.Forward.X,current.Forward.Z)+new Vector2(0.001f));
+                    center.X=playerPosition.X+normal.X*clearance;
+                    center.Z=playerPosition.Z+normal.Y*clearance;
+                }
+                desiredTarget=center+worldGrabOffset;
                 Vector3 previous=cube.HoldTarget;
                 float blend=1f-MathF.Exp(-MathF.Max(current.Smoothing,0.1f)*Step);
                 cube.HoldTarget=Vector3.Lerp(cube.HoldTarget,desiredTarget,blend);

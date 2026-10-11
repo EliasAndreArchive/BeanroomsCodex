@@ -3,6 +3,12 @@ using StbImageSharp;
 using System.Drawing;
 
 var menu=new DebugMenu();
+var blackoutTuning=new FlickerTuning { MinorEnabled=false,EventDuration=2f };
+var blackoutCheck=new LightFlicker(0,blackoutTuning);
+blackoutCheck.Trigger(1,true);
+if(blackoutCheck.IsOn(5,5,1,4)) throw new Exception("Fixture did not stay dark after blackout event");
+blackoutCheck.Trigger(5);
+if(!blackoutCheck.IsOn(5,5,1,8)) throw new Exception("Next flicker did not restore fixture");
 menu.ShowTitle();
 using var image=menu.Draw();
 if(image.Width!=320||image.Height!=240 || !image.Pixels.Where((_,i)=>i%4==3).Any(alpha=>alpha!=0))
@@ -145,6 +151,26 @@ using(var physical=new PhysicalSounds(audio))
         throw new Exception("A resting cube produced corner hit sounds");
 }
 using(var physics=new PhysicsBodies()) { }
+using(var physics=new PhysicsBodies())
+{
+    var eye=new System.Numerics.Vector3(10f,1.68f,10f);
+    var forward=System.Numerics.Vector3.UnitZ;
+    if(!physics.Spawn(eye,forward,false,[],eye) ||
+       !physics.TryPickup(eye,forward,System.Numerics.Quaternion.Identity,[]))
+        throw new Exception("Could not pick up a cube for grab control check");
+    float before=physics.Held!.HoldTarget.Z;
+    if(!physics.NudgeGrabDistance(0,0.4f))
+        throw new Exception("Mouse wheel did not adjust the active grab");
+    for(int i=0;i<30;i++) physics.Update(1f/120f,eye,forward,
+        System.Numerics.Quaternion.Identity,[],eye);
+    if(physics.Held!.HoldTarget.Z<before+0.2f)
+        throw new Exception("Mouse wheel did not move the grab target farther away");
+    physics.RotateYaw=0.7f;
+    for(int i=0;i<45;i++) physics.Update(1f/120f,eye,forward,
+        System.Numerics.Quaternion.Identity,[],eye);
+    if(MathF.Abs(physics.Held!.Rotation.Y)<0.03f)
+        throw new Exception("Right mouse rotation did not turn the held cube");
+}
 using(var physics=new PhysicsBodies())
 {
     var first=new SandboxDevice { Id=1,Kind=SandboxKind.Button,X=10f,Y=.7f,Z=10f,Qw=1f };

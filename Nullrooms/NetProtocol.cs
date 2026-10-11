@@ -20,12 +20,16 @@ internal sealed class NetMessage
     public float CrouchBlend { get; set; }
     public int RespawnId { get; set; }
     public float FlickerAge { get; set; } = -1f;
+    public bool Blackout { get; set; }
+    public bool BlackoutAfter { get; set; }
     public float X { get; set; }
     public float Y { get; set; }
     public float Z { get; set; }
     public float Yaw { get; set; }
     public float Pitch { get; set; }
     public float HoldDistance { get; set; }
+    public float GrabYaw { get; set; }
+    public float GrabPitch { get; set; }
     public float PickupRange { get; set; }
     public float SpringFrequency { get; set; }
     public float SpringDamping { get; set; }
@@ -61,6 +65,7 @@ internal sealed class FlickerTuning
     public float EventSpeedMin { get; set; } = 5f;
     public float EventSpeedMax { get; set; } = 14f;
     public float EventOffChance { get; set; } = 0.46f;
+    public float BlackoutChance { get; set; } = 0.12f;
     public bool ChaseFlicker { get; set; } = true;
     public bool ChaseFog { get; set; } = true;
     public float ChaseFogMax { get; set; } = 0.1f;
@@ -77,7 +82,7 @@ internal sealed class FlickerTuning
             MinorChance!=source.MinorChance||MinorDuration!=source.MinorDuration||
             RandomEvents!=source.RandomEvents||EventInterval!=source.EventInterval||
             EventDuration!=source.EventDuration||EventSpeedMin!=source.EventSpeedMin||
-            EventSpeedMax!=source.EventSpeedMax||EventOffChance!=source.EventOffChance||
+            EventSpeedMax!=source.EventSpeedMax||EventOffChance!=source.EventOffChance||BlackoutChance!=source.BlackoutChance||
             ChaseFlicker!=source.ChaseFlicker||ChaseFog!=source.ChaseFog||
             ChaseFogMax!=source.ChaseFogMax||FogRise!=source.FogRise||FogFall!=source.FogFall||
             ChaseRed!=source.ChaseRed||ChaseRedChance!=source.ChaseRedChance;
@@ -85,7 +90,7 @@ internal sealed class FlickerTuning
         MinorChance=source.MinorChance;MinorDuration=source.MinorDuration;
         RandomEvents=source.RandomEvents;EventInterval=source.EventInterval;
         EventDuration=source.EventDuration;EventSpeedMin=source.EventSpeedMin;
-        EventSpeedMax=source.EventSpeedMax;EventOffChance=source.EventOffChance;
+        EventSpeedMax=source.EventSpeedMax;EventOffChance=source.EventOffChance;BlackoutChance=source.BlackoutChance;
         ChaseFlicker=source.ChaseFlicker;ChaseFog=source.ChaseFog;
         ChaseFogMax=source.ChaseFogMax;FogRise=source.FogRise;FogFall=source.FogFall;
         ChaseRed=source.ChaseRed;ChaseRedChance=source.ChaseRedChance;
@@ -105,6 +110,7 @@ internal sealed class FlickerTuning
         EventSpeedMax=Limit(EventSpeedMax,2f,25f,14f);
         if(EventSpeedMax<EventSpeedMin) EventSpeedMax=EventSpeedMin;
         EventOffChance=Limit(EventOffChance,0.05f,0.9f,0.46f);
+        BlackoutChance=Limit(BlackoutChance,0f,1f,0.12f);
         ChaseFogMax=Limit(ChaseFogMax,0f,0.1f,0.1f);
         FogRise=Limit(FogRise,0.2f,8f,1.8f);
         FogFall=Limit(FogFall,0.2f,8f,0.9f);

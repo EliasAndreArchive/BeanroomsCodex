@@ -54,6 +54,7 @@ internal sealed class LocalServer : IDisposable
     MonsterBrain? monster;
     int nextId, seed = 82317;
     double nextFlickerEvent,lastFlickerEvent=double.NegativeInfinity;
+    bool blackout,blackoutAfterEvent;
 
     internal LocalServer(IPAddress listenAddress,int port,int healthPort=0)
     {
@@ -99,7 +100,9 @@ internal sealed class LocalServer : IDisposable
             accumulator=Math.Min(accumulator+Math.Clamp(now-previous,0,0.05),0.1);
             previous=now;
             ProcessMessages(now);
-            if(flickerSettings.RandomEvents && now>=nextFlickerEvent) BroadcastLightEvent(now);
+            if(blackoutAfterEvent && now-lastFlickerEvent>=flickerSettings.EventDuration)
+            { blackout=true;blackoutAfterEvent=false; }
+            if(flickerSettings.RandomEvents && now>=nextFlickerEvent) BroadcastLightEvent(now,true);
             while(accumulator>=Step)
             {
                 sandbox.Update(Step,device=>physics.ApplyThruster(device.Position,device.Yaw,Step,device.Id));
@@ -115,8 +118,9 @@ internal sealed class LocalServer : IDisposable
                     if(!peers.TryGetValue(id,out Peer? holder)) return null;
                     return new GrabInput(new Vector3(holder.X,holder.Y,holder.Z),
                         LookDirection(holder.Yaw,holder.Pitch),CameraOrientation.FromAngles(holder.Yaw,holder.Pitch),
-                        holder.HoldDistance,holder.SpringFrequency,holder.SpringDamping,holder.PidSmoothing);
-                });
+                        holder.HoldDistance,holder.SpringFrequency,holder.SpringDamping,holder.PidSmoothing,
+                        holder.GrabYaw,holder.GrabPitch);
+                },peers.Values.Select(peer=>new Vector3(peer.X,peer.Y,peer.Z)).ToArray());
                 physics.SyncSandboxDevices(sandbox.Devices);
                 monster?.Update(Step,peers.Values.Select(peer=>new PlayerState
                 {
@@ -176,7 +180,8 @@ internal sealed class LocalServer : IDisposable
                 peers[id]=peer;
                 double age=clock.Elapsed.TotalSeconds-lastFlickerEvent;
                 peer.Send(new NetMessage { Type="welcome",ProtocolVersion=NetProtocol.Version,Id=id,Seed=seed,X=peer.X,Y=peer.Y,Z=peer.Z,
-                    FlickerAge=age>=0 && age<flickerSettings.EventDuration ? (float)age : -1f });
+                    FlickerAge=age>=0 && age<flickerSettings.EventDuration ? (float)age : -1f,
+                    Blackout=blackout,BlackoutAfter=blackoutAfterEvent });
                 _=peer.RunAsync(stop.Token);
                 Console.WriteLine($"Player {id} connected ({peers.Count} total)");
             }
@@ -209,12 +214,15 @@ internal sealed class LocalServer : IDisposable
         }
     }
 
-    void BroadcastLightEvent(double now)
+    void BroadcastLightEvent(double now,bool random=false)
     {
         if(now-lastFlickerEvent<0.75) return;
+        bool restoring=blackout || blackoutAfterEvent;
+        blackout=false;
+        blackoutAfterEvent=!restoring && random && Random.Shared.NextSingle()<flickerSettings.BlackoutChance;
         lastFlickerEvent=now;
         nextFlickerEvent=NextFlickerTime(now);
-        foreach(Peer peer in peers.Values) peer.Send(new NetMessage { Type="flicker" });
+        foreach(Peer peer in peers.Values) peer.Send(new NetMessage { Type="flicker",BlackoutAfter=blackoutAfterEvent });
     }
 
     double NextFlickerTime(double now) => now+
@@ -257,7 +265,9 @@ internal sealed class LocalServer : IDisposable
                             peer.G=Math.Clamp(message.G,0.05f,1f);
                             peer.B=Math.Clamp(message.B,0.05f,1f);
                         }
-                        peer.HoldDistance=Math.Clamp(message.HoldDistance,1.2f,4f);
+                        peer.HoldDistance=Math.Clamp(message.HoldDistance,0.35f,6f);
+                        peer.GrabYaw=float.IsFinite(message.GrabYaw)?Math.Clamp(message.GrabYaw,-6.28f,6.28f):0f;
+                        peer.GrabPitch=float.IsFinite(message.GrabPitch)?Math.Clamp(message.GrabPitch,-1.5f,1.5f):0f;
                         if(message.PickupRange>0f) peer.PickupRange=Math.Clamp(message.PickupRange,1f,10f);
                         if(message.SpringFrequency>0f) peer.SpringFrequency=Math.Clamp(message.SpringFrequency,1f,30f);
                         if(message.SpringDamping>0f) peer.SpringDamping=Math.Clamp(message.SpringDamping,0.1f,5f);
@@ -290,6 +300,9 @@ internal sealed class LocalServer : IDisposable
                     break;
                 case "release":
                     physics.Release(peer.Id);
+                    break;
+                case "grab_scroll":
+                    physics.NudgeGrabDistance(peer.Id,Math.Clamp(message.Action,-1,1)*0.2f);
                     break;
                 case "spawn":
                     {
@@ -408,7 +421,7 @@ internal sealed class Peer : IDisposable
         { SingleReader=true,FullMode=BoundedChannelFullMode.DropOldest });
     NetMessage? latestSnapshot;
     internal int Id { get; }
-    internal float X=96f,Y=1.68f,Z=96f,Yaw=0.63f,Pitch,HoldDistance=2.25f;
+    internal float X=96f,Y=1.68f,Z=96f,Yaw=0.63f,Pitch,HoldDistance=2.25f,GrabYaw,GrabPitch;
     internal float MoveSpeed,SprintBlend,CrouchBlend;
     internal string Name;
     internal float R=0.78f,G=0.76f,B=0.70f;

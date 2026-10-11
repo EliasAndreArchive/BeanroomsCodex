@@ -10,6 +10,8 @@ internal sealed class LightFlicker
     double nextRandomEvent;
     float scheduledInterval;
     bool randomWasEnabled;
+    bool blackout;
+    bool blackoutAfterEvent;
 
     internal LightFlicker(double now,FlickerTuning? tuning=null)
     {
@@ -18,10 +20,22 @@ internal sealed class LightFlicker
         Schedule(now);
     }
 
-    internal void Trigger(double now)
+    internal void Trigger(double now,bool blackoutAfter=false)
     {
+        // A new flicker restores a blacked out room; only a random event can
+        // schedule the next blackout.
+        bool restoring=blackout || blackoutAfterEvent;
+        blackout=false;
+        blackoutAfterEvent=!restoring && blackoutAfter;
         globalStarted=now;
         Schedule(now);
+    }
+
+    internal void Restore(double now,bool isBlackout,bool afterEvent)
+    {
+        blackout=isBlackout;
+        blackoutAfterEvent=afterEvent;
+        if(isBlackout) globalStarted=double.NegativeInfinity;
     }
 
     internal void UpdateRandom(double now,bool online)
@@ -29,7 +43,8 @@ internal sealed class LightFlicker
         if(scheduledInterval!=tuning.EventInterval || (!randomWasEnabled && tuning.RandomEvents))
             Schedule(now);
         randomWasEnabled=tuning.RandomEvents;
-        if(!online && tuning.RandomEvents && now>=nextRandomEvent) Trigger(now);
+        if(!online && tuning.RandomEvents && now>=nextRandomEvent)
+            Trigger(now,Random.Shared.NextSingle()<tuning.BlackoutChance);
     }
 
     internal void UpdateChase(double now,bool locked)
@@ -49,6 +64,9 @@ internal sealed class LightFlicker
 
     internal bool IsOn(int x,int z,int seed,double now)
     {
+        if(blackoutAfterEvent && now-globalStarted>=tuning.EventDuration)
+        { blackoutAfterEvent=false; blackout=true; }
+        if(blackout) return false;
         uint fixture=(uint)(x*73856093 ^ z*19349663 ^ seed);
         double eventAge=double.IsNegativeInfinity(chaseStarted) ? EventAge(now) :
             (now-chaseStarted)%tuning.EventDuration;

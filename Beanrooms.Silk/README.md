@@ -28,8 +28,14 @@ available everywhere with **F** (glow cubes require sandbox mode). Sandbox
 devices are physical and can be grabbed like cubes. In sandbox sessions, use
 **E** on a button or lever, **G** to toggle the wire tool and click a source
 then target, or **K** to toggle the weld tool and click two nearby grabbable
-objects. Fixed path tracing is the default renderer. Realtime GI is
-available in the settings menu when a faster dynamic diffuse radiance cache is useful.
+objects. The sandbox browser uses **C** to cycle cube color and **X** to clear
+cubes. Hold the left mouse button to carry an object, use the wheel to move
+it closer or farther, and hold the right mouse button while moving the mouse
+to rotate its target. Fixed path tracing is the default renderer. Realtime GI
+is available in the settings menu when a faster dynamic diffuse radiance cache
+is useful. Post FX includes optional current-frame spatial denoising for path
+tracing. A random roomwide flicker can leave the lights blacked out until the
+next flicker restores them.
 
 Build standalone packages:
 

@@ -24,7 +24,7 @@ internal sealed class LocalNetClient : IDisposable
     NetMessage? pendingRespawn;
     NetMessage? pendingPickupResult;
     readonly Queue<CubeImpactEvent> pendingCubeImpacts = new();
-    int pendingFlicker;
+    NetMessage? pendingFlicker;
     PlayerState[] players = [];
     CubeState[] cubes = [];
     MonsterState? monster;
@@ -145,7 +145,7 @@ internal sealed class LocalNetClient : IDisposable
             hostId=0;pendingWorld=null;pendingRespawn=null;pendingPickupResult=null;
             pendingCubeImpacts.Clear();
         }
-        Interlocked.Exchange(ref pendingFlicker,0);
+        Interlocked.Exchange(ref pendingFlicker,null);
     }
 
     void ReceiveMessage(string line)
@@ -164,7 +164,7 @@ internal sealed class LocalNetClient : IDisposable
         else if(message.Type=="world") { lock(stateLock) pendingWorld=message; }
         else if(message.Type=="respawn") { lock(stateLock) pendingRespawn=message; }
         else if(message.Type=="pickup_result") { lock(stateLock) pendingPickupResult=message; }
-        else if(message.Type=="flicker") Interlocked.Exchange(ref pendingFlicker,1);
+        else if(message.Type=="flicker") Interlocked.Exchange(ref pendingFlicker,message);
         else if(message.Type=="snapshot")
         {
             lock(stateLock)
@@ -237,7 +237,7 @@ internal sealed class LocalNetClient : IDisposable
         }
     }
 
-    internal bool ConsumeFlicker() => Interlocked.Exchange(ref pendingFlicker,0)!=0;
+    internal NetMessage? ConsumeFlicker() => Interlocked.Exchange(ref pendingFlicker,null);
 
     internal NetMessage? ConsumePickupResult()
     {
