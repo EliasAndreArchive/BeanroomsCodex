@@ -254,10 +254,10 @@ internal sealed class GameWindow : SilkForm
             if(e.KeyCode==Keys.M) { menu.MonsterDebug=!menu.MonsterDebug;menu.Dirty=true; }
             if(e.KeyCode==Keys.H) { menu.ShowDebugOverlay=!menu.ShowDebugOverlay;menu.Dirty=true; }
         };
-        MouseDown += (_, e) => { if(menu.Open) { if(TryMenuPoint(e.Location,out Point point)) menu.MouseDown(point.X,point.Y); if(!menu.Open) CloseSettings(); return; } wantsCapture=true; CaptureMouse(); if(e.Button==MouseButtons.Right) rotatingHeld=true; if(e.Button==MouseButtons.Left && active) { if(menu.WireTool) { WireDevice();return; } if(menu.WeldTool) { WeldGrabbables();return; } grabYaw=grabPitch=0f; if(network.Connected) { networkHolding=true;networkHeldId=0; SendPlayerState(); network.Send(new NetMessage { Type="pickup",GrabSequence=++grabSequence }); } else { ViewPose(out Vector3 eye,out Vector3 forward); physics.HoldDistance=menu.HoldDistance; physics.TryPickup(eye,forward,ViewRotation(),boxes); } } };
+        MouseDown += (_, e) => { if(menu.Open) { if(TryMenuPoint(e.Location,out Point point)) menu.MouseDown(point.X,point.Y); if(!menu.Open) CloseSettings(); return; } wantsCapture=true; CaptureMouse(); if(e.Button==MouseButtons.Right) rotatingHeld=true; if(e.Button==MouseButtons.Left && active) { if(menu.WireTool) { WireDevice();return; } if(menu.WeldTool) { WeldGrabbables();return; } if(network.Connected) { if(networkHolding || networkCubes.Any(cube=>cube.HolderId==network.Id && network.Id!=0)) { network.Send(new NetMessage { Type="place" });networkHolding=false;networkHeldId=0; } else { grabYaw=grabPitch=0f;networkHolding=true;networkHeldId=0;SendPlayerState();network.Send(new NetMessage { Type="pickup",GrabSequence=++grabSequence }); } } else if(physics.Held!=null) { if(physics.TryPlace()) grabYaw=grabPitch=0f; } else { grabYaw=grabPitch=0f;ViewPose(out Vector3 eye,out Vector3 forward);physics.HoldDistance=menu.HoldDistance;physics.TryPickup(eye,forward,ViewRotation(),boxes); } } };
         MouseMove += (_, e) => { if(menu.Open && TryMenuPoint(e.Location,out Point point)) menu.MouseMove(point.X,point.Y); };
         MouseWheel += (_, e) => { if(!menu.Open && e.Delta!=0) { int step=Math.Sign(e.Delta); if(network.Connected) { if(networkHolding || networkCubes.Any(cube=>cube.HolderId==network.Id && network.Id!=0)) network.Send(new NetMessage { Type="grab_scroll",Action=step }); } else physics.NudgeGrabDistance(0,step*0.2f); } };
-        MouseUp += (_, e) => { menu.MouseUp(); if(e.Button==MouseButtons.Right) rotatingHeld=false; if(e.Button==MouseButtons.Left) { if(network.Connected) network.Send(new NetMessage { Type="release" }); else physics.Release(); networkHolding=false;networkHeldId=0;grabYaw=grabPitch=0f; } };
+        MouseUp += (_, e) => { menu.MouseUp(); if(e.Button==MouseButtons.Right) rotatingHeld=false; };
         Activated += (_, _) => { if(ready && wantsCapture) BeginInvoke(new Action(CaptureMouse)); };
         Deactivate += (_, _) => { networkHolding=false;rotatingHeld=false; network.Send(new NetMessage { Type="release" }); physics.Release(); SuspendMouse(); };
         FormClosed += (_, _) => { audio?.Dispose(); network.Dispose(); physics.Dispose(); ReleaseMouse(); };
@@ -860,7 +860,7 @@ internal sealed class GameWindow : SilkForm
         if(rotatingHeld && (physics.Held!=null || networkHolding || networkCubes.Any(cube=>cube.HolderId==network.Id && network.Id!=0)))
         {
             grabYaw=MathF.IEEERemainder(grabYaw+dx*menu.MouseSensitivity,MathF.Tau);
-            grabPitch=Math.Clamp(grabPitch-dy*menu.MouseSensitivity,-1.5f,1.5f);
+            grabPitch=MathF.IEEERemainder(grabPitch-dy*menu.MouseSensitivity,MathF.Tau);
             return;
         }
         float yawChange=dx*menu.MouseSensitivity;
@@ -1052,6 +1052,7 @@ internal sealed class GameWindow : SilkForm
             HoldDistance=menu.HoldDistance,PickupRange=menu.PickupRange,GrabYaw=grabYaw,GrabPitch=grabPitch,
             SpringFrequency=menu.SpringFrequency,SpringDamping=menu.SpringDamping,
             PidSmoothing=menu.PidSmoothing,SlideResistance=menu.SlideResistance,
+            PlacementGrid=menu.PlacementGrid,PlacementAngle=menu.PlacementAngle,SurfaceSnap=menu.SurfaceSnap,
             MonsterTuning=menu.MonsterSettings.Clone(),FlickerTuning=menu.FlickerSettings.Clone(),
             Name=menu.PlayerName,RespawnId=respawnId,
             R=menu.PlayerRed,G=menu.PlayerGreen,B=menu.PlayerBlue });
@@ -1209,6 +1210,7 @@ internal sealed class GameWindow : SilkForm
                 current.Qx=q.X;current.Qy=q.Y;current.Qz=q.Z;current.Qw=q.W;
                 current.HalfSize=target.HalfSize;current.Emissive=target.Emissive;
                 current.HolderId=target.HolderId;
+                current.PlacementValid=target.PlacementValid;
                 current.Vx=target.Vx;current.Vy=target.Vy;current.Vz=target.Vz;current.Grounded=target.Grounded;
                 current.Ax=target.Ax;current.Ay=target.Ay;current.Az=target.Az;
                 current.SlipSpeed=target.SlipSpeed;
@@ -1254,6 +1256,7 @@ internal sealed class GameWindow : SilkForm
         physics.PickupRange=menu.PickupRange; physics.HoldDistance=menu.HoldDistance;
         physics.RotateYaw=grabYaw;physics.RotatePitch=grabPitch;
         physics.Frequency=menu.SpringFrequency; physics.Damping=menu.SpringDamping; physics.TargetSmoothing=menu.PidSmoothing;
+        physics.PlacementGrid=menu.PlacementGrid;physics.PlacementAngle=menu.PlacementAngle;physics.SurfaceSnap=menu.SurfaceSnap;
         physics.SlideResistance=menu.SlideResistance;
         physics.Update(dt,eye,forward,ViewRotation(),boxes,camera);
         physics.SyncSandboxDevices(localSandbox.Devices);
@@ -1271,7 +1274,7 @@ internal sealed class GameWindow : SilkForm
 
     static CubeState CloneCube(CubeState source) => new()
     {
-        Id=source.Id,HolderId=source.HolderId,
+        Id=source.Id,HolderId=source.HolderId,PlacementValid=source.PlacementValid,
         X=source.X,Y=source.Y,Z=source.Z,Qx=source.Qx,Qy=source.Qy,Qz=source.Qz,Qw=source.Qw,
         Vx=source.Vx,Vy=source.Vy,Vz=source.Vz,Grounded=source.Grounded,
         Ax=source.Ax,Ay=source.Ay,Az=source.Az,SlipSpeed=source.SlipSpeed,
@@ -1458,10 +1461,13 @@ internal sealed class GameWindow : SilkForm
         int deviceCount=network.Connected?networkDevices.Length:localDevices.Length;
         int count=cubeCount+deviceCount;
         if(!menu.ShowObjectFrames||count==0)
-        { if(menu.ObjectFrames.Length>0) { menu.ObjectFrames=[];menu.Dirty=true; } return; }
+        { if(menu.ObjectFrames.Length>0) { menu.ObjectFrames=[];menu.Dirty=true; } menu.ObjectFrameInvalid=false;return; }
         int heldId=network.Connected
-            ? networkHolding?networkHeldId:networkCubes.FirstOrDefault(cube=>cube.HolderId==network.Id)?.Id??0
+            ? networkHeldId!=0?networkHeldId:networkCubes.FirstOrDefault(cube=>cube.HolderId==network.Id)?.Id??0
             : physics.Held?.Id??0;
+        menu.ObjectFrameInvalid=heldId!=0 && (network.Connected
+            ? networkCubes.FirstOrDefault(cube=>cube.Id==heldId)?.PlacementValid==false
+            : !physics.CanPlace());
         float nearest=heldId==0
             ? MathF.Min(menu.PickupRange,PhysicsBodies.WallRay(eye,forward,boxes,menu.PickupRange))
             : float.PositiveInfinity;
@@ -1745,7 +1751,7 @@ internal sealed class GameWindow : SilkForm
             fpsValue=(int)Math.Round(reportFrames/elapsed);
             frameMs=(float)(elapsed*1000.0/Math.Max(reportFrames,1));
             menu.FpsValue=fpsValue;
-            Text=$"BEANROOMS  |  {(network.Connected?$"{(remoteServer?"ONLINE":"LOCAL")} {remotePositions.Count+1} PLAYERS  •  ":"")}{menu.RenderModeName}  •  {width}×{height}  •  {fpsValue} FPS  •  WASD move  •  F cube  •  T flicker  •  LMB carry  •  Tab menu  •  F11 full screen";
+            Text=$"BEANROOMS  |  {(network.Connected?$"{(remoteServer?"ONLINE":"LOCAL")} {remotePositions.Count+1} PLAYERS  •  ":"")}{menu.RenderModeName}  •  {width}×{height}  •  {fpsValue} FPS  •  WASD move  •  F cube  •  T flicker  •  LMB pick/place  •  RMB rotate  •  wheel depth  •  Tab menu  •  F11 full screen";
             reportFrames=0; reportTime=watch.Elapsed.TotalSeconds;
         }
         if(watch.Elapsed.TotalSeconds-lastDebugTime>=0.2)

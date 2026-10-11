@@ -170,6 +170,29 @@ using(var physics=new PhysicsBodies())
         System.Numerics.Quaternion.Identity,[],eye);
     if(MathF.Abs(physics.Held!.Rotation.Y)<0.03f)
         throw new Exception("Right mouse rotation did not turn the held cube");
+    if(!physics.TryPlace() || physics.Held!=null || !physics.Bodies[0].Placed)
+        throw new Exception("A valid snap placement did not anchor the cube");
+    var placedPosition=physics.Bodies[0].Position;
+    for(int i=0;i<120;i++) physics.Update(1f/120f,eye,forward,
+        System.Numerics.Quaternion.Identity,[],eye);
+    if(System.Numerics.Vector3.DistanceSquared(placedPosition,physics.Bodies[0].Position)>0.0001f)
+        throw new Exception("Placed cube drifted after release");
+    if(!physics.TryPickup(eye,forward,System.Numerics.Quaternion.Identity,[]))
+        throw new Exception("A placed cube could not be picked up again");
+}
+using(var physics=new PhysicsBodies())
+{
+    var eye=new System.Numerics.Vector3(10f,1.68f,9f);
+    var wall=new RectangleF(9f,12.5f,2f,1f);
+    if(!physics.Spawn(eye,System.Numerics.Vector3.UnitZ,false,[wall],eye) ||
+       !physics.TryPickup(eye,System.Numerics.Vector3.UnitZ,System.Numerics.Quaternion.Identity,[wall]))
+        throw new Exception("Could not start the wall placement check");
+    physics.NudgeGrabDistance(0,2f);
+    for(int i=0;i<10;i++) physics.Update(1f/120f,eye,System.Numerics.Vector3.UnitZ,
+        System.Numerics.Quaternion.Identity,[wall],eye);
+    RigidCube cube=physics.Bodies[0];
+    if(cube.Position.Z+PhysicsBodies.Extents(cube).Z>wall.Top+.01f || !physics.TryPlace())
+        throw new Exception("Surface snapped placement crossed a wall");
 }
 using(var physics=new PhysicsBodies())
 {

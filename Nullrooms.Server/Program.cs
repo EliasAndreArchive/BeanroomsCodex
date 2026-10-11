@@ -119,7 +119,7 @@ internal sealed class LocalServer : IDisposable
                     return new GrabInput(new Vector3(holder.X,holder.Y,holder.Z),
                         LookDirection(holder.Yaw,holder.Pitch),CameraOrientation.FromAngles(holder.Yaw,holder.Pitch),
                         holder.HoldDistance,holder.SpringFrequency,holder.SpringDamping,holder.PidSmoothing,
-                        holder.GrabYaw,holder.GrabPitch);
+                        holder.GrabYaw,holder.GrabPitch,holder.PlacementGrid,holder.PlacementAngle,holder.SurfaceSnap);
                 },peers.Values.Select(peer=>new Vector3(peer.X,peer.Y,peer.Z)).ToArray());
                 physics.SyncSandboxDevices(sandbox.Devices);
                 monster?.Update(Step,peers.Values.Select(peer=>new PlayerState
@@ -267,11 +267,14 @@ internal sealed class LocalServer : IDisposable
                         }
                         peer.HoldDistance=Math.Clamp(message.HoldDistance,0.35f,6f);
                         peer.GrabYaw=float.IsFinite(message.GrabYaw)?Math.Clamp(message.GrabYaw,-6.28f,6.28f):0f;
-                        peer.GrabPitch=float.IsFinite(message.GrabPitch)?Math.Clamp(message.GrabPitch,-1.5f,1.5f):0f;
+                        peer.GrabPitch=float.IsFinite(message.GrabPitch)?Math.Clamp(message.GrabPitch,-6.28f,6.28f):0f;
                         if(message.PickupRange>0f) peer.PickupRange=Math.Clamp(message.PickupRange,1f,10f);
                         if(message.SpringFrequency>0f) peer.SpringFrequency=Math.Clamp(message.SpringFrequency,1f,30f);
                         if(message.SpringDamping>0f) peer.SpringDamping=Math.Clamp(message.SpringDamping,0.1f,5f);
                         if(message.PidSmoothing>0f) peer.PidSmoothing=Math.Clamp(message.PidSmoothing,1f,50f);
+                        peer.PlacementGrid=Math.Clamp(message.PlacementGrid,.1f,1f);
+                        peer.PlacementAngle=Math.Clamp(message.PlacementAngle,5f,90f);
+                        peer.SurfaceSnap=message.SurfaceSnap;
                         if(message.SlideResistance>0f) peer.SlideResistance=Math.Clamp(message.SlideResistance,0.1f,20f);
                     }
                     if(message.MonsterTuning!=null && peer.Id==peers.Keys.Min())
@@ -300,6 +303,9 @@ internal sealed class LocalServer : IDisposable
                     break;
                 case "release":
                     physics.Release(peer.Id);
+                    break;
+                case "place":
+                    physics.TryPlace(peer.Id);
                     break;
                 case "grab_scroll":
                     physics.NudgeGrabDistance(peer.Id,Math.Clamp(message.Action,-1,1)*0.2f);
@@ -375,6 +381,7 @@ internal sealed class LocalServer : IDisposable
         {
             Id=body.Id,
             HolderId=physics.HolderOf(body),
+            PlacementValid=physics.HolderOf(body)==0 || physics.CanPlace(physics.HolderOf(body)),
             X=body.Position.X,Y=body.Position.Y,Z=body.Position.Z,
             Vx=body.Velocity.X,Vy=body.Velocity.Y,Vz=body.Velocity.Z,Grounded=body.Grounded,
             Ax=body.AngularVelocity.X,Ay=body.AngularVelocity.Y,Az=body.AngularVelocity.Z,
@@ -426,6 +433,8 @@ internal sealed class Peer : IDisposable
     internal string Name;
     internal float R=0.78f,G=0.76f,B=0.70f;
     internal float PickupRange=5f,SpringFrequency=8.5f,SpringDamping=1.35f,PidSmoothing=18f,SlideResistance=4.5f;
+    internal float PlacementGrid=.25f,PlacementAngle=15f;
+    internal bool SurfaceSnap=true;
     internal int RespawnId;
     internal double RespawnProtectedUntil;
 

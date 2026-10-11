@@ -91,6 +91,7 @@ internal sealed class DebugMenu
     internal (PointF At,string Label,Color Ink)[] PlayerTags = [];
     internal (PointF A,PointF B,Color Ink)[] SandboxWires = [];
     internal RectangleF[] ObjectFrames = [];
+    internal bool ObjectFrameInvalid;
     internal string MonsterTargetText = "TARGET NONE";
     internal int BodyCount;
     internal Action<int>? ObjectAction;
@@ -99,6 +100,8 @@ internal sealed class DebugMenu
     internal Action<int>? SessionAction;
     internal Action? InteractionSound, HoverSound;
     internal float PickupRange=5f, HoldDistance=2.25f, SpringFrequency=8.5f, SpringDamping=1.35f, PidSmoothing=18f, SlideResistance=4.5f;
+    internal float PlacementGrid=.25f,PlacementAngle=15f;
+    internal bool SurfaceSnap=true;
     internal int CubeColorIndex = 6;
     static readonly (string Name, Vector3 Color)[] CubeColors =
     {
@@ -156,7 +159,7 @@ internal sealed class DebugMenu
         new[] { "RENDER MODE", "PATH SAMPLES", "PATH BOUNCES", "BOUNCE LIGHT", "AO STRENGTH", "LIGHT INTENSITY", "LIGHT DENSITY", "RESOLUTION", "FIXTURES", "FPS LIMIT", "VSYNC", "VOLUMETRICS", "FOG DENSITY", "FOG STEPS", "PROBE GRID", "PROBE BOUNCES", "DIRECT SAMPLES" },
         new[] { "WALK SPEED", "SPRINT X", "CROUCH X", "ACCELERATION", "DECELERATION", "STANCE SMOOTH", "SPRINT SMOOTH", "CROUCH HEIGHT", "STEP LENGTH" },
         new[] { "MOUSE SENS", "IDLE SHAKE", "WALK SHAKE", "SPRINT SHAKE", "CROUCH SHAKE", "HEAD BOB", "SWAY AMOUNT", "STRAFE ROLL", "TURN ROLL", "MOVE PITCH", "LOOK SMOOTH" },
-        new[] { "PICKUP RANGE", "HOLD DIST", "SPRING FREQ", "SPRING DAMP", "HOLD SMOOTH", "SLIDE RESIST", "CUBE COUNT", "DEBUG UI", "OBJECT FRAMES" },
+        new[] { "PICKUP RANGE", "HOLD DIST", "SNAP GRID", "ROTATE STEP", "SURFACE SNAP", "SLIDE RESIST", "CUBE COUNT", "DEBUG UI", "OBJECT FRAMES" },
         new[] { "MONSTER", "ROAM SPEED", "SEARCH SPEED", "CHASE SPEED", "CHASE TURN", "SEARCH TURN", "ROAM TURN", "SIGHT RANGE", "SIGHT ANGLE", "SEARCH RADIUS", "ROAM RADIUS" },
         new[] { "PLAYER NAME", "BEAN COLOR", "RED", "GREEN", "BLUE", "SERVER", "JOIN KEY", "CONNECT", "DISCONNECT", "CONNECTION", "PLAYER ID", "PLAYERS", "ROLE" },
         new[] { "POST FX", "TONEMAP", "EXPOSURE", "AUTO EXPOSURE", "BRIGHTEN SPEED", "DARKEN SPEED", "BLOOM", "BLOOM STRENGTH", "BLOOM THRESHOLD", "BLOOM RADIUS", "SPATIAL DENOISE", "DENOISE STRENGTH", "DENOISE RADIUS" },
@@ -240,6 +243,7 @@ internal sealed class DebugMenu
         PickupRange=defaults.PickupRange; HoldDistance=defaults.HoldDistance;
         SpringFrequency=defaults.SpringFrequency; SpringDamping=defaults.SpringDamping;
         PidSmoothing=defaults.PidSmoothing; SlideResistance=defaults.SlideResistance;
+        PlacementGrid=defaults.PlacementGrid;PlacementAngle=defaults.PlacementAngle;SurfaceSnap=defaults.SurfaceSnap;
         CubeColorIndex=defaults.CubeColorIndex;
         ShowDebugOverlay=defaults.ShowDebugOverlay; ShowObjectFrames=defaults.ShowObjectFrames;
         MonsterDebug=defaults.MonsterDebug;
@@ -457,7 +461,7 @@ internal sealed class DebugMenu
     {
         0 => row is 2 or 3 or 4 or 5 or 6 or 7 or 8,
         1 => row is 1 or 2 or 3 or 4 or 5 or 6 or 7 or 9 or 12 or 13 or 14 or 15 or 16,
-        4 => row is 0 or 1 or 2 or 3 or 4 or 5,
+        4 => row is 0 or 1 or 2 or 3 or 5,
         5 => row > 0,
         6 => row is 2 or 3 or 4,
         7 => row is 2 or 4 or 5 or 7 or 8 or 9 or 11 or 12,
@@ -562,9 +566,9 @@ internal sealed class DebugMenu
             {
                 case 0: PickupRange=Math.Clamp(PickupRange+direction*0.1f,2f,8f); break;
                 case 1: HoldDistance=Math.Clamp(HoldDistance+direction*0.1f,0.35f,6f); break;
-                case 2: SpringFrequency=Math.Clamp(SpringFrequency+direction*0.1f,2f,18f); break;
-                case 3: SpringDamping=Math.Clamp(SpringDamping+direction*0.01f,0.3f,2f); break;
-                case 4: PidSmoothing=Math.Clamp(PidSmoothing+direction*0.1f,4f,30f); break;
+                case 2: PlacementGrid=Math.Clamp(PlacementGrid+direction*.05f,.1f,1f); break;
+                case 3: PlacementAngle=Math.Clamp(PlacementAngle+direction*5f,5f,90f); break;
+                case 4: SurfaceSnap=!SurfaceSnap; break;
                 case 5: SlideResistance=Math.Clamp(SlideResistance+direction*0.1f,0f,12f); break;
                 case 7: ShowDebugOverlay=!ShowDebugOverlay; break;
                 case 8: ShowObjectFrames=!ShowObjectFrames; break;
@@ -753,8 +757,8 @@ internal sealed class DebugMenu
         if(Page == 4) return row switch
         {
             0 => $"{PickupRange:0.0}",1 => $"{HoldDistance:0.0}",
-            2 => $"{SpringFrequency:0.0}",3 => $"{SpringDamping:0.00}",
-            4 => $"{PidSmoothing:0.0}",5 => $"{SlideResistance:0.0}",
+            2 => $"{PlacementGrid:0.00}M",3 => $"{PlacementAngle:0} DEG",
+            4 => SurfaceSnap?"ON":"OFF",5 => $"{SlideResistance:0.0}",
             6 => $"{BodyCount}",7 => ShowDebugOverlay ? "ON" : "OFF",
             8 => ShowObjectFrames ? "ON" : "OFF",_ => ""
         };
@@ -867,8 +871,8 @@ internal sealed class DebugMenu
         if(Page == 4) return row switch
         {
             0 => (PickupRange-2f)/6f, 1 => (HoldDistance-0.35f)/5.65f,
-            2 => (SpringFrequency-2f)/16f, 3 => (SpringDamping-0.3f)/1.7f,
-            4 => (PidSmoothing-4f)/26f,5 => SlideResistance/12f,_ => 0f
+            2 => (PlacementGrid-.1f)/.9f, 3 => (PlacementAngle-5f)/85f,
+            5 => SlideResistance/12f,_ => 0f
         };
         if (Page == 0) return row switch
         {
@@ -967,6 +971,7 @@ internal sealed class DebugMenu
         using var white = new SolidBrush(Color.FromArgb(237, 246, 247));
         using var paleBlue = new SolidBrush(Color.FromArgb(170, 211, 231));
         using var green = new SolidBrush(Color.FromArgb(84, 224, 160));
+        using var invalidPlacement = new SolidBrush(Color.FromArgb(255, 143, 80));
         using var unfilled = new SolidBrush(Color.FromArgb(130, 160, 171));
         if(Open && SandboxPage)
         {
@@ -1083,7 +1088,7 @@ internal sealed class DebugMenu
             if(ShowObjectFrames) foreach(var frame in ObjectFrames)
             {
                 DrawFrameCorners(g,Brushes.Black,frame,1);
-                DrawFrameCorners(g,white,frame,0);
+                DrawFrameCorners(g,ObjectFrameInvalid?invalidPlacement:white,frame,0);
             }
             foreach(var wire in SandboxWires)
             {

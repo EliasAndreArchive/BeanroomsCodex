@@ -4,7 +4,7 @@ internal static class NetProtocol
 {
     // Bump when a server changes a feature whose absence would otherwise look like
     // a valid, but ignored, client command.
-    internal const int Version=2;
+    internal const int Version=3;
 }
 
 internal sealed class NetMessage
@@ -34,6 +34,9 @@ internal sealed class NetMessage
     public float SpringFrequency { get; set; }
     public float SpringDamping { get; set; }
     public float PidSmoothing { get; set; }
+    public float PlacementGrid { get; set; } = 0.25f;
+    public float PlacementAngle { get; set; } = 15f;
+    public bool SurfaceSnap { get; set; } = true;
     public float SlideResistance { get; set; }
     public float R { get; set; }
     public float G { get; set; }
@@ -210,6 +213,7 @@ internal sealed class CubeState
 {
     public int Id { get; set; }
     public int HolderId { get; set; }
+    public bool PlacementValid { get; set; } = true;
     public float X { get; set; }
     public float Y { get; set; }
     public float Z { get; set; }

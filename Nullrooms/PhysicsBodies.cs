@@ -19,13 +19,14 @@ internal sealed class RigidCube
     internal Vector3 HoldTarget, HoldTargetVelocity;
     internal Quaternion CarryRotationOffset = Quaternion.Identity;
     internal float HalfSize, Drag = 0.025f, RestDrag;
-    internal bool HasHoldTarget, Grounded, Emissive;
+    internal bool HasHoldTarget, Grounded, Emissive, Placed;
     internal float ImpactCooldown;
     internal BodyHandle Handle;
 }
 
 internal readonly record struct GrabInput(Vector3 Eye,Vector3 Forward,Quaternion Rotation,
-    float HoldDistance,float Frequency,float Damping,float Smoothing,float RotateYaw=0f,float RotatePitch=0f);
+    float HoldDistance,float Frequency,float Damping,float Smoothing,float RotateYaw=0f,float RotatePitch=0f,
+    float GridStep=0.25f,float AngleStep=15f,bool SurfaceSnap=true);
 
 internal struct PhysicsNarrowPhaseCallbacks : INarrowPhaseCallbacks
 {
@@ -111,9 +112,7 @@ internal sealed class PhysicsBodies : IDisposable
         internal Vector3 LocalPoint;
         internal float DistanceOffset;
         internal float LastHoldDistance;
-        internal Quaternion TargetOrientation;
-        internal ConstraintHandle Linear, Angular;
-        internal bool Active;
+        internal bool PlacementValid = true;
     }
     readonly Dictionary<int,Grab> grabs = new();
     readonly List<ConstraintHandle> welds = new();
@@ -121,6 +120,7 @@ internal sealed class PhysicsBodies : IDisposable
     internal RigidCube? Held => grabs.TryGetValue(0,out Grab? grab) ? grab.Cube : null;
     internal int HolderOf(RigidCube cube) => grabs.FirstOrDefault(pair=>pair.Value.Cube==cube).Key;
     internal bool HeldBy(int holderId) => grabs.ContainsKey(holderId);
+    internal bool CanPlace(int holderId=0) => grabs.TryGetValue(holderId,out Grab? grab) && grab.PlacementValid;
     internal int HeldCubeId(int holderId) => grabs.TryGetValue(holderId,out Grab? grab) ? grab.Cube.Id : 0;
     internal bool NudgeGrabDistance(int holderId,float delta)
     {
@@ -131,14 +131,17 @@ internal sealed class PhysicsBodies : IDisposable
     }
     internal void ApplyThruster(Vector3 position,float yaw,float dt,int sourceDeviceId=0)
     {
-        RigidCube? cube=Bodies.Where(body=>!body.HasHoldTarget && body.SandboxDeviceId!=sourceDeviceId)
+        RigidCube? cube=Bodies.Where(body=>!body.HasHoldTarget && !body.Placed && body.SandboxDeviceId!=sourceDeviceId)
             .OrderBy(body=>Vector3.DistanceSquared(body.Position,position)).FirstOrDefault();
         if(cube==null || Vector3.DistanceSquared(cube.Position,position)>1.5f*1.5f) return;
         BodyReference reference=simulation.Bodies[cube.Handle];
         reference.Velocity.Linear+=new Vector3(MathF.Sin(yaw),0f,MathF.Cos(yaw))*10f*dt;
     }
     internal float PickupRange = 5f, HoldDistance = 2.25f, Frequency = 8.5f, Damping = 1.35f, TargetSmoothing = 18f, SlideResistance = 4.5f;
-    internal float RotateYaw,RotatePitch;
+    internal float PlacementGrid=0.25f,PlacementAngle=15f;
+    internal bool SurfaceSnap=true;
+    internal float RotateYaw { get; set; }
+    internal float RotatePitch { get; set; }
 
     const float Step = 1f / 120f;
     const float Ceiling = 3.4f;
@@ -329,6 +332,7 @@ internal sealed class PhysicsBodies : IDisposable
         RigidCube? first=Bodies.FirstOrDefault(body=>body.Id==firstId);
         RigidCube? second=Bodies.FirstOrDefault(body=>body.Id==secondId);
         if(first==null||second==null||first.HasHoldTarget||second.HasHoldTarget||
+           (first.Placed&&second.Placed)||
            Vector3.DistanceSquared(first.Position,second.Position)>2.25f*2.25f)
         { weldedPairs.Remove(pair);return false; }
         Quaternion inverse=Quaternion.Inverse(first.Rotation);
@@ -388,61 +392,39 @@ internal sealed class PhysicsBodies : IDisposable
         if (candidate == null) return false;
 
         candidate.RestDrag = candidate.Drag;
-        candidate.Drag = 0.8f;
         Vector3 hit = eye + direction * nearest;
         Quaternion pickupOrientation = Quaternion.Normalize(simulation.Bodies[candidate.Handle].Pose.Orientation);
         var grab=new Grab { Cube=candidate,
             LocalPoint=Vector3.Transform(hit-candidate.Position,Quaternion.Inverse(pickupOrientation)),
-            DistanceOffset=nearest-HoldDistance,LastHoldDistance=HoldDistance,TargetOrientation=pickupOrientation };
+            DistanceOffset=nearest-HoldDistance,LastHoldDistance=HoldDistance };
         grabs.Add(holderId,grab);
         candidate.HoldTarget = hit;
         candidate.HoldTargetVelocity = Vector3.Zero;
         candidate.CarryRotationOffset = Quaternion.Normalize(Quaternion.Inverse(cameraRotation) * pickupOrientation);
-        AddGrabConstraints(grab,hit,Frequency,Damping);
+        simulation.Bodies[candidate.Handle].BecomeKinematic();
+        simulation.Bodies[candidate.Handle].Velocity = new BodyVelocity();
+        candidate.Placed = false;
         candidate.HasHoldTarget = true;
         return true;
     }
 
-    void AddGrabConstraints(Grab grab,Vector3 target,float frequency,float damping)
+    // Placed items are kinematic Bepu colliders. They can be picked up again,
+    // while loose newly spawned items still participate in rigid body physics.
+    internal bool TryPlace(int holderId=0)
     {
-        RigidCube cube=grab.Cube;
-        var linear = new OneBodyLinearServo
-        {
-            LocalOffset = grab.LocalPoint,
-            Target = target,
-            ServoSettings = new ServoSettings(float.MaxValue, 0f, 360f),
-            SpringSettings = new SpringSettings(MathF.Max(0.1f, frequency), MathF.Max(0.05f, damping))
-        };
-        float side = cube.HalfSize * 2f;
-        float inertia = side * side / 6f;
-        var angular = new OneBodyAngularServo
-        {
-            TargetOrientation = grab.TargetOrientation,
-            ServoSettings = new ServoSettings(12f, 0f, MathF.Max(10f, inertia * 260f)),
-            SpringSettings = new SpringSettings(MathF.Max(0.1f, frequency), MathF.Max(0.05f, damping))
-        };
-        if(!grab.Active)
-        {
-            grab.Linear=simulation.Solver.Add(cube.Handle,linear);
-            grab.Angular=simulation.Solver.Add(cube.Handle,angular);
-            grab.Active=true;
-        }
-        else
-        {
-            simulation.Solver.ApplyDescription(grab.Linear,linear);
-            simulation.Solver.ApplyDescription(grab.Angular,angular);
-        }
-        simulation.Bodies[cube.Handle].Activity.TimestepsUnderThresholdCount = 0;
+        if(!grabs.TryGetValue(holderId,out Grab? grab) || !grab.PlacementValid) return false;
+        Release(holderId);
+        return true;
     }
 
     internal void Release(int holderId=0)
     {
         if (!grabs.Remove(holderId,out Grab? grab)) return;
-        simulation.Solver.Remove(grab.Linear);
-        simulation.Solver.Remove(grab.Angular);
         RigidCube released = grab.Cube;
         released.HasHoldTarget = false;
+        released.Placed = true;
         released.Drag = released.RestDrag;
+        simulation.Bodies[released.Handle].Velocity = new BodyVelocity();
     }
 
     internal bool CollidesPlayer(float x, float z, float radius)
@@ -457,6 +439,87 @@ internal sealed class PhysicsBodies : IDisposable
         return false;
     }
 
+    static float Grid(float value,float step) => MathF.Round(value/step)*step;
+
+    static Vector3 HitNormal(Vector3 point,Vector3 center,Vector3 extents)
+    {
+        Vector3 local=point-center;
+        float dx=MathF.Abs(MathF.Abs(local.X)-extents.X);
+        float dy=MathF.Abs(MathF.Abs(local.Y)-extents.Y);
+        float dz=MathF.Abs(MathF.Abs(local.Z)-extents.Z);
+        if(dx<=dy && dx<=dz) return new Vector3(MathF.CopySign(1f,local.X),0,0);
+        if(dy<=dz) return new Vector3(0,MathF.CopySign(1f,local.Y),0);
+        return new Vector3(0,0,MathF.CopySign(1f,local.Z));
+    }
+
+    bool FindPlacement(Grab grab,GrabInput input,IReadOnlyList<RectangleF> walls,
+        IReadOnlyList<Vector3>? playerPositions,Vector3 fallbackPlayer,out Vector3 center,out Quaternion rotation)
+    {
+        RigidCube cube=grab.Cube;
+        // Keep the pickup orientation relative to the camera, with deliberate
+        // 15 degree rotation steps for predictable construction.
+        float angleStep=Math.Clamp(input.AngleStep,5f,90f)*MathF.PI/180f;
+        float yaw=MathF.Round(input.RotateYaw/angleStep)*angleStep;
+        float pitch=MathF.Round(input.RotatePitch/angleStep)*angleStep;
+        rotation=Quaternion.Normalize(input.Rotation*Quaternion.CreateFromYawPitchRoll(yaw,pitch,0f)*cube.CarryRotationOffset);
+        Vector3 extents=RotatedExtents(cube.HalfSize,rotation);
+        float distance=Math.Clamp(input.HoldDistance+grab.DistanceOffset,0.6f,6f);
+        Vector3 aim=input.Eye+input.Forward*distance;
+        Vector3 freeCenter=aim-Vector3.Transform(grab.LocalPoint,rotation);
+        float grid=Math.Clamp(input.GridStep,.1f,1f);
+        center=new Vector3(Grid(freeCenter.X,grid),Grid(freeCenter.Y,grid),Grid(freeCenter.Z,grid));
+        float nearest=distance+0.6f;
+        Vector3 normal=Vector3.Zero;
+        Vector3 surface=default;
+        void Consider(Vector3 boxCenter,Vector3 boxExtents)
+        {
+            float t=RayBox(input.Eye,input.Forward,boxCenter,boxExtents);
+            if(t<0.05f || t>=nearest) return;
+            nearest=t;
+            surface=input.Eye+input.Forward*t;
+            normal=HitNormal(surface,boxCenter,boxExtents);
+        }
+        if(input.SurfaceSnap)
+        {
+            foreach(RectangleF wall in walls)
+                Consider(new Vector3((wall.Left+wall.Right)*.5f,Ceiling*.5f,(wall.Top+wall.Bottom)*.5f),
+                    new Vector3(wall.Width*.5f,Ceiling*.5f,wall.Height*.5f));
+            foreach(RigidCube other in Bodies)
+                if(other!=cube) Consider(other.Position,Extents(other));
+            if(input.Forward.Y<-.0001f)
+            {
+                float t=-input.Eye.Y/input.Forward.Y;
+                if(t>0.05f && t<nearest) { nearest=t;surface=input.Eye+input.Forward*t;normal=Vector3.UnitY; }
+            }
+            if(input.Forward.Y>.0001f)
+            {
+                float t=(Ceiling-input.Eye.Y)/input.Forward.Y;
+                if(t>0.05f && t<nearest) { nearest=t;surface=input.Eye+input.Forward*t;normal=-Vector3.UnitY; }
+            }
+        }
+        if(normal!=Vector3.Zero)
+        {
+            Vector3 snapped=new(Grid(surface.X,grid),Grid(surface.Y,grid),Grid(surface.Z,grid));
+            center=snapped+new Vector3(normal.X*extents.X,normal.Y*extents.Y,normal.Z*extents.Z)+normal*.005f;
+            if(normal.X!=0f) center.X=surface.X+normal.X*(extents.X+.005f);
+            if(normal.Y!=0f) center.Y=surface.Y+normal.Y*(extents.Y+.005f);
+            if(normal.Z!=0f) center.Z=surface.Z+normal.Z*(extents.Z+.005f);
+        }
+        if(center.X-extents.X<RoomMin || center.X+extents.X>RoomMax ||
+           center.Z-extents.Z<RoomMin || center.Z+extents.Z>RoomMax ||
+           center.Y-extents.Y<0f || center.Y+extents.Y>Ceiling) return false;
+        foreach(RectangleF wall in walls)
+            if(center.X+extents.X>wall.Left+.001f && center.X-extents.X<wall.Right-.001f &&
+               center.Z+extents.Z>wall.Top+.001f && center.Z-extents.Z<wall.Bottom-.001f) return false;
+        foreach(RigidCube other in Bodies)
+            if(other!=cube && Overlap(center,extents,other.Position,Extents(other)-new Vector3(.004f))) return false;
+        foreach(Vector3 player in playerPositions??[fallbackPlayer])
+            if(center.Y-extents.Y<2.1f && center.Y+extents.Y>0f &&
+               MathF.Abs(center.X-player.X)<extents.X+.38f &&
+               MathF.Abs(center.Z-player.Z)<extents.Z+.38f) return false;
+        return true;
+    }
+
     internal void Update(float dt, Vector3 eye, Vector3 forward, Quaternion cameraRotation, IReadOnlyList<RectangleF> walls, Vector3 player,
         Func<int,GrabInput?>? onlineInput=null,IReadOnlyList<Vector3>? playerPositions=null)
     {
@@ -468,39 +531,23 @@ internal sealed class PhysicsBodies : IDisposable
             {
                 Grab grab=pair.Value;
                 GrabInput? input=onlineInput==null
-                    ? new GrabInput(eye,forward,cameraRotation,HoldDistance,Frequency,Damping,TargetSmoothing,RotateYaw,RotatePitch)
+                    ? new GrabInput(eye,forward,cameraRotation,HoldDistance,Frequency,Damping,TargetSmoothing,RotateYaw,RotatePitch,
+                        PlacementGrid,PlacementAngle,SurfaceSnap)
                     : onlineInput(pair.Key);
                 if(input==null) { Release(pair.Key); continue; }
                 GrabInput current=input.Value;
                 RigidCube cube=grab.Cube;
                 grab.LastHoldDistance=current.HoldDistance;
-                Quaternion handRotation=Quaternion.CreateFromYawPitchRoll(current.RotateYaw,current.RotatePitch,0f);
-                Quaternion desiredOrientation=Quaternion.Normalize(current.Rotation*handRotation*cube.CarryRotationOffset);
-                Vector3 desiredTarget=current.Eye+current.Forward*MathF.Max(0f,current.HoldDistance+grab.DistanceOffset);
-                Vector3 worldGrabOffset=Vector3.Transform(grab.LocalPoint,desiredOrientation);
-                float halfHeight=RotatedExtents(cube.HalfSize,desiredOrientation).Y;
-                float centerY=Math.Clamp(desiredTarget.Y-worldGrabOffset.Y,halfHeight+0.005f,Ceiling-halfHeight-0.005f);
-                desiredTarget.Y=centerY+worldGrabOffset.Y;
-                Vector3 center=desiredTarget-worldGrabOffset;
-                Vector3 extents=RotatedExtents(cube.HalfSize,desiredOrientation);
-                foreach(Vector3 playerPosition in playerPositions??[player])
-                {
-                    if(center.Y-extents.Y>2.15f) continue;
-                    Vector2 away=new(center.X-playerPosition.X,center.Z-playerPosition.Z);
-                    float clearance=MathF.Max(extents.X,extents.Z)+0.42f;
-                    if(away.LengthSquared()>=clearance*clearance) continue;
-                    Vector2 normal=away.LengthSquared()>0.0001f?Vector2.Normalize(away):
-                        Vector2.Normalize(new Vector2(current.Forward.X,current.Forward.Z)+new Vector2(0.001f));
-                    center.X=playerPosition.X+normal.X*clearance;
-                    center.Z=playerPosition.Z+normal.Y*clearance;
-                }
-                desiredTarget=center+worldGrabOffset;
-                Vector3 previous=cube.HoldTarget;
-                float blend=1f-MathF.Exp(-MathF.Max(current.Smoothing,0.1f)*Step);
-                cube.HoldTarget=Vector3.Lerp(cube.HoldTarget,desiredTarget,blend);
-                cube.HoldTargetVelocity=(cube.HoldTarget-previous)/Step;
-                grab.TargetOrientation=Quaternion.Normalize(Quaternion.Slerp(grab.TargetOrientation,desiredOrientation,blend));
-                AddGrabConstraints(grab,cube.HoldTarget,current.Frequency,current.Damping);
+                grab.PlacementValid=FindPlacement(grab,current,walls,playerPositions,player,
+                    out Vector3 center,out Quaternion orientation);
+                if(!grab.PlacementValid) continue;
+                BodyReference reference=simulation.Bodies[cube.Handle];
+                reference.Pose=new RigidPose(center,orientation);
+                reference.Velocity=new BodyVelocity();
+                reference.UpdateBounds();
+                cube.Position=center;cube.Rotation=orientation;
+                cube.HoldTarget=center+Vector3.Transform(grab.LocalPoint,orientation);
+                cube.HoldTargetVelocity=Vector3.Zero;
             }
             Vector3[] before=Bodies.Select(body=>simulation.Bodies[body.Handle].Velocity.Linear).ToArray();
             simulation.Timestep(Step, null);
@@ -508,7 +555,7 @@ internal sealed class PhysicsBodies : IDisposable
             {
                 RigidCube body=Bodies[i];
                 body.ImpactCooldown=MathF.Max(0f,body.ImpactCooldown-Step);
-                if(body.HasHoldTarget || body.ImpactCooldown>0f || before[i].LengthSquared()<0.8f) continue;
+                if(body.HasHoldTarget || body.Placed || body.ImpactCooldown>0f || before[i].LengthSquared()<0.8f) continue;
                 BodyReference reference=simulation.Bodies[body.Handle];
                 Vector3 contactChange=reference.Velocity.Linear-before[i]-new Vector3(0f,-9.81f*Step,0f);
                 float impulse=contactChange.Length();
@@ -528,7 +575,7 @@ internal sealed class PhysicsBodies : IDisposable
     {
         foreach (RigidCube body in Bodies)
         {
-            if (body.HasHoldTarget) continue;
+            if (body.HasHoldTarget || body.Placed) continue;
             BodyReference reference = simulation.Bodies[body.Handle];
             Vector3 position = reference.Pose.Position;
             Vector3 extents = Extents(body);

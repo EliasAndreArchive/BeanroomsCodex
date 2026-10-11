@@ -29,9 +29,11 @@ devices are physical and can be grabbed like cubes. In sandbox sessions, use
 **E** on a button or lever, **G** to toggle the wire tool and click a source
 then target, or **K** to toggle the weld tool and click two nearby grabbable
 objects. The sandbox browser uses **C** to cycle cube color and **X** to clear
-cubes. Hold the left mouse button to carry an object, use the wheel to move
+cubes. Left click to pick up or place an object, use the wheel to move
 it closer or farther, and hold the right mouse button while moving the mouse
-to rotate its target. Fixed path tracing is the default renderer. Realtime GI
+to rotate it in set increments. Placed objects remain fixed and can be picked
+up again. Grid size, rotation step, and surface snapping are in the Object tab.
+An orange outline marks a blocked placement. Fixed path tracing is the default renderer. Realtime GI
 is available in the settings menu when a faster dynamic diffuse radiance cache
 is useful. Post FX includes optional current-frame spatial denoising for path
 tracing. A random roomwide flicker can leave the lights blacked out until the
