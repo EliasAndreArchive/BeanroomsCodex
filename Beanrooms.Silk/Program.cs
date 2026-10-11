@@ -189,7 +189,7 @@ internal sealed class GameWindow : SilkForm
             {
                 PlayerState[] players=network.Snapshot().Players.OrderBy(player=>player.Id).ToArray();
                 int target=index<=0?0:index-1<players.Length?players[index-1].Id:0;
-                network.Send(new NetMessage { Type="chicken_target",Action=target });
+                network.Send(new NetMessage { Type="chicken_trigger",Action=target });
             }
         };
         ClientSize = new Size(960, 720);

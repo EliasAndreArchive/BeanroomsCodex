@@ -28,7 +28,8 @@ menu.SetPage(9);menu.ChickenControlVisible=false;menu.Selected=7;int chickenTarg
 menu.ChickenTargetAction= _=>chickenTargetChanges++;
 menu.AdjustSelected(1);
 if(chickenTargetChanges!=0) throw new Exception("Guest-only session menu exposed chicken targeting");
-menu.ChickenControlVisible=true;menu.Selected=8;menu.AdjustSelected(1);
+menu.SetChickenTargets([new PlayerState { Id=1,Name="HOST" }]);
+menu.ChickenControlVisible=true;menu.Selected=9;menu.AdjustSelected(1);
 if(chickenTargetChanges!=1) throw new Exception("Host session menu did not expose chicken targeting");
 menu.SetPage(4);menu.Selected=6;menu.AdjustSelected(1);
 if(!menu.SnapHold) throw new Exception("Physics menu did not toggle grid snap");
@@ -61,6 +62,11 @@ using(var photonAuthority=new PhotonAuthority([4,9]))
     var guestAttempt=photonAuthority.DrainOutgoing().Last(entry=>entry.Target==0&&entry.Message.Type=="snapshot").Message;
     if(!guestAttempt.SandboxEnabled)
         throw new Exception("Photon authority accepted a guest sandbox toggle");
+    photonAuthority.Receive(4,new NetMessage { Type="chicken_trigger",Action=9 });
+    photonAuthority.Update(.06f);
+    var chicken=photonAuthority.DrainOutgoing().Last(entry=>entry.Target==0&&entry.Message.Type=="snapshot").Message.Chicken;
+    if(chicken is not { Active:true } || chicken.X==0f)
+        throw new Exception("Photon authority did not trigger a targeted chicken event");
 }
 {
     var source=new NetMessage { Type="snapshot",Chicken=new ChickenState

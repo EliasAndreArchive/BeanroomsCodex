@@ -230,7 +230,7 @@ internal sealed class DebugMenu
         new[] { "PLAYER NAME", "BEAN COLOR", "RED", "GREEN", "BLUE", "PHOTON REGION", "JOIN KEY", "CONNECT", "DISCONNECT", "CONNECTION", "PLAYER ID", "PLAYERS", "ROLE" },
         new[] { "POST FX", "TONEMAP", "EXPOSURE", "AUTO EXPOSURE", "BRIGHTEN SPEED", "DARKEN SPEED", "BLOOM", "BLOOM STRENGTH", "BLOOM THRESHOLD", "BLOOM RADIUS" },
         new[] { "MINOR FLICKER", "MINOR INTERVAL", "MINOR CHANCE", "MINOR DURATION", "RANDOM EVENTS", "EVENT INTERVAL", "EVENT LENGTH", "EVENT SPEED MIN", "EVENT SPEED MAX", "EVENT OFF CHANCE", "CHASE FLICKER", "CHASE FOG", "CHASE FOG MAX", "FOG RISE", "FOG FALL", "CHASE RED", "CHASE RED CHANCE", "BLACKOUT CHANCE" },
-        new[] { "RESUME", "LEAVE MULTIPLAYER", "MAIN MENU", "QUIT GAME", "CONNECTION", "PLAYERS", "ROLE", "SANDBOX MODE", "CHICKEN TARGET" }
+        new[] { "RESUME", "LEAVE MULTIPLAYER", "MAIN MENU", "QUIT GAME", "CONNECTION", "PLAYERS", "ROLE", "SANDBOX MODE", "CHICKEN TARGET", "PLAYER 1", "PLAYER 2", "PLAYER 3", "PLAYER 4" }
     };
 
     internal void Toggle()
@@ -374,7 +374,7 @@ internal sealed class DebugMenu
             if(next!=TitleSelected) InteractionSound?.Invoke();
             TitleSelected=next;Dirty=true;return;
         }
-        int max=Page==9&&!ChickenControlVisible?7:Labels[Page].Length-1;
+        int max=Page==9&&!ChickenControlVisible?7:Page==9?Math.Min(8+ChickenTargetOptions.Length,Labels[Page].Length-1):Labels[Page].Length-1;
         int selected=Math.Clamp(Selected + step, 0, max);
         if(selected!=Selected) InteractionSound?.Invoke(); Selected=selected; Dirty=true;
     }
@@ -687,9 +687,9 @@ internal sealed class DebugMenu
             // The server validates the sender. Do not use a stale client-side host
             // flag to prevent a host from issuing the request.
             if(row==7 && (!NetworkConnected || SandboxSupported)) SandboxToggle?.Invoke();
-            else if(row==8 && ChickenControlVisible)
+            else if(row>=9 && ChickenControlVisible && row-8<ChickenTargetOptions.Length)
             {
-                ChickenTargetIndex=(ChickenTargetIndex+direction+ChickenTargetOptions.Length)%ChickenTargetOptions.Length;
+                ChickenTargetIndex=row-8;
                 ChickenTargetAction?.Invoke(ChickenTargetIndex);
             }
             else if(row<4) SessionAction?.Invoke(row);
@@ -766,7 +766,8 @@ internal sealed class DebugMenu
             5 => NetworkConnected ? NetworkPlayers.ToString() : "1",
             6 => NetworkConnected ? (NetworkId==NetworkHost ? "HOST" : "GUEST") : "SOLO",
             7 => NetworkConnected&&!SandboxSupported ? "SERVER UPDATE REQUIRED" : SandboxEnabled ? "ON" : "OFF",
-            8 => ChickenControlVisible ? ChickenTargetOptions[Math.Clamp(ChickenTargetIndex,0,ChickenTargetOptions.Length-1)] : "",
+            8 => ChickenControlVisible ? "SELECT A PLAYER BELOW" : "",
+            9 or 10 or 11 or 12 => ChickenControlVisible && row-8<ChickenTargetOptions.Length ? ChickenTargetOptions[row-8] : "",
             _ => ""
         };
         if(Page == 8) return row switch
@@ -1164,7 +1165,7 @@ internal sealed class DebugMenu
                 int y = 54 + row * RowPitch;
                 int textOffset = Page is 1 or 8 ? 1 : 3;
                 bool focused=row==Selected;
-                if(Page==9&&row==8&&!ChickenControlVisible) continue;
+                if(Page==9&&row>=8&&(!ChickenControlVisible || row-8>=ChickenTargetOptions.Length)) continue;
                 bool locked=Page==5&&!MonsterControlsWritable ||
                     Page==8&&!FlickerControlsWritable ||
                     Page==2&&!MovementControlsWritable ||

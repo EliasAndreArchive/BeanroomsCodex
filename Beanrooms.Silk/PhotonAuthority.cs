@@ -185,6 +185,13 @@ internal sealed class PhotonAuthority : IDisposable
                 case "chicken_target":
                     if(IsHost(peer.Id)) chickenTargetId=message.Action>0&&peers.ContainsKey(message.Action)?message.Action:0;
                     break;
+                case "chicken_trigger":
+                    if(IsHost(peer.Id))
+                    {
+                        chickenTargetId=message.Action>0&&peers.ContainsKey(message.Action)?message.Action:0;
+                        if(!chicken.Active) { chickenClock=chickenNext; }
+                    }
+                    break;
                 case "device_spawn":
                     if(sandboxEnabled&&Enum.IsDefined((SandboxKind)message.Action))
                     { SandboxDevice? d=sandbox.Spawn((SandboxKind)message.Action,new Vector3(peer.X,peer.Y,peer.Z),Look(peer.Yaw,peer.Pitch),peer.Yaw,walls);
