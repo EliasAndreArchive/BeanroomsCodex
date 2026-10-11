@@ -192,7 +192,7 @@ internal sealed class GameWindow : SilkForm
             Location=new Point(left+(localSide=="--local-right"?656:0),top);
         }
         KeyDown += (_, e) => {
-            if(e.KeyCode==Keys.B)
+            if(!menu.Open && e.KeyCode==Keys.B)
             {
                 if(!sandboxToggleKeyDown) { sandboxToggleKeyDown=true;ToggleSandboxMenu(); }
                 e.Handled=true;

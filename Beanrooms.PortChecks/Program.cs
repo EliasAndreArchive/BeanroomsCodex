@@ -270,6 +270,19 @@ using(var game=new GameWindow())
     spawn.Invoke(game,[SandboxKind.Lamp]);
     if(localSandbox.Devices.Count!=1 || localPhysics.Bodies.All(body=>body.SandboxDeviceId==0))
         throw new Exception("Solo sandbox spawn did not create a device body");
+    // Typing "b" into a connection field must not open the sandbox browser.
+    var keyDownField=typeof(SilkForm).GetField("KeyDown",
+        System.Reflection.BindingFlags.Instance|System.Reflection.BindingFlags.NonPublic)!;
+    var keyDown=(EventHandler<KeyEventArgs>)keyDownField.GetValue(game)!;
+    gameMenu.Open=true;gameMenu.EditingJoinKey=true;
+    keyDown(game,new KeyEventArgs(Keys.B,false));
+    if(gameMenu.Open && gameMenu.SandboxPage)
+        throw new Exception("Typing B in a connection field opened the sandbox page");
+    gameMenu.FinishEditing();gameMenu.Open=false;
+    // ... but pressing B during gameplay still opens it (solo needs no lobby).
+    keyDown(game,new KeyEventArgs(Keys.B,false));
+    if(!gameMenu.SandboxPage)
+        throw new Exception("B did not open the sandbox browser in solo gameplay");
 }
 if(!Beanrooms.Program.TryOnlineEndpoint("https://beanrooms-game.onrender.com","test-key",out string endpoint)
     || endpoint!="wss://beanrooms-game.onrender.com/ws?key=test-key")
