@@ -260,8 +260,8 @@ using(var physics=new PhysicsBodies())
 using(var audio=new AudioSystem())
 using(var physical=new PhysicalSounds(audio))
 {
-    // A cube dragged along the floor while held must stay silent: no scrape loop,
-    // no landing click, and no click even if a stale impact packet names its id.
+    // A held cube carried through open air must stay silent: no scrape loop, no
+    // landing click, and no click even if a stale impact packet names its id.
     var eye=new System.Numerics.Vector3(10f,1.68f,10f);
     var forward=System.Numerics.Vector3.UnitZ;
     if(!physics.Spawn(eye,forward,false,[],eye))
@@ -284,11 +284,11 @@ using(var physical=new PhysicalSounds(audio))
             1f/120f);
     }
     if(physical.ImpactPlayCount!=hits)
-        throw new Exception("A carried cube still played a hit sound");
+        throw new Exception("A held cube in open air still played a hit sound");
     if(scrapes.Any(scrape=>scrape.TargetVolume>0.001))
-        throw new Exception("A carried cube still played a scrape loop");
+        throw new Exception("A held cube in open air still played a scrape loop");
     // A held cube must also ignore a stale impact packet that names it, and never
-    // scrape even with a high server-measured slip speed.
+    // scrape even with a high server-measured slip speed while it touches nothing.
     int staleHits=physical.ImpactPlayCount;
     physical.Update(eye,0f,new FootstepSource(0,eye,0f,0f,0f),[],
         [new CubeSoundSource(999,new System.Numerics.Vector3(10f,0.5f,10f),
@@ -298,7 +298,39 @@ using(var physical=new PhysicalSounds(audio))
     if(physical.ImpactPlayCount!=staleHits)
         throw new Exception("A held cube played a stale impact packet");
     if(scrapes.Any(scrape=>scrape.TargetVolume>0.001))
-        throw new Exception("A held cube scraped with a high slip speed");
+        throw new Exception("A held cube scraped without touching a surface");
+    // But a held cube that is actually banged or dragged along a surface must sound,
+    // for both the local simulation and the server-driven online path.
+    var ear=new System.Numerics.Vector3(10f,1.7f,10f);
+    int surfaceHits=physical.ImpactPlayCount;
+    // Frame 1: still in the air, moving fast, resting on nothing.
+    physical.Update(ear,0f,new FootstepSource(0,ear,0f,0f,0f),[],
+        [new CubeSoundSource(700,new System.Numerics.Vector3(10f,1.4f,10f),
+            new System.Numerics.Vector3(4f,0f,0f),0.4f,false,true,
+            System.Numerics.Quaternion.Identity,System.Numerics.Vector3.Zero,0f)],[],1f/60f);
+    if(physical.ImpactPlayCount!=surfaceHits)
+        throw new Exception("A held cube in the air played a hit sound before touching");
+    // Frame 2: banged down onto the floor, so a corner newly lands hard.
+    physical.Update(ear,0f,new FootstepSource(0,ear,0f,0f,0f),[],
+        [new CubeSoundSource(700,new System.Numerics.Vector3(10f,0.4f,10f),
+            new System.Numerics.Vector3(2f,-3f,0f),0.4f,true,true,
+            System.Numerics.Quaternion.Identity,System.Numerics.Vector3.Zero,0f)],[],1f/60f);
+    if(physical.ImpactPlayCount==surfaceHits)
+        throw new Exception("A held cube banged against the floor did not play a hit sound");
+    // Frame 3: dragged sideways while still touching the floor, so it must scrape.
+    physical.Update(ear,0f,new FootstepSource(0,ear,0f,0f,0f),[],
+        [new CubeSoundSource(700,new System.Numerics.Vector3(10.06f,0.4f,10f),
+            new System.Numerics.Vector3(3f,0f,0f),0.4f,true,true,
+            System.Numerics.Quaternion.Identity,System.Numerics.Vector3.Zero,0f)],[],1f/60f);
+    if(!scrapes.Any(scrape=>scrape.TargetVolume>0.001))
+        throw new Exception("A held cube dragged along the floor did not scrape");
+    // Lifting it back into the air again must silence the scrape.
+    physical.Update(ear,0f,new FootstepSource(0,ear,0f,0f,0f),[],
+        [new CubeSoundSource(700,new System.Numerics.Vector3(10f,1.4f,10f),
+            new System.Numerics.Vector3(3f,1f,0f),0.4f,false,true,
+            System.Numerics.Quaternion.Identity,System.Numerics.Vector3.Zero,0f)],[],1f/60f);
+    if(scrapes.Any(scrape=>scrape.TargetVolume>0.001))
+        throw new Exception("A held cube kept scraping after it left the floor");
 }
 using(var game=new GameWindow())
 {

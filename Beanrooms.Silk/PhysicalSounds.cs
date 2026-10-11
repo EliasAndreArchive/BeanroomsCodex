@@ -25,11 +25,13 @@ internal sealed class PhysicalSounds : IDisposable
     {
         internal bool Touching;
         internal float Impact;
+        internal float Slip;
     }
 
     readonly AudioClip[] stepClips,impactClips;
     readonly AudioVoice[][] stepVoices,impactVoices;
     readonly LoopingSound[] scrapes;
+    readonly Dictionary<int,float> vertexSlip=new();
     readonly Dictionary<int,float> stepTravel=new();
     readonly Dictionary<int,float> nextStride=new();
     readonly Dictionary<int,int> lastStepClip=new();
@@ -121,10 +123,13 @@ internal sealed class PhysicalSounds : IDisposable
 
         UpdateVertexHits(cubes,listener,right,walls??[],dt,FilterFor,GroupFor);
 
-        var sliding=cubes.Where(cube=>!cube.Held && cube.Grounded)
+        // A held cube only scrapes while a corner is actually pressed against a
+        // surface; its floor-contact slip is measured from the touching vertices
+        // so carrying it through the air stays silent.
+        var sliding=cubes.Where(cube=>cube.Held||cube.Grounded)
             .Select(cube=>
             {
-                float speed=cube.SlipSpeed;
+                float speed=cube.Held?vertexSlip.GetValueOrDefault(cube.Id):cube.SlipSpeed;
                 var (gain,pan)=Spatial(listener,cube.Position,right);
                 VercidiumAcoustics.Filter filter=FilterFor(AcousticSourceIds.Cube(cube.Id));
                 return (Gain:Math.Clamp((speed-0.12f)/2.2f,0f,1f)*gain*0.8f*filter.Gain,
@@ -164,13 +169,14 @@ internal sealed class PhysicalSounds : IDisposable
     {
         float step=Math.Clamp(dt,0f,0.05f);
         HashSet<int> seen=[];
+        vertexSlip.Clear();
         foreach(CubeSoundSource cube in cubes)
         {
             seen.Add(cube.Id);
-            if(cube.Held) { vertexStates.Remove(cube.Id); continue; }
             if(!vertexStates.TryGetValue(cube.Id,out VertexState? state)) { state=new VertexState();vertexStates[cube.Id]=state; }
             Quaternion rotation=Normalize(cube.Rotation);
             float half=cube.HalfSize;
+            float slip=0f;
             for(int index=0;index<8;index++)
             {
                 state.Cooldown[index]=MathF.Max(0f,state.Cooldown[index]-step);
@@ -179,15 +185,20 @@ internal sealed class PhysicalSounds : IDisposable
                 Vector3 vertex=cube.Position+radius;
                 Vector3 velocity=cube.Velocity+Vector3.Cross(cube.AngularVelocity,radius);
                 Contact contact=VertexContact(cube,vertex,velocity,walls,cubes);
-                if(contact.Touching && !state.Touching[index] && state.Cooldown[index]<=0f &&
-                   contact.Impact>=VertexImpactSpeed && !impactCooldown.ContainsKey(cube.Id) &&
-                   PlayImpact(cube.Id,vertex,Math.Clamp(contact.Impact/6f,0.15f,1f),listener,right,filterFor,groupFor))
+                if(contact.Touching)
                 {
-                    state.Cooldown[index]=VertexCooldown;
-                    VertexHitCount++;
+                    slip=MathF.Max(slip,contact.Slip);
+                    if(!state.Touching[index] && state.Cooldown[index]<=0f &&
+                       contact.Impact>=VertexImpactSpeed && !impactCooldown.ContainsKey(cube.Id) &&
+                       PlayImpact(cube.Id,vertex,Math.Clamp(contact.Impact/6f,0.15f,1f),listener,right,filterFor,groupFor))
+                    {
+                        state.Cooldown[index]=VertexCooldown;
+                        VertexHitCount++;
+                    }
                 }
                 state.Touching[index]=contact.Touching;
             }
+            if(slip>0f) vertexSlip[cube.Id]=slip;
         }
         foreach(int id in vertexStates.Keys.Where(id=>!seen.Contains(id)).ToArray()) vertexStates.Remove(id);
     }
@@ -200,6 +211,7 @@ internal sealed class PhysicalSounds : IDisposable
         {
             result.Touching=true;
             result.Impact=MathF.Max(result.Impact,MathF.Max(0f,-velocity.Y));
+            result.Slip=MathF.Max(result.Slip,MathF.Sqrt(velocity.X*velocity.X+velocity.Z*velocity.Z));
         }
         for(int i=0;i<walls.Count;i++)
         {
@@ -210,6 +222,7 @@ internal sealed class PhysicalSounds : IDisposable
             Vector3 normal=WallNormal(vertex,wall);
             result.Touching=true;
             result.Impact=MathF.Max(result.Impact,MathF.Max(0f,-Vector3.Dot(velocity,normal)));
+            result.Slip=MathF.Max(result.Slip,(velocity-normal*Vector3.Dot(velocity,normal)).Length());
         }
         for(int i=0;i<cubes.Count;i++)
         {
@@ -221,6 +234,7 @@ internal sealed class PhysicalSounds : IDisposable
             Vector3 relative=velocity-other.Velocity;
             result.Touching=true;
             result.Impact=MathF.Max(result.Impact,MathF.Max(0f,-Vector3.Dot(relative,normal)));
+            result.Slip=MathF.Max(result.Slip,(relative-normal*Vector3.Dot(relative,normal)).Length());
         }
         return result;
     }
