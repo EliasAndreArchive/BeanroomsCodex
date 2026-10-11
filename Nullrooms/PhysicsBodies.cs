@@ -553,13 +553,14 @@ internal sealed class PhysicsBodies : IDisposable
         released.Drag = released.RestDrag;
     }
 
-    internal bool CollidesPlayer(float x, float z, float radius)
+    internal bool CollidesPlayer(float x, float z, float radius,float footHeight=0f)
     {
         foreach (RigidCube body in Bodies)
         {
             if (body.HasHoldTarget) continue;
             Vector3 e = Extents(body);
-            if (body.Position.Y - e.Y > 1.9f) continue;
+            if (body.Position.Y+e.Y<=footHeight+0.025f ||
+                body.Position.Y-e.Y>=footHeight+2.1f) continue;
             if (MathF.Abs(body.Position.X - x) < e.X + radius && MathF.Abs(body.Position.Z - z) < e.Z + radius) return true;
         }
         return false;

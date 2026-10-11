@@ -8,10 +8,3 @@ All converted WAV files listed here are licensed under Creative Commons Zero (CC
 | `cube_concrete_scrape.wav` | [Scrapes](https://opengameart.org/content/scrapes), original `scrape-3.wav` (recorded across a cinder block) | AntumDeluge |
 
 The files were converted to mono, 44.1 kHz, 16-bit PCM WAV for the game's audio decoder. The source archives each contain their CC0 license text.
-
-## Procedural material sounds
-
-`impact_concrete_*.wav`, `impact_wood_*.wav`, `impact_metal_*.wav`,
-`impact_plastic_*.wav`, and `slide_{concrete,wood,metal,plastic}.wav` were
-created for Beanrooms from synthesized noise and oscillator signals. They are
-original project assets and may be used under this repository's license.

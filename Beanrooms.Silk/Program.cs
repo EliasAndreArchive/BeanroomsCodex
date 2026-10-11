@@ -98,8 +98,8 @@ internal sealed class GameWindow : SilkForm
     int seed = 82317;
     int width = 320, height = 240;
     int frames, worldTexture, fixtureTexture, objectTexture, wallTexture, floorTexture, ceilingTexture, faceTexture, eyeTexture, overlayTexture;
-    int pathProgram, probeProgram, displayProgram, denoiseProgram, exposureProgram, bloomExtractProgram, bloomBlurProgram, framebuffer;
-    int renderTexture, denoiseTexture, sceneTexture, bloomA, bloomB, exposureA, exposureB, exposureCurrent;
+    int pathProgram, probeProgram, displayProgram, exposureProgram, bloomExtractProgram, bloomBlurProgram, framebuffer;
+    int renderTexture, sceneTexture, bloomA, bloomB, exposureA, exposureB, exposureCurrent;
     int probeDirect, probeA, probeB, probeResult, probeSize;
     bool probeDirty = true;
     int lastProbeSettings;
@@ -363,7 +363,6 @@ internal sealed class GameWindow : SilkForm
             pathProgram = Compile("screen.vert", "pathtrace.frag");
             probeProgram = Compile("screen.vert", "probe.frag");
             displayProgram = Compile("screen.vert", "display.frag");
-            denoiseProgram = Compile("screen.vert", "denoise.frag");
             exposureProgram = Compile("screen.vert", "exposure.frag");
             bloomExtractProgram = Compile("screen.vert", "bloom_extract.frag");
             bloomBlurProgram = Compile("screen.vert", "bloom_blur.frag");
@@ -446,11 +445,6 @@ internal sealed class GameWindow : SilkForm
         Gl.TexParameteri(0x0DE1,0x2802,0x812F); Gl.TexParameteri(0x0DE1,0x2803,0x812F);
         Gl.TexImage2D(0x0DE1,0,0x881A,width,height,0,0x1908,0x1406,IntPtr.Zero);
         Gl.GenerateMipmap(0x0DE1);
-        if(denoiseTexture!=0) Gl.DeleteTexture(denoiseTexture);
-        denoiseTexture=Gl.GenTexture();Gl.BindTexture(0x0DE1,denoiseTexture);
-        Gl.TexParameteri(0x0DE1,0x2801,0x2600);Gl.TexParameteri(0x0DE1,0x2800,0x2600);
-        Gl.TexParameteri(0x0DE1,0x2802,0x812F);Gl.TexParameteri(0x0DE1,0x2803,0x812F);
-        Gl.TexImage2D(0x0DE1,0,0x881A,width,height,0,0x1908,0x1406,IntPtr.Zero);
         CreateBloomTargets();
     }
 
@@ -896,7 +890,32 @@ internal sealed class GameWindow : SilkForm
         pitch=Math.Clamp(pitch-dy*menu.MouseSensitivity,-1.35f,1.35f);
     }
 
-    bool Collides(float x,float z)
+    float StepSupport(float x,float z)
+    {
+        float height=0f;
+        if(network.Connected)
+        {
+            foreach(CubeState cube in networkCubes)
+            {
+                if(!cube.Plank || cube.HolderId!=0) continue;
+                Quaternion rotation=new(cube.Qx,cube.Qy,cube.Qz,cube.Qw);
+                if(rotation.LengthSquared()<.001f) rotation=Quaternion.Identity;
+                Vector3 extent=PhysicsBodies.RotatedExtents(CubeLocalExtents(cube),rotation);
+                if(MathF.Abs(x-cube.X)<extent.X+Radius && MathF.Abs(z-cube.Z)<extent.Z+Radius)
+                    height=MathF.Max(height,cube.Y+extent.Y);
+            }
+        }
+        else foreach(RigidCube body in physics.Bodies)
+        {
+            if(!body.Plank || body.HasHoldTarget) continue;
+            Vector3 extent=PhysicsBodies.Extents(body);
+            if(MathF.Abs(x-body.Position.X)<extent.X+Radius && MathF.Abs(z-body.Position.Z)<extent.Z+Radius)
+                height=MathF.Max(height,body.Position.Y+extent.Y);
+        }
+        return height;
+    }
+
+    bool Collides(float x,float z,float footHeight)
     {
         if(x<4+Radius||z<4+Radius||x>Grid*Cell-4-Radius||z>Grid*Cell-4-Radius) return true;
         foreach(var b in boxes) if(x>b.Left-Radius&&x<b.Right+Radius&&z>b.Top-Radius&&z<b.Bottom+Radius) return true;
@@ -907,10 +926,11 @@ internal sealed class GameWindow : SilkForm
                 Quaternion rotation=new(cube.Qx,cube.Qy,cube.Qz,cube.Qw);
                 if(rotation.LengthSquared()<.001f) rotation=Quaternion.Identity;
                 Vector3 extent=PhysicsBodies.RotatedExtents(CubeLocalExtents(cube),rotation);
-                if(MathF.Abs(x-cube.X)<extent.X+Radius && MathF.Abs(z-cube.Z)<extent.Z+Radius && cube.Y-extent.Y<2.2f) return true;
+                if(MathF.Abs(x-cube.X)<extent.X+Radius && MathF.Abs(z-cube.Z)<extent.Z+Radius &&
+                   cube.Y+extent.Y>footHeight+.025f && cube.Y-extent.Y<footHeight+2.1f) return true;
             }
         }
-        else if(physics.CollidesPlayer(x,z,Radius)) return true;
+        else if(physics.CollidesPlayer(x,z,Radius,footHeight)) return true;
         return false;
     }
 
@@ -1221,7 +1241,7 @@ internal sealed class GameWindow : SilkForm
         }
         bool crouching=crouchToggle || keys.Contains(Keys.ControlKey) || keys.Contains(Keys.LControlKey) || keys.Contains(Keys.RControlKey);
         bool sprinting=keys.Contains(Keys.ShiftKey) || keys.Contains(Keys.LShiftKey) || keys.Contains(Keys.RShiftKey);
-        motion.Update(dt,input,sprinting,crouching,mouseYawDelta,yaw,menu,ref camera,Collides,active);
+        motion.Update(dt,input,sprinting,crouching,mouseYawDelta,yaw,menu,ref camera,Collides,StepSupport,active);
         mouseYawDelta=0f;
         if(!lookInitialized) { smoothYaw=yaw; smoothPitch=pitch; lookInitialized=true; }
         float lookBlend=1f-MathF.Exp(-MathF.Max(menu.CameraSmooth,0.1f)*dt);
@@ -1712,21 +1732,6 @@ internal sealed class GameWindow : SilkForm
         Uniform1f(bloomBlurProgram,"radius",menu.BloomRadius);
         Gl.DrawArrays(0x0004,0,3);
     }
-    void RunDenoise()
-    {
-        sceneTexture=renderTexture;
-        if(!menu.Denoise || menu.RenderMode!=2) return;
-        Gl.BindFramebuffer(0x8D40,framebuffer);
-        Gl.FramebufferTexture2D(0x8D40,0x8CE0,0x0DE1,denoiseTexture,0);
-        Gl.Viewport(0,0,width,height);
-        Gl.UseProgram(denoiseProgram);
-        Bind(0,renderTexture);Uniform1(denoiseProgram,"sceneTex",0);
-        Uniform1f(denoiseProgram,"strength",menu.DenoiseStrength);
-        Uniform1(denoiseProgram,"radius",menu.DenoiseRadius);
-        Gl.DrawArrays(0x0004,0,3);
-        Gl.BindFramebuffer(0x8D40,0);
-        sceneTexture=denoiseTexture;
-    }
     void Render()
     {
         if(menu.LightDensity!=appliedLightDensity) RebuildFixtureMap();
@@ -1816,7 +1821,7 @@ internal sealed class GameWindow : SilkForm
         PrepareObjectFrames(viewPosition,rolledRight,rolledUp,forward);
         PrepareSandboxWires(viewPosition,rolledRight,rolledUp,forward);
         Gl.DrawArrays(0x0004,0,3);
-        RunDenoise();
+        sceneTexture=renderTexture;
         RunPostProcessing();
         if(menu.Dirty) UploadOverlay();
         Gl.Viewport(0,0,FramebufferSize.Width,FramebufferSize.Height);

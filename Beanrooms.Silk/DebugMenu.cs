@@ -106,9 +106,6 @@ internal sealed class DebugMenu
     internal int TonemapMode = 2;
     internal float Exposure = 2f, Saturation = 1f, Contrast = 1f;
     internal float BrightenSpeed = 1.25f, DarkenSpeed = 2.2f, BloomStrength = 0.1f, BloomThreshold = 0.85f, BloomRadius = 1.9f;
-    internal bool Denoise;
-    internal float DenoiseStrength=0.55f;
-    internal int DenoiseRadius=1;
     internal float RedMix = 1f, GreenMix = 1f, BlueMix = 1f;
     internal float BounceStrength = 1.75f, AO = 0.9f, LightIntensity = 1f, LightDensity = 0.65f, FogDensity = 0.008f;
     internal int FogSteps = 8;
@@ -215,7 +212,7 @@ internal sealed class DebugMenu
         new[] { "PICKUP RANGE", "HOLD DIST", "SPRING FREQ", "SPRING DAMP", "HOLD SMOOTH", "SLIDE RESIST", "GRID SNAP", "SNAP STEP", "CUBE COUNT", "DEBUG UI", "OBJECT FRAMES" },
         new[] { "MONSTER", "ROAM SPEED", "SEARCH SPEED", "CHASE SPEED", "CHASE TURN", "SEARCH TURN", "ROAM TURN", "SIGHT RANGE", "SIGHT ANGLE", "SEARCH RADIUS", "ROAM RADIUS" },
         new[] { "PLAYER NAME", "BEAN COLOR", "RED", "GREEN", "BLUE", "PHOTON REGION", "JOIN KEY", "CONNECT", "DISCONNECT", "CONNECTION", "PLAYER ID", "PLAYERS", "ROLE" },
-        new[] { "POST FX", "TONEMAP", "EXPOSURE", "AUTO EXPOSURE", "BRIGHTEN SPEED", "DARKEN SPEED", "BLOOM", "BLOOM STRENGTH", "BLOOM THRESHOLD", "BLOOM RADIUS", "SPATIAL DENOISE", "DENOISE STRENGTH", "DENOISE RADIUS" },
+        new[] { "POST FX", "TONEMAP", "EXPOSURE", "AUTO EXPOSURE", "BRIGHTEN SPEED", "DARKEN SPEED", "BLOOM", "BLOOM STRENGTH", "BLOOM THRESHOLD", "BLOOM RADIUS" },
         new[] { "MINOR FLICKER", "MINOR INTERVAL", "MINOR CHANCE", "MINOR DURATION", "RANDOM EVENTS", "EVENT INTERVAL", "EVENT LENGTH", "EVENT SPEED MIN", "EVENT SPEED MAX", "EVENT OFF CHANCE", "CHASE FLICKER", "CHASE FOG", "CHASE FOG MAX", "FOG RISE", "FOG FALL", "CHASE RED", "CHASE RED CHANCE", "BLACKOUT CHANCE" },
         new[] { "RESUME", "LEAVE MULTIPLAYER", "MAIN MENU", "QUIT GAME", "CONNECTION", "PLAYERS", "ROLE", "SANDBOX MODE" }
     };
@@ -274,7 +271,6 @@ internal sealed class DebugMenu
         BrightenSpeed=defaults.BrightenSpeed; DarkenSpeed=defaults.DarkenSpeed;
         Bloom=defaults.Bloom; BloomStrength=defaults.BloomStrength;
         BloomThreshold=defaults.BloomThreshold; BloomRadius=defaults.BloomRadius;
-        Denoise=defaults.Denoise;DenoiseStrength=defaults.DenoiseStrength;DenoiseRadius=defaults.DenoiseRadius;
         RenderMode=defaults.RenderMode; ProbeQuality=defaults.ProbeQuality;
         ProbeBounces=defaults.ProbeBounces; HybridDirectSamples=defaults.HybridDirectSamples;
         Samples=defaults.Samples; Bounces=defaults.Bounces;
@@ -523,7 +519,7 @@ internal sealed class DebugMenu
         4 => row is 0 or 1 or 2 or 3 or 4 or 5,
         5 => row > 0,
         6 => row is 2 or 3 or 4,
-        7 => row is 2 or 4 or 5 or 7 or 8 or 9 or 11 or 12,
+        7 => row is 2 or 4 or 5 or 7 or 8 or 9,
         8 => row is 1 or 2 or 3 or 5 or 6 or 7 or 8 or 9 or 12 or 13 or 14 or 16 or 17,
         9 => false,
         _ => true
@@ -691,9 +687,6 @@ internal sealed class DebugMenu
                 case 7: BloomStrength=Math.Clamp(BloomStrength+direction*0.01f,0f,2f);break;
                 case 8: BloomThreshold=Math.Clamp(BloomThreshold+direction*0.01f,0.25f,4f);break;
                 case 9: BloomRadius=Math.Clamp(BloomRadius+direction*0.01f,0.5f,4f);break;
-                case 10: Denoise=!Denoise;break;
-                case 11: DenoiseStrength=Math.Clamp(DenoiseStrength+direction*0.01f,0f,1f);break;
-                case 12: DenoiseRadius=Math.Clamp(DenoiseRadius+direction,1,2);break;
             }
         }
         else if(Page == 8)
@@ -782,9 +775,7 @@ internal sealed class DebugMenu
             2 => $"{Exposure:0.00}",3 => AutoExposure?"ON":"OFF",
             4 => $"{BrightenSpeed:0.00}",5 => $"{DarkenSpeed:0.00}",
             6 => Bloom?"ON":"OFF",7 => $"{BloomStrength:0.00}",
-            8 => $"{BloomThreshold:0.00}",9 => $"{BloomRadius:0.00}",
-            10 => Denoise?"ON":"OFF",11 => $"{DenoiseStrength:0.00}",
-            12 => DenoiseRadius.ToString(),_ => ""
+            8 => $"{BloomThreshold:0.00}",9 => $"{BloomRadius:0.00}",_ => ""
         };
         if(Page == 6) return row switch
         {
@@ -910,8 +901,7 @@ internal sealed class DebugMenu
             2 => (Exposure-0.25f)/2.75f,
             4 => (BrightenSpeed-0.1f)/7.9f,5 => (DarkenSpeed-0.1f)/7.9f,
             7 => BloomStrength/2f,8 => (BloomThreshold-0.25f)/3.75f,
-            9 => (BloomRadius-0.5f)/3.5f,11 => DenoiseStrength,
-            12 => DenoiseRadius-1f,_ => 0f
+            9 => (BloomRadius-0.5f)/3.5f,_ => 0f
         };
         if(Page == 6) return row switch
         { 2 => (PlayerRed-0.05f)/0.95f,3 => (PlayerGreen-0.05f)/0.95f,4 => (PlayerBlue-0.05f)/0.95f,_ => 0f };

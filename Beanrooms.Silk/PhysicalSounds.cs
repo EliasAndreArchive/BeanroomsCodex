@@ -32,10 +32,6 @@ internal sealed class PhysicalSounds : IDisposable
     readonly AudioClip[] stepClips,impactClips;
     readonly AudioVoice[][] stepVoices,impactVoices;
     readonly LoopingSound[] scrapes;
-    readonly Dictionary<PhysicsMaterial,AudioClip[]> materialImpactClips=[];
-    readonly Dictionary<PhysicsMaterial,AudioVoice[][]> materialImpacts=[];
-    readonly Dictionary<PhysicsMaterial,LoopingSound[]> materialScrapes=[];
-    readonly Dictionary<PhysicsMaterial,int> nextMaterialImpact=[];
     readonly Dictionary<int,float> vertexSlip=new();
     readonly Dictionary<int,float> stepTravel=new();
     readonly Dictionary<int,float> nextStride=new();
@@ -43,7 +39,7 @@ internal sealed class PhysicalSounds : IDisposable
     readonly Dictionary<int,(Vector3 Position,float VerticalSpeed,bool Grounded)> previousCubes=new();
     readonly Dictionary<int,float> impactCooldown=new();
     readonly Dictionary<int,VertexState> vertexStates=new();
-    int nextStepVoice;
+    int nextStepVoice,nextImpact;
     internal int ImpactPlayCount { get; private set; }
     internal int VertexHitCount { get; private set; }
 
@@ -51,16 +47,9 @@ internal sealed class PhysicalSounds : IDisposable
     {
         stepClips=Enumerable.Range(0,5).Select(i=>system.Load($"footstep_concrete_{i:000}.wav")).ToArray();
         stepVoices=stepClips.Select(clip=>new[]{new AudioVoice(clip),new AudioVoice(clip)}).ToArray();
-        foreach(PhysicsMaterial material in Enum.GetValues<PhysicsMaterial>())
-        {
-            AudioClip[] clips=Enumerable.Range(0,2).Select(i=>system.Load($"impact_{material.ToString().ToLowerInvariant()}_{i:000}.wav")).ToArray();
-            materialImpactClips[material]=clips;
-            materialImpacts[material]=clips.Select(clip=>new[]{new AudioVoice(clip),new AudioVoice(clip)}).ToArray();
-            materialScrapes[material]=Enumerable.Range(0,4).Select(_=>new LoopingSound(system,$"slide_{material.ToString().ToLowerInvariant()}.wav")).ToArray();
-        }
-        impactClips=materialImpactClips[PhysicsMaterial.Wood];
-        impactVoices=materialImpacts[PhysicsMaterial.Wood];
-        scrapes=materialScrapes[PhysicsMaterial.Wood];
+        impactClips=Enumerable.Range(0,5).Select(i=>system.Load($"cube_wood_impact_{i:000}.wav")).ToArray();
+        impactVoices=impactClips.Select(clip=>new[]{new AudioVoice(clip),new AudioVoice(clip)}).ToArray();
+        scrapes=Enumerable.Range(0,4).Select(_=>new LoopingSound(system,"cube_concrete_scrape.wav")).ToArray();
     }
 
     static (float Gain,float Pan) Spatial(Vector3 listener,Vector3 source,Vector2 right,float falloff=100f)
@@ -133,7 +122,7 @@ internal sealed class PhysicalSounds : IDisposable
         foreach(int id in previousCubes.Keys.Where(id=>!seenCubes.Contains(id)).ToArray()) previousCubes.Remove(id);
 
         foreach(CubeImpactEvent impact in audibleImpacts)
-            PlayImpact(impact.CubeId,new Vector3(impact.X,impact.Y,impact.Z),impact.Strength,impact.Material,listener,right,FilterFor,GroupFor);
+            PlayImpact(impact.CubeId,new Vector3(impact.X,impact.Y,impact.Z),impact.Strength,listener,right,FilterFor,GroupFor);
 
         UpdateVertexHits(cubes,listener,right,walls??[],dt,FilterFor,GroupFor);
 
@@ -146,36 +135,29 @@ internal sealed class PhysicalSounds : IDisposable
                 float speed=cube.Held?vertexSlip.GetValueOrDefault(cube.Id):cube.SlipSpeed;
                 var (gain,pan)=Spatial(listener,cube.Position,right);
                 VercidiumAcoustics.Filter filter=FilterFor(AcousticSourceIds.Cube(cube.Id));
-                return (cube.Material,Gain:Math.Clamp((speed-0.12f)/2.2f,0f,1f)*gain*0.8f*filter.Gain,
+                return (Gain:Math.Clamp((speed-0.12f)/2.2f,0f,1f)*gain*0.8f*filter.Gain,
                     Pan:pan,HighRatio:filter.HighRatio,Group:GroupFor(AcousticSourceIds.Cube(cube.Id)));
             })
             .Where(sound=>sound.Gain>0.012f)
-            .OrderByDescending(sound=>sound.Gain).Take(8).ToArray();
-        foreach(PhysicsMaterial material in Enum.GetValues<PhysicsMaterial>())
+            .OrderByDescending(sound=>sound.Gain).Take(scrapes.Length).ToArray();
+        for(int i=0;i<scrapes.Length;i++)
         {
-            LoopingSound[] loops=materialScrapes[material];
-            var sounds=sliding.Where(sound=>sound.Material==material).Take(loops.Length).ToArray();
-            for(int i=0;i<loops.Length;i++)
-            {
-                loops[i].SetHighFrequencyGain(i<sounds.Length?sounds[i].HighRatio:1f);
-                loops[i].SetReverbGroup(i<sounds.Length?sounds[i].Group:-1);
-                loops[i].SetTarget(i<sounds.Length?sounds[i].Gain:0f,i<sounds.Length?sounds[i].Pan:0f);
-                loops[i].Update(dt);
-            }
+            scrapes[i].SetHighFrequencyGain(i<sliding.Length?sliding[i].HighRatio:1f);
+            scrapes[i].SetReverbGroup(i<sliding.Length?sliding[i].Group:-1);
+            scrapes[i].SetTarget(i<sliding.Length?sliding[i].Gain:0f,i<sliding.Length?sliding[i].Pan:0f);
+            scrapes[i].Update(dt);
         }
     }
 
-    bool PlayImpact(int cubeId,Vector3 position,float strength,PhysicsMaterial material,Vector3 listener,Vector2 right,
+    bool PlayImpact(int cubeId,Vector3 position,float strength,Vector3 listener,Vector2 right,
         Func<int,VercidiumAcoustics.Filter> filterFor,Func<int,int> groupFor)
     {
         var (gain,pan)=Spatial(listener,position,right,400f);
         VercidiumAcoustics.Filter filter=filterFor(AcousticSourceIds.Cube(cubeId));
         gain*=filter.Gain;
         if(gain<0.02f) return false;
-        AudioVoice[][] voices=materialImpacts[material];
-        int index=nextMaterialImpact.GetValueOrDefault(material);
-        nextMaterialImpact[material]=index+1;
-        AudioVoice voice=voices[index%voices.Length][(index/voices.Length)%2];
+        int index=nextImpact++;
+        AudioVoice voice=impactVoices[index%impactVoices.Length][(index/impactVoices.Length)%2];
         voice.SetPitch(0.88f+Random.Shared.NextSingle()*0.12f);
         voice.SetHighFrequencyGain(filter.HighRatio);
         voice.SetReverbGroup(groupFor(AcousticSourceIds.Cube(cubeId)));
@@ -211,7 +193,7 @@ internal sealed class PhysicalSounds : IDisposable
                     slip=MathF.Max(slip,contact.Slip);
                     if(!state.Touching[index] && state.Cooldown[index]<=0f &&
                        contact.Impact>=VertexImpactSpeed && !impactCooldown.ContainsKey(cube.Id) &&
-                       PlayImpact(cube.Id,vertex,Math.Clamp(contact.Impact/6f,0.15f,1f),cube.Material,listener,right,filterFor,groupFor))
+                       PlayImpact(cube.Id,vertex,Math.Clamp(contact.Impact/6f,0.15f,1f),listener,right,filterFor,groupFor))
                     {
                         state.Cooldown[index]=VertexCooldown;
                         VertexHitCount++;
@@ -326,9 +308,9 @@ internal sealed class PhysicalSounds : IDisposable
 
     public void Dispose()
     {
-        foreach(LoopingSound scrape in materialScrapes.Values.SelectMany(loops=>loops)) scrape.Dispose();
+        foreach(LoopingSound scrape in scrapes) scrape.Dispose();
         foreach(AudioVoice voice in stepVoices.SelectMany(voices=>voices)) voice.Dispose();
-        foreach(AudioVoice voice in materialImpacts.Values.SelectMany(groups=>groups).SelectMany(voices=>voices)) voice.Dispose();
-        foreach(AudioClip clip in stepClips.Concat(materialImpactClips.Values.SelectMany(clips=>clips))) clip.Dispose();
+        foreach(AudioVoice voice in impactVoices.SelectMany(voices=>voices)) voice.Dispose();
+        foreach(AudioClip clip in stepClips.Concat(impactClips)) clip.Dispose();
     }
 }

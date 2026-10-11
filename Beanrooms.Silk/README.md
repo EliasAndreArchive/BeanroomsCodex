@@ -34,8 +34,7 @@ objects. Welding is available for every grabbable object, including the wooden p
 it closer or farther, and hold the right mouse button while moving the mouse
 to rotate its target. In **Tab → Physics**, enable **Grid Snap** and set **Snap Step** to place held objects on a construction grid. Press **O** to open the private Ponder screen: it locks movement, shows a 5×5×5 example build, and uses Left/Right to change lessons; press **Escape** or **O** to leave. Fixed path tracing is the default renderer. Realtime GI
 is available in the settings menu when a faster dynamic diffuse radiance cache
-is useful. Post FX includes optional current-frame spatial denoising for path
-tracing. A random roomwide flicker can leave the lights blacked out until the
+is useful. A random roomwide flicker can leave the lights blacked out until the
 next flicker restores them.
 
 Build standalone packages:

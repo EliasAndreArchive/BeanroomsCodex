@@ -114,9 +114,7 @@ foreach(string asset in new[]{"spawn-boom.mp3","ui-click.wav","ui-hover.wav","la
     "footstep_concrete_002.wav","footstep_concrete_003.wav","footstep_concrete_004.wav",
     "cube_wood_impact_000.wav","cube_wood_impact_001.wav",
     "cube_wood_impact_002.wav","cube_wood_impact_003.wav","cube_wood_impact_004.wav",
-    "cube_concrete_scrape.wav",
-    "impact_concrete_000.wav","impact_wood_001.wav","impact_metal_000.wav","impact_plastic_001.wav",
-    "slide_concrete.wav","slide_wood.wav","slide_metal.wav","slide_plastic.wav"})
+    "cube_concrete_scrape.wav"})
 {
     using var clip=audio.Load(asset);
     if(clip.Duration<=0) throw new Exception("Failed to decode "+asset);
@@ -145,9 +143,11 @@ using(var physical=new PhysicalSounds(audio))
     int woodImpactCount=physical.ImpactPlayCount;
     physical.Update(listener,0f,walker,[],[],[new CubeImpactEvent { X=10f,Y=0.5f,Z=10f,Strength=1f,Material=PhysicsMaterial.Metal }],1f/60f);
     if(physical.ImpactPlayCount<=woodImpactCount)
-        throw new Exception("A metal collision did not select a material impact voice");
+        throw new Exception("A metal object's collision did not play the original impact sound");
     var impactVoices=(AudioVoice[][])typeof(PhysicalSounds).GetField("impactVoices",
         System.Reflection.BindingFlags.Instance|System.Reflection.BindingFlags.NonPublic)!.GetValue(physical)!;
+    if(impactVoices.Length!=5)
+        throw new Exception("The original five cube impact variations were not restored");
     if(!impactVoices.SelectMany(voices=>voices).Any(voice=>voice.IsPlaying))
         throw new Exception("Collision did not start a cube impact voice");
     if(audio.Al.GetError()!=Silk.NET.OpenAL.AudioError.NoError)
@@ -275,6 +275,33 @@ using(var physics=new PhysicsBodies())
     RigidCube[] pallets=physics.Bodies.Where(body=>body.Plank).ToArray();
     if(!physics.TryWeld(pallets[0].Id,pallets[1].Id))
         throw new Exception("Nearby wooden pallets could not be welded");
+}
+using(var physics=new PhysicsBodies())
+{
+    if(!physics.SpawnCornerPlank(new System.Numerics.Vector3(10f,.14f,10f),0f,[],System.Numerics.Vector3.Zero))
+        throw new Exception("Could not create a pallet for the step check");
+    if(!physics.CollidesPlayer(10f,10f,.3f) || physics.CollidesPlayer(10f,10f,.3f,.25f))
+        throw new Exception("Pallet should block at floor height and clear at its top");
+    var cubeEye=new System.Numerics.Vector3(13f,1.68f,10f);
+    if(!physics.Spawn(cubeEye,System.Numerics.Vector3.UnitZ,false,[],cubeEye) ||
+       !physics.CollidesPlayer(13f,12.35f,.3f,.25f))
+        throw new Exception("A cube must still block a player standing at pallet height");
+}
+{
+    var movement=new PlayerMotion();
+    var settings=new DebugMenu();
+    var camera=new System.Numerics.Vector3(10f,1.68f,10f);
+    bool climbed=false;
+    for(int i=0;i<300;i++)
+    {
+        movement.Update(1f/120f,new System.Numerics.Vector2(0f,1f),false,false,0f,0f,
+            settings,ref camera,
+            (x,z,feet)=>(z>=11f && z<12.8f && feet<.23f) || z>=13f,
+            (x,z)=>(z>=11f && z<12.8f) ? .25f : 0f,true);
+        climbed|=movement.FootElevation>.2f;
+    }
+    if(!climbed || camera.Z<12.7f || camera.Z>=13f)
+        throw new Exception("Autostep did not cross a pallet or walked through a cube");
 }
 using(var physics=new PhysicsBodies())
 {

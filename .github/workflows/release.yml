@@ -1,0 +1,58 @@
+name: Build and release Beanrooms
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: windows-latest
+            rid: win-x64
+            archive: Beanrooms-Windows-x64.zip
+          - os: ubuntu-latest
+            rid: linux-x64
+            archive: Beanrooms-Linux-x64.zip
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 8.0.x
+      - name: Publish game
+        shell: pwsh
+        run: dotnet publish Beanrooms.Silk/Beanrooms.Silk.csproj -c Release -r ${{ matrix.rid }} --self-contained true -o publish/game
+      - name: Package game
+        shell: pwsh
+        run: Compress-Archive -Path publish/game/* -DestinationPath ${{ matrix.archive }}
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.rid }}
+          path: ${{ matrix.archive }}
+          if-no-files-found: error
+
+  release:
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: '*-x64'
+          merge-multiple: true
+          path: dist
+      - name: Create release with both builds
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          RELEASE_TAG: build-${{ github.run_number }}
+          RELEASE_SHA: ${{ github.sha }}
+        run: gh release create "$RELEASE_TAG" dist/*.zip --target "$RELEASE_SHA" --title "Beanrooms $RELEASE_TAG" --generate-notes --latest

@@ -7,6 +7,7 @@
 *.log
 *.zip
 *.tar.gz
+/publish/
 .env
 .env.*
 !*.env.example
