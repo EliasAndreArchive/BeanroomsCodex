@@ -283,6 +283,12 @@ using(var game=new GameWindow())
     keyDown(game,new KeyEventArgs(Keys.B,false));
     if(!gameMenu.SandboxPage)
         throw new Exception("B did not open the sandbox browser in solo gameplay");
+    // Sandbox mode OFF must keep the browser closed, in solo and online alike.
+    gameMenu.ToggleSandbox();
+    gameMenu.SandboxEnabled=false;
+    keyDown(game,new KeyEventArgs(Keys.B,false));
+    if(gameMenu.SandboxPage)
+        throw new Exception("B opened the sandbox browser while sandbox mode was off");
 }
 if(!Beanrooms.Program.TryOnlineEndpoint("https://beanrooms-game.onrender.com","test-key",out string endpoint)
     || endpoint!="wss://beanrooms-game.onrender.com/ws?key=test-key")

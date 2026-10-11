@@ -896,7 +896,7 @@ internal sealed class GameWindow : SilkForm
 
     void ToggleSandboxMenu()
     {
-        if(!menu.SandboxPage && network.Connected && !menu.SandboxEnabled) return;
+        if(!menu.SandboxPage && !menu.SandboxEnabled) return;
         network.Send(new NetMessage { Type="release" });physics.Release();networkHolding=false;
         menu.ToggleSandbox();
         if(menu.Open) { wantsCapture=false;SuspendMouse(); }
