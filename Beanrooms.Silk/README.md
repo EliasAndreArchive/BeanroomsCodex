@@ -18,8 +18,10 @@ dotnet run --project Beanrooms.Silk/Beanrooms.Silk.csproj -c Release
 The game opens fullscreen with a 4:3 image and black side bars.
 Use **Tab** for the menu, **F11** for windowed/full screen, **WASD** to move,
 and **Escape** to release the mouse. The title menu has solo and online play.
-The online connection uses the same WebSocket protocol and join key as the
-previous Windows client.
+Online play uses Photon Realtime. Choose **JOIN ONLINE**, enter a shared room
+name, and connect. The client includes Photon Realtime v5.1.20 and its license
+under `ThirdParty/PhotonRealtime/`; `BEANROOMS_PHOTON_APP_ID` can override the
+configured Photon App ID for a different deployment.
 
 Sandbox mode is available in solo and online. In solo, toggle it in
 **Tab → Session → Sandbox Mode** and press **B** to open the sandbox browser.
@@ -53,7 +55,6 @@ The headless checks live in `../Beanrooms.PortChecks`. Run them with:
 dotnet run --project Beanrooms.PortChecks/Beanrooms.PortChecks.csproj -c Release
 ```
 
-To test local multiplayer, start `../Nullrooms.Server` on port 27075 and pass
-`--network` to the checks. To test the Render-style WebSocket route, start the
-server on 27015 and `../Beanrooms.RenderBridge` on 10000 with a temporary
-`BEANROOMS_JOIN_KEY=port-test-key`, then pass `--websocket` to the checks.
+Run `--photon` to open two temporary Photon clients and verify room joining,
+authoritative snapshots, and host-only sandbox mode. The TCP server checks are
+kept for the legacy dedicated-server project.

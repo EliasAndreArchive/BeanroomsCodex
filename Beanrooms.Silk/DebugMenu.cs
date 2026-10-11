@@ -186,7 +186,7 @@ internal sealed class DebugMenu
         new[] { "MOUSE SENS", "IDLE SHAKE", "WALK SHAKE", "SPRINT SHAKE", "CROUCH SHAKE", "HEAD BOB", "SWAY AMOUNT", "STRAFE ROLL", "TURN ROLL", "MOVE PITCH", "LOOK SMOOTH" },
         new[] { "PICKUP RANGE", "HOLD DIST", "SPRING FREQ", "SPRING DAMP", "HOLD SMOOTH", "SLIDE RESIST", "CUBE COUNT", "DEBUG UI", "OBJECT FRAMES" },
         new[] { "MONSTER", "ROAM SPEED", "SEARCH SPEED", "CHASE SPEED", "CHASE TURN", "SEARCH TURN", "ROAM TURN", "SIGHT RANGE", "SIGHT ANGLE", "SEARCH RADIUS", "ROAM RADIUS" },
-        new[] { "PLAYER NAME", "BEAN COLOR", "RED", "GREEN", "BLUE", "SERVER", "JOIN KEY", "CONNECT", "DISCONNECT", "CONNECTION", "PLAYER ID", "PLAYERS", "ROLE" },
+        new[] { "PLAYER NAME", "BEAN COLOR", "RED", "GREEN", "BLUE", "PHOTON REGION", "JOIN KEY", "CONNECT", "DISCONNECT", "CONNECTION", "PLAYER ID", "PLAYERS", "ROLE" },
         new[] { "POST FX", "TONEMAP", "EXPOSURE", "AUTO EXPOSURE", "BRIGHTEN SPEED", "DARKEN SPEED", "BLOOM", "BLOOM STRENGTH", "BLOOM THRESHOLD", "BLOOM RADIUS", "SPATIAL DENOISE", "DENOISE STRENGTH", "DENOISE RADIUS" },
         new[] { "MINOR FLICKER", "MINOR INTERVAL", "MINOR CHANCE", "MINOR DURATION", "RANDOM EVENTS", "EVENT INTERVAL", "EVENT LENGTH", "EVENT SPEED MIN", "EVENT SPEED MAX", "EVENT OFF CHANCE", "CHASE FLICKER", "CHASE FOG", "CHASE FOG MAX", "FOG RISE", "FOG FALL", "CHASE RED", "CHASE RED CHANCE", "BLACKOUT CHANCE" },
         new[] { "RESUME", "LEAVE MULTIPLAYER", "MAIN MENU", "QUIT GAME", "CONNECTION", "PLAYERS", "ROLE", "SANDBOX MODE" }
@@ -212,7 +212,7 @@ internal sealed class DebugMenu
     }
     internal void ShowJoinScreen()
     {
-        FinishEditing();TitleScreen=true;TitlePage=1;TitleSelected=1;Dirty=true;
+        FinishEditing();TitleScreen=true;TitlePage=1;TitleSelected=0;Dirty=true;
     }
     internal void ShowSettingsFromTitle()
     {
@@ -328,7 +328,7 @@ internal sealed class DebugMenu
     {
         if(TitleScreen)
         {
-            int next=Math.Clamp(TitleSelected+step,0,TitlePage==0?3:3);
+            int next=Math.Clamp(TitleSelected+step,0,TitlePage==0?3:2);
             if(next!=TitleSelected) InteractionSound?.Invoke();
             TitleSelected=next;Dirty=true;return;
         }
@@ -354,10 +354,9 @@ internal sealed class DebugMenu
         }
         else switch(TitleSelected)
         {
-            case 0: FinishEditing();EditingServer=true;break;
-            case 1: FinishEditing();EditingJoinKey=true;JoinKey="";break;
-            case 2: FinishEditing();ConnectAction?.Invoke();break;
-            case 3: ShowTitle();break;
+            case 0: FinishEditing();EditingJoinKey=true;JoinKey="";break;
+            case 1: FinishEditing();ConnectAction?.Invoke();break;
+            case 2: ShowTitle();break;
         }
         Dirty=true;
     }
@@ -631,7 +630,7 @@ internal sealed class DebugMenu
                 case 2: PlayerRed=Math.Clamp(PlayerRed+direction*0.01f,0.05f,1f);PlayerColorIndex=-1;break;
                 case 3: PlayerGreen=Math.Clamp(PlayerGreen+direction*0.01f,0.05f,1f);PlayerColorIndex=-1;break;
                 case 4: PlayerBlue=Math.Clamp(PlayerBlue+direction*0.01f,0.05f,1f);PlayerColorIndex=-1;break;
-                case 5: FinishEditing();EditingServer=true;break;
+                case 5: break;
                 case 6: FinishEditing();EditingJoinKey=true;JoinKey="";break;
                 case 7: FinishEditing();ConnectAction?.Invoke();break;
                 case 8: FinishEditing();DisconnectAction?.Invoke();break;
@@ -759,7 +758,7 @@ internal sealed class DebugMenu
             0 => EditingName ? PlayerName+"_" : PlayerName,
             1 => PlayerColorIndex<0 ? "CUSTOM" : CubeColors[PlayerColorIndex].Name,
             2 => $"{PlayerRed:0.00}",3 => $"{PlayerGreen:0.00}",4 => $"{PlayerBlue:0.00}",
-            5 => (ServerAddress.Length>29 ? ServerAddress[^29..] : ServerAddress)+(EditingServer?"-":""),
+            5 => "EU",
             6 => JoinKey.Length==0 ? (EditingJoinKey?"-":"ENTER KEY") : new string('*',Math.Min(JoinKey.Length,16))+(EditingJoinKey?"-":""),
             7 => "JOIN", 8 => "LEAVE",
             9 => NetworkConnected ? (NetworkRemote ? "ONLINE" : "LOCAL") : NetworkStatus,
@@ -1052,17 +1051,13 @@ internal sealed class DebugMenu
             else
             {
                 PixelText(g,"1.",TitleSelected==0?green:white,21,70);
-                PixelText(g,"SERVER",TitleSelected==0?green:white,44,70);
-                string server=ServerAddress.Length>32?ServerAddress[^32..]:ServerAddress;
-                PixelText(g,server+(EditingServer?"-":""),TitleSelected==0?green:white,44,83);
-                PixelText(g,"2.",TitleSelected==1?green:white,21,110);
-                PixelText(g,"JOIN KEY",TitleSelected==1?green:white,44,110);
+                PixelText(g,"PHOTON ROOM",TitleSelected==0?green:white,44,70);
                 string masked=JoinKey.Length==0?"ENTER KEY":new string('*',Math.Min(JoinKey.Length,20));
-                PixelText(g,masked+(EditingJoinKey?"-":""),TitleSelected==1?green:white,44,123);
-                PixelText(g,"3.",TitleSelected==2?green:white,21,157);
-                PixelText(g,"CONNECT",TitleSelected==2?green:white,44,157);
-                PixelText(g,"4.",TitleSelected==3?green:white,21,180);
-                PixelText(g,"BACK",TitleSelected==3?green:white,44,180);
+                PixelText(g,masked+(EditingJoinKey?"-":""),TitleSelected==0?green:white,44,83);
+                PixelText(g,"2.",TitleSelected==1?green:white,21,125);
+                PixelText(g,"CONNECT",TitleSelected==1?green:white,44,125);
+                PixelText(g,"3.",TitleSelected==2?green:white,21,160);
+                PixelText(g,"BACK",TitleSelected==2?green:white,44,160);
                 PixelText(g,"STATUS "+(NetworkConnected?"ONLINE":NetworkStatus),paleBlue,13,225);
             }
         }

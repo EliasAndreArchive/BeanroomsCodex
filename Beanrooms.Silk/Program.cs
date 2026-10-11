@@ -12,12 +12,7 @@ internal static class Program
     static void Main(string[] args)
     {
         AppDomain.CurrentDomain.UnhandledException += (_, e) => File.WriteAllText(Path.Combine(AppContext.BaseDirectory,"crash.log"),e.ExceptionObject.ToString() ?? "Unknown error");
-        if(!TryServerEndpoint(args,out string host,out int port))
-        {
-            Console.Error.WriteLine("Enter a Render hostname or URL and a join key, or use --server HOST:PORT.");
-            return;
-        }
-        using var game=new GameWindow(host,port);
+        using var game=new GameWindow();
         game.Run();
     }
 
@@ -117,7 +112,7 @@ internal sealed class GameWindow : SilkForm
     float[] objectTexels = [];
     int objectTextureHeight;
     bool cubeVisualNetworkMode;
-    LocalNetClient network;
+    INetClient network;
     bool remoteServer;
     bool networkStarted;
     readonly bool launchFullscreen;
@@ -153,7 +148,7 @@ internal sealed class GameWindow : SilkForm
     bool fullscreen;
     Rectangle windowedBounds;
 
-    public GameWindow(string serverHost = "127.0.0.1", int serverPort = 27015)
+    public GameWindow(string serverHost = "", int serverPort = 27015)
     {
         flicker=new LightFlicker(0,menu.FlickerSettings);
         network = new LocalNetClient(serverHost.Length==0?"127.0.0.1":serverHost,serverPort);
@@ -820,13 +815,8 @@ internal sealed class GameWindow : SilkForm
             menu.NetworkStatus="ENTER KEY"; menu.Dirty=true;
             return;
         }
-        if(!Program.TryOnlineEndpoint(menu.ServerAddress,menu.JoinKey,out string endpoint))
-        {
-            menu.NetworkStatus="BAD ADDRESS"; menu.Dirty=true;
-            return;
-        }
         DisconnectNetwork();
-        network=new LocalNetClient(endpoint,new Uri(endpoint).Port);
+        network=new PhotonNetClient(menu.JoinKey);
         networkStarted=true;
         remoteServer=true;
         menu.NetworkRemote=true;
@@ -1060,6 +1050,7 @@ internal sealed class GameWindow : SilkForm
 
     void UpdateGame(float dt)
     {
+        network.Service(dt);
         bool movementWritable=!network.Connected && !remoteServer;
         if(menu.MovementControlsWritable!=movementWritable)
         {

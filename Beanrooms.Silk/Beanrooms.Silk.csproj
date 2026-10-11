@@ -13,8 +13,14 @@
       <HintPath>ThirdParty/VercidiumAudio/vaudio.dll</HintPath>
       <Private>true</Private>
     </Reference>
+    <Reference Include="PhotonClient">
+      <HintPath>ThirdParty/PhotonRealtime/PhotonClient.dll</HintPath>
+      <Private>true</Private>
+    </Reference>
     <None Include="ThirdParty/VercidiumAudio/LICENCE.txt" CopyToOutputDirectory="PreserveNewest" />
     <None Include="ThirdParty/VercidiumAudio/vaudio.xml" CopyToOutputDirectory="PreserveNewest" />
+    <None Include="ThirdParty/PhotonRealtime/LICENSE.txt" CopyToOutputDirectory="PreserveNewest" />
+    <None Include="ThirdParty/PhotonRealtime/PhotonClient.xml" CopyToOutputDirectory="PreserveNewest" />
     <PackageReference Include="BepuPhysics" Version="2.4.0" />
     <PackageReference Include="Silk.NET.Windowing" Version="2.23.0" />
     <PackageReference Include="Silk.NET.Windowing.Glfw" Version="2.23.0" />
@@ -25,6 +31,8 @@
     <PackageReference Include="NLayer" Version="3.0.0" />
   </ItemGroup>
   <ItemGroup>
+    <Compile Remove="ThirdParty/PhotonRealtime/**/*.cs" />
+    <ProjectReference Include="ThirdParty/PhotonRealtime/PhotonRealtime.csproj" />
     <AssemblyAttribute Include="System.Runtime.CompilerServices.InternalsVisibleToAttribute">
       <_Parameter1>Beanrooms.PortChecks</_Parameter1>
     </AssemblyAttribute>

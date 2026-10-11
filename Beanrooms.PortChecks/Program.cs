@@ -32,6 +32,25 @@ using(var staleClient=new LocalNetClient())
     if(staleClient.SupportsSandbox || staleClient.Status!="SERVER UPDATE REQUIRED")
         throw new Exception("A stale server did not report its required update");
 }
+using(var photonAuthority=new PhotonAuthority([4,9]))
+{
+    // The Photon room master consumes the same messages as the dedicated server.
+    photonAuthority.Update(.06f);
+    var welcome=photonAuthority.DrainOutgoing();
+    if(!welcome.Any(entry=>entry.Target==4&&entry.Message.Type=="welcome") ||
+       !welcome.Any(entry=>entry.Target==9&&entry.Message.Type=="welcome"))
+        throw new Exception("Photon authority did not welcome every room player");
+    photonAuthority.Receive(4,new NetMessage { Type="sandbox_toggle" });
+    photonAuthority.Update(.06f);
+    var enabled=photonAuthority.DrainOutgoing().Last(entry=>entry.Target==0&&entry.Message.Type=="snapshot").Message;
+    if(!enabled.SandboxEnabled||enabled.HostId!=4)
+        throw new Exception("Photon authority did not apply the room-master sandbox toggle");
+    photonAuthority.Receive(9,new NetMessage { Type="sandbox_toggle" });
+    photonAuthority.Update(.06f);
+    var guestAttempt=photonAuthority.DrainOutgoing().Last(entry=>entry.Target==0&&entry.Message.Type=="snapshot").Message;
+    if(!guestAttempt.SandboxEnabled)
+        throw new Exception("Photon authority accepted a guest sandbox toggle");
+}
 foreach(string asset in new[]{"wall.png","floor.png","ceiling.png","beanface.png","eye.png"})
 {
     string path=Path.Combine(AppContext.BaseDirectory,"assets",asset);
@@ -653,4 +672,34 @@ if(args.Contains("--netmenu"))
     networkField.SetValue(guestWindow,new LocalNetClient());
     guestWindow.Dispose();
     Console.WriteLine("PASS: server-authorized session-menu sandbox toggle reached host and guest");
+}
+if(args.Contains("--photon"))
+{
+    string room="PORT-"+Guid.NewGuid().ToString("N")[..10].ToUpperInvariant();
+    using var first=new PhotonNetClient(room);
+    using var second=new PhotonNetClient(room);
+    first.Start();second.Start();
+    var deadline=DateTime.UtcNow.AddSeconds(20);
+    while((!first.Connected||!second.Connected) && DateTime.UtcNow<deadline)
+    { first.Service(1f/60f);second.Service(1f/60f);Thread.Sleep(16); }
+    if(!first.Connected||!second.Connected)
+        throw new Exception($"Photon room join failed: {first.Status}, {second.Status}");
+    PhotonNetClient host=first.Id<second.Id?first:second;
+    PhotonNetClient guest=host==first?second:first;
+    deadline=DateTime.UtcNow.AddSeconds(5);
+    while((host.Snapshot().HostId!=host.Id||guest.Snapshot().HostId!=host.Id) && DateTime.UtcNow<deadline)
+    { first.Service(1f/60f);second.Service(1f/60f);Thread.Sleep(16); }
+    if(host.Snapshot().HostId!=host.Id||guest.Snapshot().HostId!=host.Id)
+        throw new Exception("Photon snapshots did not select the room master as host");
+    host.Send(new NetMessage { Type="sandbox_toggle" });
+    deadline=DateTime.UtcNow.AddSeconds(5);
+    while(!guest.Snapshot().SandboxEnabled && DateTime.UtcNow<deadline)
+    { first.Service(1f/60f);second.Service(1f/60f);Thread.Sleep(16); }
+    if(!host.Snapshot().SandboxEnabled||!guest.Snapshot().SandboxEnabled)
+        throw new Exception("Photon master sandbox toggle did not replicate");
+    guest.Send(new NetMessage { Type="sandbox_toggle" });
+    for(int i=0;i<60;i++) { first.Service(1f/60f);second.Service(1f/60f);Thread.Sleep(16); }
+    if(!host.Snapshot().SandboxEnabled||!guest.Snapshot().SandboxEnabled)
+        throw new Exception("Photon room master accepted a guest sandbox toggle");
+    Console.WriteLine("PASS: Photon Realtime room, authoritative snapshots, and sandbox permissions");
 }

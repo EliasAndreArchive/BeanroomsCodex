@@ -8,6 +8,7 @@
   </PropertyGroup>
   <ItemGroup>
     <ProjectReference Include="../Beanrooms.Silk/Beanrooms.Silk.csproj" />
+    <ProjectReference Include="../Beanrooms.Silk/ThirdParty/PhotonRealtime/PhotonRealtime.csproj" />
     <None Include="../Beanrooms.Silk/ThirdParty/VercidiumAudio/vaudio.dll" Link="vaudio.dll" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 </Project>

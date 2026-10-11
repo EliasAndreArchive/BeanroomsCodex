@@ -7,7 +7,27 @@ using System.Threading.Channels;
 
 namespace Beanrooms;
 
-internal sealed class LocalNetClient : IDisposable
+internal interface INetClient : IDisposable
+{
+    bool Connected { get; }
+    string Status { get; }
+    int Id { get; }
+    int ProtocolVersion { get; }
+    bool SupportsSandbox { get; }
+    void Start();
+    void Service(float dt);
+    void Send(NetMessage message);
+    NetMessage? ConsumeWorld();
+    NetMessage? ConsumeRespawn();
+    NetMessage? ConsumeFlicker();
+    NetMessage? ConsumePickupResult();
+    CubeImpactEvent[] ConsumeCubeImpacts();
+    (PlayerState[] Players, CubeState[] Cubes, MonsterState? Monster,
+        MonsterTuning? MonsterTuning,FlickerTuning? FlickerTuning,int HostId,
+        SandboxDevice[] Devices,SandboxWire[] Wires,bool SandboxEnabled) Snapshot();
+}
+
+internal sealed class LocalNetClient : INetClient
 {
     readonly string host;
     readonly int port;
@@ -42,12 +62,13 @@ internal sealed class LocalNetClient : IDisposable
         this.port = port;
     }
 
-    internal bool Connected => Volatile.Read(ref connected) != 0;
-    internal string Status => Volatile.Read(ref status);
-    internal int Id => Volatile.Read(ref id);
-    internal int ProtocolVersion => Volatile.Read(ref protocolVersion);
-    internal bool SupportsSandbox => ProtocolVersion>=NetProtocol.Version;
-    internal void Start() { Volatile.Write(ref status,"CONNECTING"); _ = Task.Run(RunAsync); }
+    public bool Connected => Volatile.Read(ref connected) != 0;
+    public string Status => Volatile.Read(ref status);
+    public int Id => Volatile.Read(ref id);
+    public int ProtocolVersion => Volatile.Read(ref protocolVersion);
+    public bool SupportsSandbox => ProtocolVersion>=NetProtocol.Version;
+    public void Start() { Volatile.Write(ref status,"CONNECTING"); _ = Task.Run(RunAsync); }
+    public void Service(float dt) { }
 
     async Task RunAsync()
     {
@@ -209,7 +230,7 @@ internal sealed class LocalNetClient : IDisposable
         }
     }
 
-    internal void Send(NetMessage message)
+    public void Send(NetMessage message)
     {
         if (!Connected) return;
         if(message.Type=="state") Interlocked.Exchange(ref latestState,message);
@@ -217,7 +238,7 @@ internal sealed class LocalNetClient : IDisposable
         sendWake.Writer.TryWrite(0);
     }
 
-    internal NetMessage? ConsumeWorld()
+    public NetMessage? ConsumeWorld()
     {
         lock(stateLock)
         {
@@ -227,7 +248,7 @@ internal sealed class LocalNetClient : IDisposable
         }
     }
 
-    internal NetMessage? ConsumeRespawn()
+    public NetMessage? ConsumeRespawn()
     {
         lock(stateLock)
         {
@@ -237,9 +258,9 @@ internal sealed class LocalNetClient : IDisposable
         }
     }
 
-    internal NetMessage? ConsumeFlicker() => Interlocked.Exchange(ref pendingFlicker,null);
+    public NetMessage? ConsumeFlicker() => Interlocked.Exchange(ref pendingFlicker,null);
 
-    internal NetMessage? ConsumePickupResult()
+    public NetMessage? ConsumePickupResult()
     {
         lock(stateLock)
         {
@@ -249,7 +270,7 @@ internal sealed class LocalNetClient : IDisposable
         }
     }
 
-    internal CubeImpactEvent[] ConsumeCubeImpacts()
+    public CubeImpactEvent[] ConsumeCubeImpacts()
     {
         lock(stateLock)
         {
@@ -259,7 +280,7 @@ internal sealed class LocalNetClient : IDisposable
         }
     }
 
-    internal (PlayerState[] Players, CubeState[] Cubes, MonsterState? Monster,
+    public (PlayerState[] Players, CubeState[] Cubes, MonsterState? Monster,
         MonsterTuning? MonsterTuning,FlickerTuning? FlickerTuning,int HostId,
         SandboxDevice[] Devices,SandboxWire[] Wires,bool SandboxEnabled) Snapshot()
     {
