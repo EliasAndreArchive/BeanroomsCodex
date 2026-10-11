@@ -590,6 +590,7 @@ internal sealed class GameWindow : SilkForm
                 SandboxKind.Button=>new(0.75f,0.19f,0.12f),
                 SandboxKind.Lever=>new(0.65f,0.68f,0.62f),
                 SandboxKind.Lamp=>new(0.95f,0.83f,0.44f),
+                SandboxKind.Piston=>new(0.30f,0.34f,0.38f),
                 _=>new(0.21f,0.49f,0.56f)
             };
             texels[j+8]=color.X;texels[j+9]=color.Y;texels[j+10]=color.Z;
@@ -1257,7 +1258,8 @@ internal sealed class GameWindow : SilkForm
         physics.SlideResistance=menu.SlideResistance;
         physics.Update(dt,eye,forward,ViewRotation(),boxes,camera);
         physics.SyncSandboxDevices(localSandbox.Devices);
-        localSandbox.Update(dt,device=>physics.ApplyThruster(device.Position,device.Yaw,dt,device.Id));
+        localSandbox.Update(dt,device=>physics.ApplyThruster(device.Position,device.Yaw,dt,device.Id),
+            device=>physics.ApplyPiston(device.Position,device.Rotation,dt,device.Id));
         localMonster?.Update(dt,[new PlayerState { Id=1,X=eye.X,Y=eye.Y,Z=eye.Z,Yaw=smoothYaw }],physics.Bodies);
         visibleMonster=localMonster?.State;
         if(menu.MonsterSettings.Enabled && visibleMonster!=null &&

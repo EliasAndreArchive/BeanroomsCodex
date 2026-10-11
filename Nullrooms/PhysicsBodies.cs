@@ -212,8 +212,29 @@ internal sealed class PhysicsBodies : IDisposable
             s * (MathF.Abs(m.M13) + MathF.Abs(m.M23) + MathF.Abs(m.M33)));
     }
 
-    // A tipping cube can move its centre sideways while the edge on the floor is
-    // stationary. Measured scrape follows the floor contact points, not the centre.
+    // A powered piston shoves the nearest free body directly in front of its face
+    // along the device's 3D forward axis, Minecraft-style (with the base excluded).
+    internal void ApplyPiston(Vector3 position,Quaternion rotation,float dt,int sourceDeviceId=0)
+    {
+        Vector3 forward=Vector3.Transform(Vector3.UnitZ,rotation);
+        if(forward.LengthSquared()<0.5f) forward=Vector3.UnitZ;
+        forward=Vector3.Normalize(forward);
+        Vector3 face=position+forward*0.5f;
+        RigidCube? cube=null;
+        float nearestAlong=float.MaxValue;
+        foreach(RigidCube body in Bodies)
+        {
+            if(body.HasHoldTarget || body.SandboxDeviceId==sourceDeviceId) continue;
+            Vector3 delta=body.Position-face;
+            float along=Vector3.Dot(delta,forward);
+            if(along<0.08f || along>1.6f || along>=nearestAlong) continue;
+            Vector3 radial=delta-forward*along;
+            if(radial.LengthSquared()>0.6f*0.6f) continue;
+            cube=body;nearestAlong=along;
+        }
+        if(cube==null) return;
+        simulation.Bodies[cube.Handle].Velocity.Linear+=forward*11f*dt;
+    }
     internal static float ContactSlipSpeed(Vector3 velocity,Vector3 angularVelocity,Quaternion rotation,float halfSize)
     {
         float lengthSquared=rotation.LengthSquared();

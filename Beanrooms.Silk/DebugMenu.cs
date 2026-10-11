@@ -13,7 +13,7 @@ internal sealed class DebugMenu
     static readonly SandboxKind[][] SandboxItems =
     [
         [SandboxKind.Cube,SandboxKind.GlowCube],
-        [SandboxKind.Thruster,SandboxKind.Lamp],
+        [SandboxKind.Thruster,SandboxKind.Lamp,SandboxKind.Piston],
         [SandboxKind.Button,SandboxKind.Lever,SandboxKind.And,SandboxKind.Or,SandboxKind.Not,
          SandboxKind.Xor,SandboxKind.Nand,SandboxKind.Xnor,SandboxKind.Toggle,SandboxKind.Timer]
     ];
@@ -38,6 +38,7 @@ internal sealed class DebugMenu
         SandboxKind.Xor=>"ODD PARITY",SandboxKind.Nand=>"NOT ALL INPUTS",
         SandboxKind.Xnor=>"EVEN PARITY",SandboxKind.Toggle=>"LATCHES ON RISING EDGE",
         SandboxKind.Timer=>"BLINKS TWICE A SECOND",
+        SandboxKind.Piston=>"PUSHES BLOCKS AHEAD",
         _=>"POWERED LIGHT"
     };
     internal void SelectSandbox(int step)

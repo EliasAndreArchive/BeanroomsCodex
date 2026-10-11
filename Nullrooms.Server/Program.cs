@@ -105,7 +105,8 @@ internal sealed class LocalServer : IDisposable
             if(flickerSettings.RandomEvents && now>=nextFlickerEvent) BroadcastLightEvent(now,true);
             while(accumulator>=Step)
             {
-                sandbox.Update(Step,device=>physics.ApplyThruster(device.Position,device.Yaw,Step,device.Id));
+                sandbox.Update(Step,device=>physics.ApplyThruster(device.Position,device.Yaw,Step,device.Id),
+                device=>physics.ApplyPiston(device.Position,device.Rotation,Step,device.Id));
                 Vector3 eye=new(96f,1.68f,96f), forward=Vector3.UnitZ;
                 Quaternion rotation=Quaternion.Identity;
                 foreach(Peer peer in peers.Values)

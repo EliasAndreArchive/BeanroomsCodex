@@ -2,7 +2,7 @@ using System.Numerics;
 
 namespace Beanrooms;
 
-internal enum SandboxKind { Cube, GlowCube, Thruster, Button, Lever, And, Or, Not, Lamp, Xor, Nand, Xnor, Toggle, Timer }
+internal enum SandboxKind { Cube, GlowCube, Thruster, Button, Lever, And, Or, Not, Lamp, Xor, Nand, Xnor, Toggle, Timer, Piston }
 
 internal sealed class SandboxDevice
 {
@@ -94,7 +94,7 @@ internal sealed class SandboxWorld
         if(from==to || Wires.Count>=128 || Wires.Any(w=>w.From==from && w.To==to)) return false;
         SandboxDevice? source=Devices.FirstOrDefault(d=>d.Id==from);
         SandboxDevice? target=Devices.FirstOrDefault(d=>d.Id==to);
-        if(source==null || target==null || source.Kind is SandboxKind.Thruster or SandboxKind.Lamp ||
+        if(source==null || target==null || source.Kind is SandboxKind.Thruster or SandboxKind.Lamp or SandboxKind.Piston ||
            target.Kind is SandboxKind.Button or SandboxKind.Lever) return false;
         if(Vector3.DistanceSquared(source.Position,target.Position)>20f*20f) return false;
         Wires.Add(new SandboxWire { From=from,To=to });
@@ -108,7 +108,7 @@ internal sealed class SandboxWorld
         else if(device?.Kind==SandboxKind.Lever) device.State=!device.State;
     }
 
-    internal void Update(float dt,Action<SandboxDevice>? poweredThruster=null)
+    internal void Update(float dt,Action<SandboxDevice>? poweredThruster=null,Action<SandboxDevice>? poweredPiston=null)
     {
         foreach(SandboxDevice device in Devices)
             if(device.Kind==SandboxKind.Button && device.PressTime>0f)
@@ -159,5 +159,7 @@ internal sealed class SandboxWorld
         }
         if(poweredThruster!=null) foreach(SandboxDevice device in Devices)
             if(device.Kind==SandboxKind.Thruster && device.State) poweredThruster(device);
+        if(poweredPiston!=null) foreach(SandboxDevice device in Devices)
+            if(device.Kind==SandboxKind.Piston && device.State) poweredPiston(device);
     }
 }

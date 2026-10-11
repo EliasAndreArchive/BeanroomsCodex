@@ -191,6 +191,22 @@ using(var physics=new PhysicsBodies())
     if(System.Numerics.Vector3.Distance(first.Position,second.Position)>.98f)
         throw new Exception("Sandbox weld did not preserve the body relationship");
 }
+using(var physics=new PhysicsBodies())
+{
+    // A powered piston uses its facing direction to push the nearest free body.
+    var piston=new SandboxDevice { Id=1,Kind=SandboxKind.Piston,X=10f,Y=.36f,Z=10f,Qw=1f };
+    if(!physics.SpawnSandboxDevice(piston,[],System.Numerics.Vector3.Zero))
+        throw new Exception("Sandbox piston did not create a physical body");
+    var eye=new System.Numerics.Vector3(10f,.8f,9.4f);
+    if(!physics.Spawn(eye,System.Numerics.Vector3.UnitZ,false,[],eye))
+        throw new Exception("Could not spawn a cube in front of the piston");
+    RigidCube cube=physics.Bodies.Single(body=>body.SandboxDeviceId==0);
+    float before=cube.Velocity.Z;
+    physics.ApplyPiston(piston.Position,piston.Rotation,1f/60f,piston.Id);
+    physics.Update(1f/120f,eye,System.Numerics.Vector3.UnitZ,System.Numerics.Quaternion.Identity,[],eye);
+    if(cube.Velocity.Z<=before+0.1f)
+        throw new Exception("Powered piston did not push the cube in front of it");
+}
 {
     var sandbox=new SandboxWorld();
     sandbox.Devices.AddRange([
