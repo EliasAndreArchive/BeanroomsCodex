@@ -211,6 +211,62 @@ using(var physics=new PhysicsBodies())
     if(sandbox.Devices.Single(d=>d.Id==3).State)
         throw new Exception("Sandbox button did not release after its pulse");
 }
+{
+    // XOR/NAND/XNOR parity gates, the edge-triggered Toggle, and the Timer clock.
+    var sandbox=new SandboxWorld();
+    sandbox.Devices.AddRange([
+        new SandboxDevice { Id=1,Kind=SandboxKind.Button,X=10f,Y=.36f,Z=10f },
+        new SandboxDevice { Id=2,Kind=SandboxKind.Lever,X=11f,Y=.36f,Z=10f },
+        new SandboxDevice { Id=3,Kind=SandboxKind.Xor,X=12f,Y=.36f,Z=10f },
+        new SandboxDevice { Id=4,Kind=SandboxKind.Nand,X=13f,Y=.36f,Z=10f },
+        new SandboxDevice { Id=5,Kind=SandboxKind.Xnor,X=14f,Y=.36f,Z=10f },
+        new SandboxDevice { Id=6,Kind=SandboxKind.Toggle,X=15f,Y=.36f,Z=10f },
+        new SandboxDevice { Id=7,Kind=SandboxKind.Timer,X=16f,Y=.36f,Z=10f }
+    ]);
+    if(!sandbox.Connect(1,3)||!sandbox.Connect(2,3)||!sandbox.Connect(1,4)||!sandbox.Connect(2,4)||
+       !sandbox.Connect(1,5)||!sandbox.Connect(2,5)||!sandbox.Connect(2,6))
+        throw new Exception("New sandbox gate wires could not be connected");
+    sandbox.Update(.01f);
+    // Both inputs off: XOR false, NAND true (not-all), XNOR true (even parity).
+    if(sandbox.Devices.Single(d=>d.Id==3).State || !sandbox.Devices.Single(d=>d.Id==4).State ||
+       !sandbox.Devices.Single(d=>d.Id==5).State)
+        throw new Exception("Sandbox XOR/NAND/XNOR initial parity was wrong");
+    sandbox.Interact(2);
+    sandbox.Update(.01f);
+    // Lever only on: XOR true (odd), NAND true, XNOR false.
+    if(!sandbox.Devices.Single(d=>d.Id==3).State || !sandbox.Devices.Single(d=>d.Id==4).State ||
+       sandbox.Devices.Single(d=>d.Id==5).State)
+        throw new Exception("Sandbox XOR/NAND/XNOR parity missed a single active input");
+    sandbox.Interact(1);
+    sandbox.Update(.01f);
+    // Both on: XOR false (even), NAND false (all on), XNOR true.
+    if(sandbox.Devices.Single(d=>d.Id==3).State || sandbox.Devices.Single(d=>d.Id==4).State ||
+       !sandbox.Devices.Single(d=>d.Id==5).State)
+        throw new Exception("Sandbox XOR/NAND/XNOR parity missed two active inputs");
+    // Toggle latches on the lever's rising edge only.
+    sandbox.Update(.01f);
+    if(!sandbox.Devices.Single(d=>d.Id==6).State)
+        throw new Exception("Sandbox toggle did not latch on the rising edge");
+    sandbox.Update(.01f);
+    if(!sandbox.Devices.Single(d=>d.Id==6).State)
+        throw new Exception("Sandbox toggle flipped without a rising edge");
+    sandbox.Interact(2);
+    sandbox.Update(.01f);
+    if(!sandbox.Devices.Single(d=>d.Id==6).State)
+        throw new Exception("Sandbox toggle dropped its latch on a falling edge");
+    sandbox.Interact(2);sandbox.Interact(1);
+    sandbox.Update(.01f);
+    if(sandbox.Devices.Single(d=>d.Id==6).State)
+        throw new Exception("Sandbox toggle did not flip on the second rising edge");
+    // The timer clock free-runs and blinks at 0.5s.
+    var timer=sandbox.Devices.Single(d=>d.Id==7);
+    sandbox.Update(.25f);
+    if(timer.State) throw new Exception("Sandbox timer fired too early");
+    sandbox.Update(.3f);
+    if(!timer.State) throw new Exception("Sandbox timer did not toggle after 0.5s");
+    sandbox.Update(.5f);
+    if(timer.State) throw new Exception("Sandbox timer did not toggle back");
+}
 using(var acoustics=new VercidiumAcoustics([new RectangleF(8f,8f,4f,1f)]))
 {
     AcousticSource[] sources=
@@ -412,6 +468,37 @@ using(var game=new GameWindow())
     gameMenu.SelectSandbox(5);
     if(gameMenu.SandboxSelected!=gameMenu.SandboxItemCount-1)
         throw new Exception("Sandbox selection did not clamp to the category");
+    gameMenu.CycleSandboxCategory(2);
+    if(gameMenu.SandboxCategory!=2 || gameMenu.SandboxScroll!=0)
+        throw new Exception("Sandbox LOGIC category did not reset the scroll");
+    gameMenu.SelectSandbox(9);
+    if(gameMenu.SandboxSelected!=9 || gameMenu.SandboxScroll!=3)
+        throw new Exception("Sandbox selection did not keep the cursor in view");
+    gameMenu.SelectSandbox(-9);
+    if(gameMenu.SandboxSelected!=0 || gameMenu.SandboxScroll!=0)
+        throw new Exception("Sandbox selection did not scroll back to the top");
+    gameMenu.SelectSandbox(9);
+    gameMenu.MouseWheel(-120);
+    if(gameMenu.SandboxScroll!=3)
+        throw new Exception("Sandbox mouse wheel scrolled past the end");
+    gameMenu.MouseWheel(120);
+    if(gameMenu.SandboxScroll!=2)
+        throw new Exception("Sandbox mouse wheel did not scroll the list");
+    gameMenu.MouseWheel(-120);
+    if(gameMenu.SandboxScroll!=3)
+        throw new Exception("Sandbox mouse wheel did not scroll back down");
+    gameMenu.MouseWheel(120);
+    if(gameMenu.SandboxScroll!=2)
+        throw new Exception("Sandbox mouse wheel did not scroll up from the end");
+    gameMenu.MouseWheel(120);
+    if(gameMenu.SandboxScroll!=1)
+        throw new Exception("Sandbox mouse wheel did not keep scrolling up");
+    gameMenu.MouseWheel(120);
+    if(gameMenu.SandboxScroll!=0)
+        throw new Exception("Sandbox mouse wheel did not reach the top");
+    gameMenu.MouseWheel(-120);
+    if(gameMenu.SandboxScroll!=1)
+        throw new Exception("Sandbox mouse wheel did not scroll down from the top");
     int settingsRow=gameMenu.Selected;
     key.Invoke(game,[new Message(),Keys.Down]);
     if(gameMenu.Selected!=settingsRow)

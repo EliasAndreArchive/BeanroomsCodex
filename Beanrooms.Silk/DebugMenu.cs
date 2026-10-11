@@ -7,22 +7,27 @@ internal sealed class DebugMenu
 {
     internal bool Open, TitleScreen, SettingsFromTitle, Dithering = true, PaletteReduction = true, PostEnabled = true, AutoExposure, Bloom = true, Lights = true, Vsync = true, Dirty = true, Volumetrics = true;
     internal bool SandboxPage, SandboxEnabled, SandboxHost=true, SandboxSupported=true, WireTool, WeldTool;
-    internal int SandboxCategory, SandboxSelected;
+    internal int SandboxCategory, SandboxSelected, SandboxScroll;
     internal Action<SandboxKind>? SandboxSpawn;
     internal Action? SandboxToggle;
     static readonly SandboxKind[][] SandboxItems =
     [
         [SandboxKind.Cube,SandboxKind.GlowCube],
         [SandboxKind.Thruster,SandboxKind.Lamp],
-        [SandboxKind.Button,SandboxKind.Lever,SandboxKind.And,SandboxKind.Or,SandboxKind.Not]
+        [SandboxKind.Button,SandboxKind.Lever,SandboxKind.And,SandboxKind.Or,SandboxKind.Not,
+         SandboxKind.Xor,SandboxKind.Nand,SandboxKind.Xnor,SandboxKind.Toggle,SandboxKind.Timer]
     ];
+    internal const int SandboxRows=7, SandboxPitch=14, SandboxTop=54;
     internal SandboxKind SelectedSandboxItem => SandboxItems[SandboxCategory][SandboxSelected];
     internal int SandboxItemCount => SandboxItems[SandboxCategory].Length;
+    internal int SandboxMaxScroll => Math.Max(0,SandboxItemCount-SandboxRows);
     static readonly string[] SandboxCategories=["OBJECTS","DEVICES","LOGIC"];
     static string SandboxName(SandboxKind kind) => kind switch
     {
         SandboxKind.GlowCube=>"GLOW CUBE",SandboxKind.And=>"AND GATE",
-        SandboxKind.Or=>"OR GATE",SandboxKind.Not=>"NOT GATE",_=>kind.ToString().ToUpperInvariant()
+        SandboxKind.Or=>"OR GATE",SandboxKind.Not=>"NOT GATE",SandboxKind.Xor=>"XOR GATE",
+        SandboxKind.Nand=>"NAND GATE",SandboxKind.Xnor=>"XNOR GATE",SandboxKind.Toggle=>"TOGGLE FLIP",
+        SandboxKind.Timer=>"TIMER CLOCK",_=>kind.ToString().ToUpperInvariant()
     };
     static string SandboxDetail(SandboxKind kind) => kind switch
     {
@@ -30,24 +35,46 @@ internal sealed class DebugMenu
         SandboxKind.Thruster=>"POWER PUSHES CUBE",SandboxKind.Button=>"PULSE OUTPUT",
         SandboxKind.Lever=>"TOGGLE OUTPUT",SandboxKind.And=>"ALL INPUTS ON",
         SandboxKind.Or=>"ANY INPUT ON",SandboxKind.Not=>"INVERT INPUT",
+        SandboxKind.Xor=>"ODD PARITY",SandboxKind.Nand=>"NOT ALL INPUTS",
+        SandboxKind.Xnor=>"EVEN PARITY",SandboxKind.Toggle=>"LATCHES ON RISING EDGE",
+        SandboxKind.Timer=>"BLINKS TWICE A SECOND",
         _=>"POWERED LIGHT"
     };
     internal void SelectSandbox(int step)
     {
         int selected=Math.Clamp(SandboxSelected+step,0,SandboxItemCount-1);
-        if(selected!=SandboxSelected) { SandboxSelected=selected;Dirty=true;InteractionSound?.Invoke(); }
+        if(selected==SandboxSelected) return;
+        SandboxSelected=selected;
+        EnsureSandboxVisible();
+        Dirty=true;InteractionSound?.Invoke();
+    }
+    void EnsureSandboxVisible()
+    {
+        if(SandboxSelected<SandboxScroll) SandboxScroll=SandboxSelected;
+        else if(SandboxSelected>=SandboxScroll+SandboxRows) SandboxScroll=SandboxSelected-SandboxRows+1;
+        SandboxScroll=Math.Clamp(SandboxScroll,0,SandboxMaxScroll);
+    }
+    internal void ScrollSandbox(int direction)
+    {
+        if(direction==0) return;
+        int scroll=Math.Clamp(SandboxScroll+direction,0,SandboxMaxScroll);
+        if(scroll==SandboxScroll) return;
+        SandboxScroll=scroll;
+        if(SandboxSelected<SandboxScroll) SandboxSelected=SandboxScroll;
+        else if(SandboxSelected>=SandboxScroll+SandboxRows) SandboxSelected=SandboxScroll+SandboxRows-1;
+        Dirty=true;InteractionSound?.Invoke();
     }
     internal void CycleSandboxCategory(int step)
     {
         int category=Math.Clamp(SandboxCategory+step,0,SandboxItems.Length-1);
-        if(category!=SandboxCategory) { SandboxCategory=category;SandboxSelected=0;Dirty=true;InteractionSound?.Invoke(); }
+        if(category!=SandboxCategory) { SandboxCategory=category;SandboxSelected=0;SandboxScroll=0;Dirty=true;InteractionSound?.Invoke(); }
     }
     internal void ToggleSandbox()
     {
         FinishEditing();
         if(Open && SandboxPage) { Open=false;SandboxPage=false; }
         else { Open=true;SandboxPage=true;TitleScreen=false; }
-        SandboxCategory=0;SandboxSelected=0;Dirty=true;InteractionSound?.Invoke();
+        SandboxCategory=0;SandboxSelected=0;SandboxScroll=0;Dirty=true;InteractionSound?.Invoke();
     }
     internal int TitlePage, TitleSelected;
     internal int RenderMode = 2, ProbeQuality = 2, ProbeBounces = 4, HybridDirectSamples = 4;
@@ -347,10 +374,11 @@ internal sealed class DebugMenu
                 if(category>=0 && category<SandboxItems.Length && (x-12)%75<70)
                 { SandboxCategory=category;SandboxSelected=0;Dirty=true;InteractionSound?.Invoke();return; }
             }
-            if(x>=15 && x<305 && y>=54)
+            if(x>=15 && x<305 && y>=SandboxTop && y<SandboxTop+SandboxRows*SandboxPitch)
             {
-                int itemRow=(y-54)/14;
-                if(itemRow>=0 && itemRow<SandboxItemCount)
+                int slot=(y-SandboxTop)/SandboxPitch;
+                int itemRow=SandboxScroll+slot;
+                if(slot>=0 && slot<SandboxRows && itemRow>=0 && itemRow<SandboxItemCount)
                 {
                     SandboxSelected=itemRow;
                     SandboxKind kind=SandboxItems[SandboxCategory][SandboxSelected];
@@ -427,6 +455,10 @@ internal sealed class DebugMenu
         SetSliderFromX(dragging,x);
     }
     internal void MouseUp() => dragging = -1;
+    internal void MouseWheel(int delta)
+    {
+        if(SandboxPage) { ScrollSandbox(-Math.Sign(delta));return; }
+    }
     int TitleRowAt(int x,int y)
     {
         if(x<15 || x>=305) return -1;
@@ -976,10 +1008,11 @@ internal sealed class DebugMenu
                 PixelText(g,SandboxCategories[category],category==SandboxCategory?green:white,
                     12+category*75,17);
             SandboxKind[] items=SandboxItems[SandboxCategory];
-            const int sandboxPitch=14;
-            for(int row=0;row<items.Length;row++)
+            for(int slot=0;slot<SandboxRows;slot++)
             {
-                int y=54+row*sandboxPitch;
+                int row=SandboxScroll+slot;
+                if(row>=items.Length) break;
+                int y=SandboxTop+slot*SandboxPitch;
                 bool focused=row==SandboxSelected;
                 bool spawnable=SandboxEnabled || items[row]==SandboxKind.Cube;
                 Brush ink=spawnable?focused?green:white:unfilled;
@@ -988,6 +1021,8 @@ internal sealed class DebugMenu
                 string value=spawnable?focused?"SPAWN <":"SPAWN":"LOCKED";
                 PixelText(g,value,ink,316-value.Length*6,y+3);
             }
+            if(SandboxScroll>0) PixelText(g,"^",paleBlue,8,SandboxTop-1);
+            if(SandboxScroll<SandboxMaxScroll) PixelText(g,"v",paleBlue,8,SandboxTop+SandboxRows*SandboxPitch-3);
             PixelText(g,"CUBE COLOR",white,21,151);
             PixelText(g,"< "+CubeColors[CubeColorIndex].Name+" >",green,215,151);
             PixelText(g,"CLEAR CUBES",white,21,171);

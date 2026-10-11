@@ -134,7 +134,7 @@ Hit trace(vec3 ro, vec3 rd, float limit) {
                 } else if(kind==4) {
                     if(part==1) { halfSize=vec3(0.035,0.20,0.035);center=vec3(devicePowered(object)?0.09:-0.09,-0.01,0.0);color=vec3(0.68); }
                     if(part==2) { halfSize=vec3(0.08);center=vec3(devicePowered(object)?0.09:-0.09,0.19,0.0);color=objectColor(object); }
-                } else if(kind>=5 && kind<=7) {
+                } else if(kind>=5 && kind<=13) {
                     if(part==1) { halfSize=vec3(0.25,0.15,0.07);center=vec3(0.0,-0.04,-0.27);color=objectColor(object); }
                     if(part==2) { halfSize=vec3(0.07,0.045,0.015);center=vec3(0.0,-0.04,-0.35);color=devicePowered(object)?vec3(0.27,0.95,0.56):vec3(0.37,0.12,0.10); }
                     if(part==3) { halfSize=vec3(0.22,0.11,0.22);center.y=-0.10;color=vec3(0.14,0.17,0.21); }
