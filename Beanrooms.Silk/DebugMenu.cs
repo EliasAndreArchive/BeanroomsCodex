@@ -7,6 +7,7 @@ internal sealed class DebugMenu
 {
     internal bool Open, TitleScreen, SettingsFromTitle, Dithering = true, PaletteReduction = true, PostEnabled = true, AutoExposure, Bloom = true, Lights = true, Vsync = true, Dirty = true, Volumetrics = true;
     internal bool SandboxPage, SandboxEnabled, SandboxHost=true, SandboxSupported=true, WireTool, WeldTool;
+    internal string ToolStatus="";
     internal int SandboxCategory, SandboxSelected, SandboxScroll;
     internal Action<SandboxKind>? SandboxSpawn;
     internal Action? SandboxToggle;
@@ -1112,6 +1113,8 @@ internal sealed class DebugMenu
                 PixelText(g,"WIRE TOOL: CLICK SOURCE, THEN TARGET",green,13,225);
             else if(WeldTool)
                 PixelText(g,"WELD TOOL: CLICK TWO OBJECTS",green,13,225);
+            else if(!string.IsNullOrEmpty(ToolStatus))
+                PixelText(g,ToolStatus,green,13,225);
             foreach(var tag in PlayerTags)
             {
                 using var brush=new SolidBrush(tag.Ink);

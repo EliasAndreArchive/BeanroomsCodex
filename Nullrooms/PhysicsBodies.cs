@@ -284,15 +284,20 @@ internal sealed class PhysicsBodies : IDisposable
         MathF.Abs(a.X - b.X) < ae.X + be.X && MathF.Abs(a.Y - b.Y) < ae.Y + be.Y && MathF.Abs(a.Z - b.Z) < ae.Z + be.Z;
 
     bool SpawnBlocked(Vector3 center, float half, IReadOnlyList<RectangleF> walls, Vector3 player)
+        => SpawnBlocked(center,new Vector3(half),walls,player);
+
+    bool SpawnBlocked(Vector3 center, Vector3 extents, IReadOnlyList<RectangleF> walls, Vector3 player)
     {
-        Vector3 e = new(half);
-        if (center.X - half < RoomMin || center.X + half > RoomMax || center.Z - half < RoomMin || center.Z + half > RoomMax ||
-            center.Y - half < 0.01f || center.Y + half > Ceiling - 0.01f) return true;
+        if (center.X - extents.X < RoomMin || center.X + extents.X > RoomMax ||
+            center.Z - extents.Z < RoomMin || center.Z + extents.Z > RoomMax ||
+            center.Y - extents.Y < 0.01f || center.Y + extents.Y > Ceiling - 0.01f) return true;
         foreach (RectangleF wall in walls)
-            if (center.X + half > wall.Left && center.X - half < wall.Right && center.Z + half > wall.Top && center.Z - half < wall.Bottom) return true;
+            if (center.X + extents.X > wall.Left && center.X - extents.X < wall.Right &&
+                center.Z + extents.Z > wall.Top && center.Z - extents.Z < wall.Bottom) return true;
         foreach (RigidCube other in Bodies)
-            if (Overlap(center, e, other.Position, Extents(other))) return true;
-        return MathF.Abs(center.X - player.X) < half + 0.3f && MathF.Abs(center.Z - player.Z) < half + 0.3f && center.Y - half < 1.9f;
+            if (Overlap(center, extents, other.Position, Extents(other))) return true;
+        return MathF.Abs(center.X - player.X) < extents.X + 0.3f &&
+               MathF.Abs(center.Z - player.Z) < extents.Z + 0.3f && center.Y - extents.Y < 1.9f;
     }
 
     internal bool Spawn(Vector3 eye, Vector3 forward, bool emissive, IReadOnlyList<RectangleF> walls, Vector3 player)
@@ -321,11 +326,12 @@ internal sealed class PhysicsBodies : IDisposable
     internal bool SpawnCornerPlank(Vector3 position,float yaw,IReadOnlyList<RectangleF> walls,Vector3 player)
     {
         EnsureEnvironment(walls);
-        const float half=.32f;
-        position.Y=half+.03f;
-        if(SpawnBlocked(position,half,walls,player)) return false;
+        // A low square pallet: several visible boards share one solid Bepu body.
+        const float half=.90f, halfHeight=.11f;
+        position.Y=halfHeight+.03f;
+        if(SpawnBlocked(position,new Vector3(half,halfHeight,half),walls,player)) return false;
         Quaternion rotation=Quaternion.CreateFromAxisAngle(Vector3.UnitY,yaw);
-        var shape=new Box(half*2f,half*2f,half*2f);
+        var shape=new Box(half*2f,halfHeight*2f,half*2f);
         TypedIndex shapeIndex=simulation.Shapes.Add(in shape);
         BodyInertia inertia=shape.ComputeInertia(.7f);
         BodyHandle handle=simulation.Bodies.Add(BodyDescription.CreateDynamic(

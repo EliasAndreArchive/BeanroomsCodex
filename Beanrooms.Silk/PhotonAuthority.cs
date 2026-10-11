@@ -140,6 +140,12 @@ internal sealed class PhotonAuthority : IDisposable
                     if(sandboxEnabled&&Enum.IsDefined((SandboxKind)message.Action))
                     { SandboxDevice? d=sandbox.Spawn((SandboxKind)message.Action,new Vector3(peer.X,peer.Y,peer.Z),Look(peer.Yaw,peer.Pitch),peer.Yaw,walls);
                       if(d!=null&&!physics.SpawnSandboxDevice(d,walls,new Vector3(peer.X,peer.Y,peer.Z))) sandbox.Remove(d.Id); } break;
+                case "copy_cube":
+                    if(sandboxEnabled) physics.Spawn(new Vector3(peer.X,peer.Y,peer.Z),Look(peer.Yaw,peer.Pitch),message.Action==1,walls,new Vector3(peer.X,peer.Y,peer.Z),new Vector3(Math.Clamp(message.R,0,1),Math.Clamp(message.G,0,1),Math.Clamp(message.B,0,1))); break;
+                case "copy_device":
+                    if(sandboxEnabled&&Enum.IsDefined((SandboxKind)message.Action))
+                    { SandboxDevice? d=sandbox.Spawn((SandboxKind)message.Action,new Vector3(peer.X,peer.Y,peer.Z),Look(peer.Yaw,peer.Pitch),peer.Yaw,walls);
+                      if(d!=null&&!physics.SpawnSandboxDevice(d,walls,new Vector3(peer.X,peer.Y,peer.Z))) sandbox.Remove(d.Id); } break;
                 case "device_interact":
                     if(sandboxEnabled&&sandbox.Devices.Any(d=>d.Id==message.Action&&
                         Vector3.DistanceSquared(d.Position,new Vector3(peer.X,peer.Y,peer.Z))<6f*6f))

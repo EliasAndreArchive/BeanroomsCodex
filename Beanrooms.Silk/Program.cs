@@ -80,6 +80,9 @@ internal sealed class GameWindow : SilkForm
     SandboxWire[] networkWires=[];
     int pendingWireId;
     int pendingWeldId;
+    SandboxKind? copiedDeviceKind;
+    bool copiedCube,copiedEmissive;
+    Vector3 copiedColor;
     bool sandboxToggleKeyDown;
     bool wireToggleKeyDown,weldToggleKeyDown;
     readonly List<Vector2> activeFixtures = new();
@@ -174,7 +177,7 @@ internal sealed class GameWindow : SilkForm
         };
         menu.InteractionSound=()=>audio?.PlayClick();
         menu.HoverSound=()=>audio?.PlayHover();
-        Text = "BEANROOMS  |  WASD move  •  F cube  •  T light event  •  Tab menu  •  F11 full screen";
+        Text = "BEANROOMS  |  WASD move  •  F cube  •  Y copy  •  V place  •  T light event  •  Tab menu  •  F11 full screen";
         menu.ObjectAction = HandleObjectAction;
         menu.SandboxSpawn = SpawnSandboxItem;
         menu.SandboxToggle = ToggleSandboxPermission;
@@ -243,7 +246,7 @@ internal sealed class GameWindow : SilkForm
             if (e.KeyCode == Keys.Escape) ReleaseMouse();
         };
         KeyPress += (_, e) => { if(menu.Open && menu.EditingText) { if(menu.EditingName) menu.EditNameCharacter(e.KeyChar); else menu.EditConnectionCharacter(e.KeyChar);e.Handled=true; } };
-        KeyUp += (_, e) => { keys.Remove(e.KeyCode); if(e.KeyCode==Keys.B) sandboxToggleKeyDown=false; if(e.KeyCode==Keys.G) wireToggleKeyDown=false; if(e.KeyCode==Keys.K) weldToggleKeyDown=false; if(menu.Open) return; if(e.KeyCode==Keys.E) InteractWithDevice(); if (e.KeyCode == Keys.C) crouchToggle=!crouchToggle; if (e.KeyCode == Keys.R) Regenerate(); if (e.KeyCode == Keys.F) HandleObjectAction(0); if (e.KeyCode == Keys.T) TriggerLightEvent(); if (e.KeyCode == Keys.P) { menu.RenderMode=menu.RenderMode==1?2:1; menu.Dirty=true; } if (e.KeyCode == Keys.D1) { menu.ResolutionIndex=0; menu.Dirty=true; } if (e.KeyCode == Keys.D2) { menu.ResolutionIndex=1; menu.Dirty=true; } if (e.KeyCode == Keys.D3) { menu.ResolutionIndex=2; menu.Dirty=true; } if(menu.MovementControlsWritable && e.KeyCode==Keys.OemOpenBrackets) { menu.WalkSpeed=Math.Max(1f,menu.WalkSpeed-0.4f); menu.Dirty=true; } if(menu.MovementControlsWritable && e.KeyCode==Keys.OemCloseBrackets) { menu.WalkSpeed=Math.Min(8f,menu.WalkSpeed+0.4f); menu.Dirty=true; } if(e.KeyCode==Keys.OemMinus) { menu.MouseSensitivity=Math.Max(0.0004f,menu.MouseSensitivity*0.85f); menu.Dirty=true; } if(e.KeyCode==Keys.Oemplus) { menu.MouseSensitivity=Math.Min(0.005f,menu.MouseSensitivity*1.15f); menu.Dirty=true; } };
+        KeyUp += (_, e) => { keys.Remove(e.KeyCode); if(e.KeyCode==Keys.B) sandboxToggleKeyDown=false; if(e.KeyCode==Keys.G) wireToggleKeyDown=false; if(e.KeyCode==Keys.K) weldToggleKeyDown=false; if(menu.Open) return; if(e.KeyCode==Keys.E) InteractWithDevice(); if(e.KeyCode==Keys.Y) CopyAimedBlock(); if(e.KeyCode==Keys.V) PlaceCopiedBlock(); if (e.KeyCode == Keys.C) crouchToggle=!crouchToggle; if (e.KeyCode == Keys.R) Regenerate(); if (e.KeyCode == Keys.F) HandleObjectAction(0); if (e.KeyCode == Keys.T) TriggerLightEvent(); if (e.KeyCode == Keys.P) { menu.RenderMode=menu.RenderMode==1?2:1; menu.Dirty=true; } if (e.KeyCode == Keys.D1) { menu.ResolutionIndex=0; menu.Dirty=true; } if (e.KeyCode == Keys.D2) { menu.ResolutionIndex=1; menu.Dirty=true; } if (e.KeyCode == Keys.D3) { menu.ResolutionIndex=2; menu.Dirty=true; } if(menu.MovementControlsWritable && e.KeyCode==Keys.OemOpenBrackets) { menu.WalkSpeed=Math.Max(1f,menu.WalkSpeed-0.4f); menu.Dirty=true; } if(menu.MovementControlsWritable && e.KeyCode==Keys.OemCloseBrackets) { menu.WalkSpeed=Math.Min(8f,menu.WalkSpeed+0.4f); menu.Dirty=true; } if(e.KeyCode==Keys.OemMinus) { menu.MouseSensitivity=Math.Max(0.0004f,menu.MouseSensitivity*0.85f); menu.Dirty=true; } if(e.KeyCode==Keys.Oemplus) { menu.MouseSensitivity=Math.Min(0.005f,menu.MouseSensitivity*1.15f); menu.Dirty=true; } };
         KeyUp += (_, e) => {
             if(menu.Open) return;
             if(e.KeyCode==Keys.M) { menu.MonsterDebug=!menu.MonsterDebug;menu.Dirty=true; }
@@ -1031,6 +1034,69 @@ internal sealed class GameWindow : SilkForm
         pendingWeldId=0;
     }
 
+    void CopyAimedBlock()
+    {
+        if(!menu.SandboxEnabled) return;
+        SandboxDevice? device=AimedDevice();
+        if(device!=null)
+        {
+            copiedDeviceKind=device.Kind;
+            copiedCube=false;
+            menu.ToolStatus=$"COPIED {device.Kind.ToString().ToUpperInvariant()} • V PLACE";
+            menu.Dirty=true;
+            return;
+        }
+        int id=AimedGrabbable();
+        if(id==0) return;
+        if(network.Connected)
+        {
+            CubeState? cube=networkCubes.FirstOrDefault(item=>item.Id==id);
+            if(cube==null||cube.Plank) return;
+            copiedCube=true;copiedEmissive=cube.Emissive;copiedColor=new Vector3(cube.R,cube.G,cube.B);copiedDeviceKind=null;
+        }
+        else
+        {
+            RigidCube? cube=physics.Bodies.FirstOrDefault(item=>item.Id==id);
+            if(cube==null||cube.Plank||cube.SandboxDeviceId!=0) return;
+            copiedCube=true;copiedEmissive=cube.Emissive;copiedColor=cube.Color;copiedDeviceKind=null;
+        }
+        menu.ToolStatus=$"COPIED {(copiedEmissive?"GLOW ":"")}CUBE • V PLACE";
+        menu.Dirty=true;
+    }
+
+    void PlaceCopiedBlock()
+    {
+        if(!menu.SandboxEnabled) return;
+        if(copiedDeviceKind is SandboxKind kind)
+        {
+            if(network.Connected)
+            {
+                SendPlayerState();
+                network.Send(new NetMessage { Type="copy_device",Action=(int)kind });
+            }
+            else
+            {
+                ViewPose(out Vector3 eye,out Vector3 forward);
+                SandboxDevice? device=localSandbox.Spawn(kind,eye,forward,smoothYaw+motion.YawOffset,boxes);
+                if(device!=null&&!physics.SpawnSandboxDevice(device,boxes,camera)) localSandbox.Remove(device.Id);
+            }
+            return;
+        }
+        if(!copiedCube) return;
+        if(network.Connected)
+        {
+            SendPlayerState();
+            network.Send(new NetMessage { Type="copy_cube",Action=copiedEmissive?1:0,R=copiedColor.X,G=copiedColor.Y,B=copiedColor.Z });
+        }
+        else
+        {
+            ViewPose(out Vector3 eye,out Vector3 forward);
+            physics.Spawn(eye,forward,copiedEmissive,boxes,camera,copiedColor);
+            menu.BodyCount=physics.Bodies.Count(body=>body.SandboxDeviceId==0);
+            menu.Dirty=true;
+        }
+    }
+
     void TriggerLightEvent()
     {
         if(network.Connected)
@@ -1746,7 +1812,7 @@ internal sealed class GameWindow : SilkForm
             fpsValue=(int)Math.Round(reportFrames/elapsed);
             frameMs=(float)(elapsed*1000.0/Math.Max(reportFrames,1));
             menu.FpsValue=fpsValue;
-            Text=$"BEANROOMS  |  {(network.Connected?$"{(remoteServer?"ONLINE":"LOCAL")} {remotePositions.Count+1} PLAYERS  •  ":"")}{menu.RenderModeName}  •  {width}×{height}  •  {fpsValue} FPS  •  WASD move  •  F cube  •  T flicker  •  LMB carry  •  Tab menu  •  F11 full screen";
+            Text=$"BEANROOMS  |  {(network.Connected?$"{(remoteServer?"ONLINE":"LOCAL")} {remotePositions.Count+1} PLAYERS  •  ":"")}{menu.RenderModeName}  •  {width}×{height}  •  {fpsValue} FPS  •  WASD move  •  F cube  •  Y copy  •  V place  •  T flicker  •  LMB carry  •  Tab menu  •  F11 full screen";
             reportFrames=0; reportTime=watch.Elapsed.TotalSeconds;
         }
         if(watch.Elapsed.TotalSeconds-lastDebugTime>=0.2)

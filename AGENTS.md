@@ -8,7 +8,7 @@ Beanrooms is a .NET 8 desktop game. The main client uses Silk.NET/GLFW for its w
 
 Beanrooms is a low resolution first person Backrooms exploration sandbox. Players walk procedural fluorescent rooms, avoid the monster, carry and throw physical objects, and build simple contraptions when the host enables sandbox mode. The visual style is deliberately pixelated and dithered, with path traced room lighting, while the world objects should still feel solid, readable, and physical.
 
-Every interactive object must have a clear physical purpose: it should be visible in the ray traced renderer, receive a Bepu body when it is grabbable, and replicate through the online authority. Decorative objects are allowed only when they cannot be mistaken for something the player can use. Seeded corner planks are grabbable wooden props and must be created from the current world seed by solo, Photon, and legacy-server paths.
+Every interactive object must have a clear physical purpose: it should be visible in the ray traced renderer, receive a Bepu body when it is grabbable, and replicate through the online authority. Decorative objects are allowed only when they cannot be mistaken for something the player can use. Seeded corner pallets are grabbable wooden platforms made of several boards and must be created from the current world seed by solo, Photon, and legacy-server paths.
 
 ## Project map
 
@@ -59,7 +59,7 @@ Every interactive object must have a clear physical purpose: it should be visibl
 - Preserve deterministic world setup: any seed-generated object must be derived from `WorldLayout` and spawned by `GameWindow.GenerateWorld`, `PhotonAuthority.ResetWorld`, and `LocalServer.ResetWorld`.
 - Add a regression check in `Beanrooms.PortChecks` for every new network rule, device state machine, world prop, or input edge case. Use the live `--photon` check when changing Photon connection, event, room, authority, or snapshot behavior.
 - Keep rendering data compact. `UploadObjects` packs one object into three RGBA texels, and `pathtrace.frag` decodes that layout. Update both sides together whenever an object flag or shape type changes.
-- Keep input controls consistent: B opens the sandbox browser only when sandbox is enabled; G toggles wires; K toggles welding; left click grabs or selects a tool target. Menu text should describe player-facing behavior, not implementation details.
+- Keep input controls consistent: B opens the sandbox browser only when sandbox is enabled; G toggles wires; K toggles welding; Y copies an aimed sandbox cube or device; V places the copy; left click grabs or selects a tool target. Menu text should describe player-facing behavior, not implementation details.
 - Preserve third party licensing. Vercidium and Photon files are local dependencies; retain their license and documentation files when upgrading either SDK.
 
 ## Build and checks

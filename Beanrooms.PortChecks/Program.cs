@@ -75,7 +75,8 @@ using(var photonAuthority=new PhotonAuthority([4,9]))
     using var physics=new PhysicsBodies();
     foreach(var plank in WorldLayout.CornerPlanks(82317,layout.Walls))
         physics.SpawnCornerPlank(plank.Position,plank.Yaw,layout.Walls,new System.Numerics.Vector3(96f,1.68f,96f));
-    if(!physics.Bodies.Any(body=>body.Plank)) throw new Exception("Seeded world did not place any corner planks");
+    RigidCube? pallet=physics.Bodies.FirstOrDefault(body=>body.Plank);
+    if(pallet==null || pallet.HalfSize<.89f) throw new Exception("Seeded world did not place a full-size corner pallet");
 }
 foreach(string asset in new[]{"wall.png","floor.png","ceiling.png","beanface.png","eye.png"})
 {
@@ -720,5 +721,21 @@ if(args.Contains("--photon"))
     for(int i=0;i<60;i++) { first.Service(1f/60f);second.Service(1f/60f);Thread.Sleep(16); }
     if(!host.Snapshot().SandboxEnabled||!guest.Snapshot().SandboxEnabled)
         throw new Exception("Photon room master accepted a guest sandbox toggle");
-    Console.WriteLine("PASS: Photon Realtime room, authoritative snapshots, and sandbox permissions");
+    int cubesBefore=host.Snapshot().Cubes.Length;
+    PlayerState spawn=host.Snapshot().Players.First(player=>player.Id==host.Id);
+    // Try each cardinal direction from the authoritative player's clear spawn;
+    // one direction is guaranteed to have space in a generated room.
+    foreach(float copyYaw in new[]{0f,MathF.PI*.5f,MathF.PI,MathF.PI*1.5f})
+    {
+        host.Send(new NetMessage { Type="state",X=spawn.X,Y=spawn.Y,Z=spawn.Z,Yaw=copyYaw,Pitch=0f });
+        host.Send(new NetMessage { Type="copy_cube",Action=0,R=.18f,G=.42f,B=.73f });
+        for(int i=0;i<12;i++) { first.Service(1f/60f);second.Service(1f/60f);Thread.Sleep(16); }
+        if(host.Snapshot().Cubes.Length>cubesBefore) break;
+    }
+    deadline=DateTime.UtcNow.AddSeconds(5);
+    while(!guest.Snapshot().Cubes.Any(cube=>MathF.Abs(cube.R-.18f)<.01f&&MathF.Abs(cube.G-.42f)<.01f&&MathF.Abs(cube.B-.73f)<.01f)&&DateTime.UtcNow<deadline)
+    { first.Service(1f/60f);second.Service(1f/60f);Thread.Sleep(16); }
+    if(host.Snapshot().Cubes.Length<=cubesBefore || !guest.Snapshot().Cubes.Any(cube=>MathF.Abs(cube.R-.18f)<.01f&&MathF.Abs(cube.G-.42f)<.01f&&MathF.Abs(cube.B-.73f)<.01f))
+        throw new Exception("Photon sandbox copy cube did not replicate");
+    Console.WriteLine("PASS: Photon Realtime room, authoritative snapshots, sandbox permissions, and copied cubes");
 }

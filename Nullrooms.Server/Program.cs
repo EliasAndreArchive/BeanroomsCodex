@@ -329,6 +329,23 @@ internal sealed class LocalServer : IDisposable
                             sandbox.Remove(device.Id);
                     }
                     break;
+                case "copy_cube":
+                    if(sandboxEnabled)
+                    {
+                        Vector3 eye=new(peer.X,peer.Y,peer.Z);
+                        physics.Spawn(eye,LookDirection(peer.Yaw,peer.Pitch),message.Action==1,walls,eye,
+                            new Vector3(Math.Clamp(message.R,0f,1f),Math.Clamp(message.G,0f,1f),Math.Clamp(message.B,0f,1f)));
+                    }
+                    break;
+                case "copy_device":
+                    if(sandboxEnabled && Enum.IsDefined((SandboxKind)message.Action))
+                    {
+                        SandboxDevice? device=sandbox.Spawn((SandboxKind)message.Action,new Vector3(peer.X,peer.Y,peer.Z),
+                            LookDirection(peer.Yaw,peer.Pitch),peer.Yaw,walls);
+                        if(device!=null && !physics.SpawnSandboxDevice(device,walls,new Vector3(peer.X,peer.Y,peer.Z)))
+                            sandbox.Remove(device.Id);
+                    }
+                    break;
                 case "device_interact":
                     if(sandboxEnabled && sandbox.Devices.Any(d=>d.Id==message.Action &&
                         Vector3.DistanceSquared(d.Position,new Vector3(peer.X,peer.Y,peer.Z))<6f*6f))

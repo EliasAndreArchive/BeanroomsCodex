@@ -122,10 +122,11 @@ internal static class WorldLayout
         foreach(RectangleF wall in walls)
         {
             if(rng.NextDouble()>.075) continue;
-            float x=rng.Next(2)==0?wall.Left-.62f:wall.Right+.62f;
-            float z=rng.Next(2)==0?wall.Top-.62f:wall.Bottom+.62f;
-            if(x<4.5f||x>187.5f||z<4.5f||z>187.5f) continue;
-            yield return (new Vector3(x,.35f,z),(float)(rng.NextDouble()*MathF.PI));
+            // Keep the 1.8 metre pallet just clear of the wall at a selected wall corner.
+            float x=rng.Next(2)==0?wall.Left-1.02f:wall.Right+1.02f;
+            float z=rng.Next(2)==0?wall.Top-1.02f:wall.Bottom+1.02f;
+            if(x<4.95f||x>187.05f||z<4.95f||z>187.05f) continue;
+            yield return (new Vector3(x,.14f,z),(float)(rng.NextDouble()*MathF.PI));
         }
     }
 }

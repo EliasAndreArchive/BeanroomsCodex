@@ -11,7 +11,7 @@ internal enum Keys
 {
     None,A,B,Back,C,ControlKey,D,D1,D2,D3,Delete,Down,E,Enter,Escape,F,F11,G,H,
     K,LControlKey,Left,LShiftKey,M,OemCloseBrackets,OemMinus,OemOpenBrackets,Oemplus,
-    P,Q,R,RControlKey,Right,RShiftKey,S,ShiftKey,Space,T,Tab,Up,V,W,X
+    P,Q,R,RControlKey,Right,RShiftKey,S,ShiftKey,Space,T,Tab,Up,V,W,X,Y
 }
 internal sealed class KeyEventArgs(Keys key,bool control) : EventArgs
 {
@@ -171,7 +171,7 @@ internal abstract class SilkForm : IDisposable
     {
         Key.A=>Keys.A,Key.B=>Keys.B,Key.C=>Keys.C,Key.D=>Keys.D,Key.E=>Keys.E,
         Key.F=>Keys.F,Key.G=>Keys.G,Key.H=>Keys.H,Key.K=>Keys.K,Key.M=>Keys.M,Key.P=>Keys.P,Key.Q=>Keys.Q,
-        Key.R=>Keys.R,Key.S=>Keys.S,Key.T=>Keys.T,Key.V=>Keys.V,Key.W=>Keys.W,Key.X=>Keys.X,
+        Key.R=>Keys.R,Key.S=>Keys.S,Key.T=>Keys.T,Key.V=>Keys.V,Key.W=>Keys.W,Key.X=>Keys.X,Key.Y=>Keys.Y,
         Key.Number1=>Keys.D1,Key.Number2=>Keys.D2,Key.Number3=>Keys.D3,
         Key.Backspace=>Keys.Back,Key.Delete=>Keys.Delete,Key.Down=>Keys.Down,
         Key.Enter=>Keys.Enter,Key.Escape=>Keys.Escape,Key.F11=>Keys.F11,
