@@ -7,6 +7,22 @@ internal sealed class DebugMenu
 {
     internal bool Open, TitleScreen, SettingsFromTitle, Dithering = true, PaletteReduction = true, PostEnabled = true, AutoExposure, Bloom = true, Lights = true, Vsync = true, Dirty = true, Volumetrics = true;
     internal bool SandboxPage, PonderPage, SandboxEnabled, SandboxHost=true, SandboxSupported=true, WireTool, WeldTool;
+    internal bool ChickenControlVisible;
+    internal string[] ChickenTargetOptions=["ALL PLAYERS"];
+    internal int ChickenTargetIndex;
+    internal Action<int>? ChickenTargetAction;
+
+    internal void SetChickenTargets(PlayerState[] players)
+    {
+        var options=new List<string> { "ALL PLAYERS" };
+        foreach(PlayerState player in players.OrderBy(player=>player.Id))
+            options.Add(string.IsNullOrWhiteSpace(player.Name)?$"PLAYER {player.Id}":player.Name);
+        string current=ChickenTargetOptions.Length>0?ChickenTargetOptions[Math.Clamp(ChickenTargetIndex,0,ChickenTargetOptions.Length-1)]:"ALL PLAYERS";
+        ChickenTargetOptions=options.ToArray();
+        ChickenTargetIndex=Math.Max(0,Array.IndexOf(ChickenTargetOptions,current));
+        if(ChickenTargetIndex<0) ChickenTargetIndex=0;
+        Dirty=true;
+    }
     internal int PonderStep;
     internal string ToolStatus="";
     internal int SandboxCategory, SandboxSelected, SandboxScroll;
@@ -214,7 +230,7 @@ internal sealed class DebugMenu
         new[] { "PLAYER NAME", "BEAN COLOR", "RED", "GREEN", "BLUE", "PHOTON REGION", "JOIN KEY", "CONNECT", "DISCONNECT", "CONNECTION", "PLAYER ID", "PLAYERS", "ROLE" },
         new[] { "POST FX", "TONEMAP", "EXPOSURE", "AUTO EXPOSURE", "BRIGHTEN SPEED", "DARKEN SPEED", "BLOOM", "BLOOM STRENGTH", "BLOOM THRESHOLD", "BLOOM RADIUS" },
         new[] { "MINOR FLICKER", "MINOR INTERVAL", "MINOR CHANCE", "MINOR DURATION", "RANDOM EVENTS", "EVENT INTERVAL", "EVENT LENGTH", "EVENT SPEED MIN", "EVENT SPEED MAX", "EVENT OFF CHANCE", "CHASE FLICKER", "CHASE FOG", "CHASE FOG MAX", "FOG RISE", "FOG FALL", "CHASE RED", "CHASE RED CHANCE", "BLACKOUT CHANCE" },
-        new[] { "RESUME", "LEAVE MULTIPLAYER", "MAIN MENU", "QUIT GAME", "CONNECTION", "PLAYERS", "ROLE", "SANDBOX MODE" }
+        new[] { "RESUME", "LEAVE MULTIPLAYER", "MAIN MENU", "QUIT GAME", "CONNECTION", "PLAYERS", "ROLE", "SANDBOX MODE", "CHICKEN TARGET" }
     };
 
     internal void Toggle()
@@ -358,7 +374,8 @@ internal sealed class DebugMenu
             if(next!=TitleSelected) InteractionSound?.Invoke();
             TitleSelected=next;Dirty=true;return;
         }
-        int selected=Math.Clamp(Selected + step, 0, Labels[Page].Length - 1);
+        int max=Page==9&&!ChickenControlVisible?7:Labels[Page].Length-1;
+        int selected=Math.Clamp(Selected + step, 0, max);
         if(selected!=Selected) InteractionSound?.Invoke(); Selected=selected; Dirty=true;
     }
     internal void AdjustSelected(int direction)
@@ -670,6 +687,11 @@ internal sealed class DebugMenu
             // The server validates the sender. Do not use a stale client-side host
             // flag to prevent a host from issuing the request.
             if(row==7 && (!NetworkConnected || SandboxSupported)) SandboxToggle?.Invoke();
+            else if(row==8 && ChickenControlVisible)
+            {
+                ChickenTargetIndex=(ChickenTargetIndex+direction+ChickenTargetOptions.Length)%ChickenTargetOptions.Length;
+                ChickenTargetAction?.Invoke(ChickenTargetIndex);
+            }
             else if(row<4) SessionAction?.Invoke(row);
             else return;
         }
@@ -744,6 +766,7 @@ internal sealed class DebugMenu
             5 => NetworkConnected ? NetworkPlayers.ToString() : "1",
             6 => NetworkConnected ? (NetworkId==NetworkHost ? "HOST" : "GUEST") : "SOLO",
             7 => NetworkConnected&&!SandboxSupported ? "SERVER UPDATE REQUIRED" : SandboxEnabled ? "ON" : "OFF",
+            8 => ChickenControlVisible ? ChickenTargetOptions[Math.Clamp(ChickenTargetIndex,0,ChickenTargetOptions.Length-1)] : "",
             _ => ""
         };
         if(Page == 8) return row switch
@@ -1141,6 +1164,7 @@ internal sealed class DebugMenu
                 int y = 54 + row * RowPitch;
                 int textOffset = Page is 1 or 8 ? 1 : 3;
                 bool focused=row==Selected;
+                if(Page==9&&row==8&&!ChickenControlVisible) continue;
                 bool locked=Page==5&&!MonsterControlsWritable ||
                     Page==8&&!FlickerControlsWritable ||
                     Page==2&&!MovementControlsWritable ||

@@ -183,6 +183,15 @@ internal sealed class GameWindow : SilkForm
         menu.ObjectAction = HandleObjectAction;
         menu.SandboxSpawn = SpawnSandboxItem;
         menu.SandboxToggle = ToggleSandboxPermission;
+        menu.ChickenTargetAction = index =>
+        {
+            if(network.Connected && network.Id==menu.NetworkHost)
+            {
+                PlayerState[] players=network.Snapshot().Players.OrderBy(player=>player.Id).ToArray();
+                int target=index<=0?0:index-1<players.Length?players[index-1].Id:0;
+                network.Send(new NetMessage { Type="chicken_target",Action=target });
+            }
+        };
         ClientSize = new Size(960, 720);
         string? localSide=Environment.GetCommandLineArgs().Skip(1).FirstOrDefault(arg=>arg is "--local-left" or "--local-right");
         launchFullscreen=localSide==null;
@@ -1301,6 +1310,8 @@ internal sealed class GameWindow : SilkForm
             { menu.SandboxEnabled=snapshot.SandboxEnabled;menu.SandboxHost=sandboxHost;
                 menu.SandboxSupported=sandboxSupported;menu.Dirty=true; }
             int count=snapshot.Players.Length;
+            menu.SetChickenTargets(snapshot.Players);
+            menu.ChickenControlVisible=!network.Connected || sandboxHost;
             if(!menu.NetworkConnected || menu.NetworkId!=network.Id || menu.NetworkHost!=hostId || menu.NetworkPlayers!=count)
             { menu.NetworkConnected=true;menu.NetworkId=network.Id;menu.NetworkHost=hostId;menu.NetworkPlayers=count;menu.Dirty=true; }
             bool writable=sandboxHost;

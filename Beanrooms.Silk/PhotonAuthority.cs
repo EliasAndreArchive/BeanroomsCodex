@@ -22,6 +22,7 @@ internal sealed class PhotonAuthority : IDisposable
     int lastSandboxSignature=int.MinValue;
     ChickenState chicken=new();
     float chickenClock, chickenNext=Random.Shared.Next(120,301);
+    int chickenTargetId;
 
     internal PhotonAuthority(IEnumerable<int> playerIds)
     {
@@ -124,7 +125,8 @@ internal sealed class PhotonAuthority : IDisposable
 
     void SpawnChicken()
     {
-        PhotonPeer viewer=peers.Values.OrderBy(p=>p.Id).First();
+        PhotonPeer viewer=(chickenTargetId!=0&&peers.TryGetValue(chickenTargetId,out PhotonPeer? selected))
+            ? selected : peers.Values.OrderBy(p=>p.Id).First();
         Vector3 forward=Look(viewer.Yaw,0f);
         Vector3 right=new(-forward.Z,0f,forward.X);
         Vector3 center=new Vector3(viewer.X,0.58f,viewer.Z)+forward*6f;
@@ -180,6 +182,9 @@ internal sealed class PhotonAuthority : IDisposable
                     physics.Spawn(new Vector3(peer.X,peer.Y,peer.Z),Look(peer.Yaw,peer.Pitch),message.Action==1,walls,new Vector3(peer.X,peer.Y,peer.Z),new Vector3(Math.Clamp(message.R,0,1),Math.Clamp(message.G,0,1),Math.Clamp(message.B,0,1)),
                         Enum.IsDefined(message.Material)?message.Material:PhysicsMaterial.Wood); break;
                 case "sandbox_toggle": if(IsHost(peer.Id)) sandboxEnabled=!sandboxEnabled; break;
+                case "chicken_target":
+                    if(IsHost(peer.Id)) chickenTargetId=message.Action>0&&peers.ContainsKey(message.Action)?message.Action:0;
+                    break;
                 case "device_spawn":
                     if(sandboxEnabled&&Enum.IsDefined((SandboxKind)message.Action))
                     { SandboxDevice? d=sandbox.Spawn((SandboxKind)message.Action,new Vector3(peer.X,peer.Y,peer.Z),Look(peer.Yaw,peer.Pitch),peer.Yaw,walls);
