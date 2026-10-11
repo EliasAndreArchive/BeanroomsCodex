@@ -24,7 +24,7 @@ internal interface INetClient : IDisposable
     CubeImpactEvent[] ConsumeCubeImpacts();
     (PlayerState[] Players, CubeState[] Cubes, MonsterState? Monster,
         MonsterTuning? MonsterTuning,FlickerTuning? FlickerTuning,int HostId,
-        SandboxDevice[] Devices,SandboxWire[] Wires,bool SandboxEnabled) Snapshot();
+        SandboxDevice[] Devices,SandboxWire[] Wires,CableSegmentState[] Cables,bool SandboxEnabled) Snapshot();
 }
 
 internal sealed class LocalNetClient : INetClient
@@ -52,6 +52,7 @@ internal sealed class LocalNetClient : INetClient
     FlickerTuning? flickerTuning;
     SandboxDevice[] devices=[];
     SandboxWire[] wires=[];
+    CableSegmentState[] cables=[];
     bool sandboxEnabled;
     int id, connected, hostId, protocolVersion;
     string status="OFFLINE";
@@ -194,6 +195,7 @@ internal sealed class LocalNetClient : INetClient
                 monsterTuning=message.MonsterTuning;flickerTuning=message.FlickerTuning;
                 hostId=message.HostId;
                 if(message.DevicesChanged||message.Devices.Length>0||message.Wires.Length>0) { devices=message.Devices;wires=message.Wires; }
+                cables=message.Cables;
                 sandboxEnabled=message.SandboxEnabled;
                 foreach(CubeImpactEvent impact in message.CubeImpacts) pendingCubeImpacts.Enqueue(impact);
                 while(pendingCubeImpacts.Count>128) pendingCubeImpacts.Dequeue();
@@ -283,9 +285,9 @@ internal sealed class LocalNetClient : INetClient
 
     public (PlayerState[] Players, CubeState[] Cubes, MonsterState? Monster,
         MonsterTuning? MonsterTuning,FlickerTuning? FlickerTuning,int HostId,
-        SandboxDevice[] Devices,SandboxWire[] Wires,bool SandboxEnabled) Snapshot()
+        SandboxDevice[] Devices,SandboxWire[] Wires,CableSegmentState[] Cables,bool SandboxEnabled) Snapshot()
     {
-        lock(stateLock) return (players, cubes, monster, monsterTuning, flickerTuning,hostId,devices,wires,sandboxEnabled);
+        lock(stateLock) return (players, cubes, monster, monsterTuning, flickerTuning,hostId,devices,wires,cables,sandboxEnabled);
     }
 
     public void Dispose()

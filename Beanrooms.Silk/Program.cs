@@ -78,6 +78,7 @@ internal sealed class GameWindow : SilkForm
     readonly SandboxWorld localSandbox = new();
     SandboxDevice[] networkDevices=[];
     SandboxWire[] networkWires=[];
+    CableSegmentState[] networkCables=[];
     int pendingWireId;
     int pendingWeldId;
     SandboxKind? copiedDeviceKind;
@@ -111,6 +112,7 @@ internal sealed class GameWindow : SilkForm
     GameAudio? audio;
     double lastSpawnSound=double.NegativeInfinity;
     readonly PhysicsBodies physics = new();
+    readonly PhysicsBodies cablePreview = new();
     int[] cubeVisualIds = [];
     double[] cubeVisualBirth = [];
     float[] objectTexels = [];
@@ -215,7 +217,7 @@ internal sealed class GameWindow : SilkForm
             }
             if(!menu.Open && e.KeyCode==Keys.G)
             {
-                if(!wireToggleKeyDown) { wireToggleKeyDown=true;menu.WireTool=!menu.WireTool;menu.WeldTool=false;pendingWireId=0;menu.Dirty=true; }
+                if(!wireToggleKeyDown) { wireToggleKeyDown=true;menu.WireTool=!menu.WireTool;menu.WeldTool=false;pendingWireId=0;cablePreview.Clear();menu.Dirty=true; }
                 e.Handled=true;return;
             }
             if(!menu.Open && e.KeyCode==Keys.K)
@@ -272,7 +274,7 @@ internal sealed class GameWindow : SilkForm
         MouseUp += (_, e) => { menu.MouseUp(); if(e.Button==MouseButtons.Right) rotatingHeld=false; if(e.Button==MouseButtons.Left) { if(network.Connected) network.Send(new NetMessage { Type="release" }); else physics.Release(); networkHolding=false;networkHeldId=0;grabYaw=grabPitch=0f; } };
         Activated += (_, _) => { if(ready && wantsCapture) BeginInvoke(new Action(CaptureMouse)); };
         Deactivate += (_, _) => { networkHolding=false;rotatingHeld=false; network.Send(new NetMessage { Type="release" }); physics.Release(); SuspendMouse(); };
-        FormClosed += (_, _) => { audio?.Dispose(); network.Dispose(); physics.Dispose(); ReleaseMouse(); };
+        FormClosed += (_, _) => { audio?.Dispose(); network.Dispose(); physics.Dispose();cablePreview.Dispose(); ReleaseMouse(); };
     }
 
     protected override bool ProcessCmdKey(ref Message msg, Keys keyData)
@@ -553,7 +555,14 @@ internal sealed class GameWindow : SilkForm
         RigidCube[] localCubes=network.Connected?[]:physics.Bodies.Where(body=>body.SandboxDeviceId==0).ToArray();
         int cubeCount=network.Connected?networkCubes.Length:localCubes.Length;
         SandboxDevice[] devices=network.Connected?networkDevices:localSandbox.Devices.ToArray();
-        int bodyCount=cubeCount+devices.Length;
+        CableSegmentState[] cables=program==probeProgram?[]:
+            (network.Connected?networkCables:physics.CableSegments())
+            .Concat(pendingWireId!=0?cablePreview.CableSegments():[])
+            .Where(segment=>(segment.B-segment.A).LengthSquared()>.0001f &&
+                Vector3.DistanceSquared((segment.A+segment.B)*.5f,camera)<30f*30f)
+            .OrderBy(segment=>Vector3.DistanceSquared((segment.A+segment.B)*.5f,camera))
+            .Take(64).ToArray();
+        int bodyCount=cubeCount+devices.Length+cables.Length;
         if(cubeVisualIds.Length<cubeCount)
         {
             Array.Resize(ref cubeVisualIds,cubeCount);
@@ -600,6 +609,8 @@ internal sealed class GameWindow : SilkForm
             texels[j+4]=q.X;texels[j+5]=q.Y;texels[j+6]=q.Z;texels[j+7]=q.W;
             Vector3 color=device.Kind switch
             {
+                SandboxKind.Battery=>new(0.24f,0.31f,0.36f),
+                SandboxKind.Generator=>new(0.45f,0.42f,0.28f),
                 SandboxKind.Thruster=>new(0.55f,0.62f,0.68f),
                 SandboxKind.Button=>new(0.75f,0.19f,0.12f),
                 SandboxKind.Lever=>new(0.65f,0.68f,0.62f),
@@ -620,6 +631,17 @@ internal sealed class GameWindow : SilkForm
             };
             texels[j+8]=color.X;texels[j+9]=color.Y;texels[j+10]=color.Z;
             texels[j+11]=(int)device.Kind+2+(device.State?0.5f:0f);
+        }
+        for(int i=0;i<cables.Length;i++)
+        {
+            CableSegmentState segment=cables[i];
+            Vector3 delta=segment.B-segment.A;
+            Quaternion rotation=PhysicsBodies.CableRotation(delta);
+            Vector3 center=(segment.A+segment.B)*.5f;
+            int j=(cubeCount+devices.Length+i)*12;
+            texels[j]=center.X;texels[j+1]=center.Y;texels[j+2]=center.Z;texels[j+3]=delta.Length()*.5f;
+            texels[j+4]=rotation.X;texels[j+5]=rotation.Y;texels[j+6]=rotation.Z;texels[j+7]=rotation.W;
+            texels[j+8]=.012f;texels[j+9]=.013f;texels[j+10]=.013f;texels[j+11]=-2f;
         }
         int textureUnit=program==probeProgram?4:9;
         Bind(textureUnit,objectTexture);
@@ -681,7 +703,7 @@ internal sealed class GameWindow : SilkForm
     {
         probeDirty=true;
         physics.Clear();
-        localSandbox.Clear();networkDevices=[];networkWires=[];pendingWireId=0;pendingWeldId=0;
+        localSandbox.Clear();networkDevices=[];networkWires=[];networkCables=[];pendingWireId=0;cablePreview.Clear();pendingWeldId=0;
         var layout=WorldLayout.Generate(seed);
         grid=layout.Grid;
         boxes.Clear();
@@ -1038,11 +1060,35 @@ internal sealed class GameWindow : SilkForm
     {
         if(!menu.SandboxEnabled) return;
         SandboxDevice? device=AimedDevice();
-        if(device==null) { pendingWireId=0;return; }
-        if(pendingWireId==0) { pendingWireId=device.Id;return; }
+        if(device==null) { pendingWireId=0;cablePreview.Clear();return; }
+        if(pendingWireId==0) { pendingWireId=device.Id;cablePreview.Clear();return; }
         if(network.Connected) network.Send(new NetMessage { Type="wire",FromId=pendingWireId,ToId=device.Id });
-        else localSandbox.Connect(pendingWireId,device.Id);
-        pendingWireId=0;
+        else if(localSandbox.Connect(pendingWireId,device.Id))
+        {
+            SandboxWire wire=localSandbox.Wires[^1];
+            SandboxDevice? source=localSandbox.Devices.FirstOrDefault(item=>item.Id==pendingWireId);
+            if(source==null || !physics.AttachCable(wire,source,device))
+                localSandbox.Disconnect(pendingWireId,device.Id);
+        }
+        pendingWireId=0;cablePreview.Clear();
+    }
+
+    void UpdateCablePreview(float dt)
+    {
+        if(pendingWireId==0 || !menu.WireTool) return;
+        IEnumerable<SandboxDevice> devices=network.Connected?networkDevices:localSandbox.Devices;
+        SandboxDevice? source=devices
+            .FirstOrDefault(device=>device.Id==pendingWireId);
+        if(source==null) { pendingWireId=0;cablePreview.Clear();return; }
+        ViewPose(out Vector3 eye,out Vector3 forward);
+        SandboxDevice? aimed=AimedDevice();
+        float wallDistance=PhysicsBodies.WallRay(eye,forward,boxes,5f);
+        // Preview anchors use device centers; AttachCable applies the socket offset.
+        Vector3 target=aimed!=null&&aimed.Id!=source.Id?aimed.Position:
+            eye+forward*MathF.Min(5f,MathF.Max(.5f,wallDistance-.08f))-Vector3.UnitY*.22f;
+        target.Y=Math.Clamp(target.Y,.12f,3.2f);
+        Vector3 start=source.Position;
+        cablePreview.StepCablePreview(dt,start,target,boxes);
     }
 
     static Vector3 CubeLocalExtents(CubeState cube)
@@ -1272,8 +1318,10 @@ internal sealed class GameWindow : SilkForm
                 current.Qx=rotation.X;current.Qy=rotation.Y;current.Qz=rotation.Z;current.Qw=rotation.W;
                 current.Yaw=target.Yaw;current.BodyId=target.BodyId;current.State=target.State;
                 current.PressTime=target.PressTime;current.Kind=target.Kind;
+                current.Powered=target.Powered;current.SwitchOn=target.SwitchOn;current.Charge=target.Charge;
             }
             networkWires=snapshot.Wires;
+            networkCables=snapshot.Cables;
             // Older servers omit HostId. A populated player list still gives a
             // stable host identity while the protocol check surfaces the upgrade.
             int hostId=snapshot.HostId;
@@ -1363,7 +1411,7 @@ internal sealed class GameWindow : SilkForm
             return;
         }
         networkCubes=[];
-        networkDevices=[];networkWires=[];
+        networkDevices=[];networkWires=[];networkCables=[];
         if(!menu.SandboxHost || !menu.SandboxSupported)
         { menu.SandboxHost=true;menu.SandboxSupported=true;menu.SandboxEnabled=false;menu.Dirty=true; }
         remotePositions.Clear();
@@ -1409,7 +1457,8 @@ internal sealed class GameWindow : SilkForm
     {
         Id=source.Id,Kind=source.Kind,X=source.X,Y=source.Y,Z=source.Z,Yaw=source.Yaw,
         Qx=source.Qx,Qy=source.Qy,Qz=source.Qz,Qw=source.Qw,BodyId=source.BodyId,
-        State=source.State,PressTime=source.PressTime
+        State=source.State,Powered=source.Powered,SwitchOn=source.SwitchOn,
+        Charge=source.Charge,PressTime=source.PressTime
     };
 
     protected override void OnFrame()
@@ -1430,6 +1479,7 @@ internal sealed class GameWindow : SilkForm
             double now=watch.Elapsed.TotalSeconds;
             float dt=(float)Math.Min(now-lastTime,0.05); lastTime=now;
             UpdateGame(dt);
+            UpdateCablePreview(dt);
             // Chase lighting is shared by everyone in the room, regardless of which player the monster sees.
             chaseLocked=menu.MonsterSettings.Enabled && visibleMonster?.Mode==2 &&
                 visibleMonster.TargetId>0;
@@ -1651,6 +1701,8 @@ internal sealed class GameWindow : SilkForm
     }
     void PrepareSandboxWires(Vector3 eye,Vector3 right,Vector3 up,Vector3 forward)
     {
+        if(!menu.ShowWiresInPlay)
+        { if(menu.SandboxWires.Length>0) { menu.SandboxWires=[];menu.Dirty=true; } return; }
         IReadOnlyList<SandboxDevice> devices=network.Connected?networkDevices:localSandbox.Devices;
         IReadOnlyList<SandboxWire> wires=network.Connected?networkWires:localSandbox.Wires;
         if(wires.Count==0) { if(menu.SandboxWires.Length>0) { menu.SandboxWires=[];menu.Dirty=true; } return; }
@@ -1667,7 +1719,7 @@ internal sealed class GameWindow : SilkForm
             else if(db<0.25f) end=Vector3.Lerp(end,start,(0.25f-db)/(da-db));
             PointF a=ProjectWirePoint(start,eye,right,up,forward);
             PointF b=ProjectWirePoint(end,eye,right,up,forward);
-            segments.Add((a,b,from.State?Color.FromArgb(82,232,156):Color.FromArgb(104,126,139)));
+            segments.Add((a,b,Color.FromArgb(220,8,9,9)));
         }
         menu.SandboxWires=segments.ToArray();menu.Dirty=true;
     }

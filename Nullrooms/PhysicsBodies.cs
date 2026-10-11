@@ -122,6 +122,14 @@ internal sealed class PhysicsBodies : IDisposable
     readonly Dictionary<int,Grab> grabs = new();
     readonly List<ConstraintHandle> welds = new();
     readonly HashSet<(int First,int Second)> weldedPairs = new();
+    sealed class CableLink
+    {
+        internal required BodyHandle[] Segments;
+        internal required float HalfLength;
+    }
+    readonly List<CableLink> cables = new();
+    internal static int CableSegmentCount(float distance) => Math.Clamp((int)MathF.Ceiling(distance/0.8f),3,18);
+    float previewReach;
     internal RigidCube? Held => grabs.TryGetValue(0,out Grab? grab) ? grab.Cube : null;
     internal int HolderOf(RigidCube cube) => grabs.FirstOrDefault(pair=>pair.Value.Cube==cube).Key;
     internal bool HeldBy(int holderId) => grabs.ContainsKey(holderId);
@@ -169,6 +177,8 @@ internal sealed class PhysicsBodies : IDisposable
         grabs.Clear();
         welds.Clear();
         weldedPairs.Clear();
+        cables.Clear();
+        previewReach=0f;
         accumulator = 0;
     }
 
@@ -448,6 +458,119 @@ internal sealed class PhysicsBodies : IDisposable
         };
         welds.Add(simulation.Solver.Add(first.Handle,second.Handle,weld));
         return true;
+    }
+
+    internal static Quaternion CableRotation(Vector3 direction)
+    {
+        direction=Vector3.Normalize(direction);
+        float dot=Vector3.Dot(Vector3.UnitY,direction);
+        if(dot<-.9999f) return Quaternion.CreateFromAxisAngle(Vector3.UnitX,MathF.PI);
+        Quaternion result=new(Vector3.Cross(Vector3.UnitY,direction),1f+dot);
+        return Quaternion.Normalize(result);
+    }
+
+    internal bool AttachCable(SandboxWire wire,SandboxDevice from,SandboxDevice to)
+    {
+        RigidCube? first=Bodies.FirstOrDefault(body=>body.SandboxDeviceId==from.Id);
+        RigidCube? last=Bodies.FirstOrDefault(body=>body.SandboxDeviceId==to.Id);
+        if(first==null||last==null||first.Handle==last.Handle) return false;
+        BodyReference a=simulation.Bodies[first.Handle],b=simulation.Bodies[last.Handle];
+        Vector3 start=a.Pose.Position+Vector3.Transform(Vector3.UnitY*.22f,a.Pose.Orientation);
+        Vector3 end=b.Pose.Position+Vector3.Transform(Vector3.UnitY*.22f,b.Pose.Orientation);
+        Vector3 delta=end-start;
+        float distance=delta.Length();
+        if(distance<.05f||distance>20f) return false;
+        int count=wire.Segments>0?wire.Segments:CableSegmentCount(distance);
+        float span=distance/count;
+        float length=span*1.08f;
+        float half=length*.5f;
+        Quaternion rotation=CableRotation(delta);
+        var shape=new Box(.055f,length,.055f);
+        TypedIndex shapeIndex=simulation.Shapes.Add(in shape);
+        BodyInertia inertia=shape.ComputeInertia(.035f);
+        var handles=new BodyHandle[count];
+        var spring=new SpringSettings(16f,1.6f);
+        BodyHandle previous=first.Handle;
+        for(int index=0;index<count;index++)
+        {
+            Vector3 center=Vector3.Lerp(start,end,(index+.5f)/count);
+            handles[index]=simulation.Bodies.Add(BodyDescription.CreateDynamic(
+                new RigidPose(center,rotation),new BodyVelocity(),inertia,
+                new CollidableDescription(shapeIndex,0f,1f,ContinuousDetection.Continuous()),
+                new BodyActivityDescription(.0001f,60)));
+            Vector3 localA=index==0
+                ?Vector3.Transform(start-a.Pose.Position,Quaternion.Inverse(a.Pose.Orientation))
+                :new Vector3(0f,half,0f);
+            simulation.Solver.Add(previous,handles[index],new BallSocket
+            {
+                LocalOffsetA=localA,LocalOffsetB=new Vector3(0f,-half,0f),SpringSettings=spring
+            });
+            previous=handles[index];
+        }
+        Vector3 localB=Vector3.Transform(end-b.Pose.Position,Quaternion.Inverse(b.Pose.Orientation));
+        simulation.Solver.Add(previous,last.Handle,new BallSocket
+        {
+            LocalOffsetA=new Vector3(0f,half,0f),LocalOffsetB=localB,SpringSettings=spring
+        });
+        cables.Add(new CableLink { Segments=handles,HalfLength=half });
+        return true;
+    }
+
+    internal CableSegmentState[] CableSegments()
+    {
+        var states=new List<CableSegmentState>();
+        foreach(CableLink cable in cables)
+            foreach(BodyHandle handle in cable.Segments)
+            {
+                RigidPose pose=simulation.Bodies[handle].Pose;
+                Vector3 axis=Vector3.Transform(Vector3.UnitY*cable.HalfLength,pose.Orientation);
+                Vector3 a=pose.Position-axis,b=pose.Position+axis;
+                states.Add(new CableSegmentState { Ax=a.X,Ay=a.Y,Az=a.Z,Bx=b.X,By=b.Y,Bz=b.Z });
+            }
+        return states.ToArray();
+    }
+
+    // A separate PhysicsBodies instance is used for the local placement preview,
+    // so its cable cannot pull an authoritative device before the second click.
+    internal void BeginCablePreview(Vector3 start,Vector3 target,IReadOnlyList<RectangleF> walls)
+    {
+        Clear();
+        EnsureEnvironment(walls);
+        previewReach=MathF.Max(1.5f,Vector3.Distance(start,target)*1.12f);
+        AddPreviewAnchor(1,start);
+        AddPreviewAnchor(2,target);
+        var wire=new SandboxWire { From=1,To=2,Segments=CableSegmentCount(previewReach) };
+        var from=new SandboxDevice { Id=1,X=start.X,Y=start.Y,Z=start.Z };
+        var to=new SandboxDevice { Id=2,X=target.X,Y=target.Y,Z=target.Z };
+        AttachCable(wire,from,to);
+    }
+
+    void AddPreviewAnchor(int id,Vector3 position)
+    {
+        var shape=new Box(.06f,.06f,.06f);
+        TypedIndex shapeIndex=simulation.Shapes.Add(in shape);
+        BodyInertia inertia=shape.ComputeInertia(1000f);
+        BodyHandle handle=simulation.Bodies.Add(BodyDescription.CreateDynamic(
+            new RigidPose(position,Quaternion.Identity),new BodyVelocity(),inertia,
+            new CollidableDescription(shapeIndex,0f,0f),new BodyActivityDescription(.0001f,60)));
+        Bodies.Add(new RigidCube { Id=-id,SandboxDeviceId=id,Position=position,HalfSize=.03f,Handle=handle });
+    }
+
+    internal void StepCablePreview(float dt,Vector3 start,Vector3 target,IReadOnlyList<RectangleF> walls)
+    {
+        if(Bodies.Count<2 || cables.Count==0) BeginCablePreview(start,target,walls);
+        else if(Vector3.Distance(start,target)>previewReach*1.12f) BeginCablePreview(start,target,walls);
+        if(Bodies.Count<2) return;
+        BodyReference a=simulation.Bodies[Bodies[0].Handle],b=simulation.Bodies[Bodies[1].Handle];
+        a.Pose.Position=start;b.Pose.Position=target;
+        a.Velocity.Linear=Vector3.Zero;b.Velocity.Linear=Vector3.Zero;
+        a.Velocity.Angular=Vector3.Zero;b.Velocity.Angular=Vector3.Zero;
+        accumulator=Math.Min(accumulator+Math.Clamp(dt,0f,.05f),.1f);
+        while(accumulator>=Step)
+        {
+            simulation.Timestep(Step,null);
+            accumulator-=Step;
+        }
     }
 
     internal static float RayBox(Vector3 origin, Vector3 direction, Vector3 center, Vector3 extents)

@@ -160,7 +160,13 @@ internal sealed class PhotonAuthority : IDisposable
                 case "wire":
                     if(sandboxEnabled&&sandbox.Devices.Any(d=>d.Id==message.FromId&&
                         Vector3.DistanceSquared(d.Position,new Vector3(peer.X,peer.Y,peer.Z))<6f*6f))
-                        sandbox.Connect(message.FromId,message.ToId);
+                        if(sandbox.Connect(message.FromId,message.ToId))
+                        {
+                            SandboxDevice? source=sandbox.Devices.FirstOrDefault(d=>d.Id==message.FromId);
+                            SandboxDevice? target=sandbox.Devices.FirstOrDefault(d=>d.Id==message.ToId);
+                            if(source==null||target==null||!physics.AttachCable(sandbox.Wires[^1],source,target))
+                                sandbox.Disconnect(message.FromId,message.ToId);
+                        }
                     break;
                 case "weld":
                     if(physics.Bodies.Any(b=>b.Id==message.FromId&&
@@ -196,7 +202,7 @@ internal sealed class PhotonAuthority : IDisposable
         foreach(SandboxDevice d in sandbox.Devices)
         { hash.Add(d.Id);hash.Add(d.Kind);hash.Add((int)(d.X*100));hash.Add((int)(d.Y*100));hash.Add((int)(d.Z*100));
           hash.Add((int)(d.Qx*1000));hash.Add((int)(d.Qy*1000));hash.Add((int)(d.Qz*1000));hash.Add((int)(d.Qw*1000));
-          hash.Add(d.State);hash.Add(d.BodyId); }
+          hash.Add(d.State);hash.Add(d.Powered);hash.Add(d.SwitchOn);hash.Add((int)(d.Charge*100));hash.Add(d.BodyId); }
         foreach(SandboxWire wire in sandbox.Wires) { hash.Add(wire.From);hash.Add(wire.To); }
         return hash.ToHashCode();
     }
@@ -208,7 +214,7 @@ internal sealed class PhotonAuthority : IDisposable
         if(devicesChanged) { lastSandboxSignature=signature;deviceSnapshotAge=0f; } else deviceSnapshotAge+=.05f;
         PlayerState[] players=peers.Values.Select(p=>new PlayerState { Id=p.Id,X=p.X,Y=p.Y,Z=p.Z,Yaw=p.Yaw,MoveSpeed=p.MoveSpeed,SprintBlend=p.SprintBlend,CrouchBlend=p.CrouchBlend,Name=p.Name,R=p.R,G=p.G,B=p.B }).ToArray();
         CubeState[] cubes=physics.Bodies.Where(b=>b.SandboxDeviceId==0).Select(b=>new CubeState { Id=b.Id,HolderId=physics.HolderOf(b),X=b.Position.X,Y=b.Position.Y,Z=b.Position.Z,Vx=b.Velocity.X,Vy=b.Velocity.Y,Vz=b.Velocity.Z,Ax=b.AngularVelocity.X,Ay=b.AngularVelocity.Y,Az=b.AngularVelocity.Z,Qx=b.Rotation.X,Qy=b.Rotation.Y,Qz=b.Rotation.Z,Qw=b.Rotation.W,Grounded=b.Grounded,SlipSpeed=PhysicsBodies.ContactSlipSpeed(b),HalfSize=b.HalfSize,Emissive=b.Emissive,Plank=b.Plank,Material=b.Material,R=b.Color.X,G=b.Color.Y,B=b.Color.Z }).ToArray();
-        Broadcast(new NetMessage { Type="snapshot",Seed=seed,Players=players,Cubes=cubes,HostId=players.Select(p=>p.Id).DefaultIfEmpty(0).Min(),SandboxEnabled=sandboxEnabled,Devices=devicesChanged?sandbox.Devices.ToArray():[],Wires=devicesChanged?sandbox.Wires.ToArray():[],DevicesChanged=devicesChanged,CubeImpacts=physics.DrainCubeImpacts(),MonsterTuning=monsterSettings.Clone(),FlickerTuning=flickerSettings.Clone(),Monster=monster?.State });
+        Broadcast(new NetMessage { Type="snapshot",Seed=seed,Players=players,Cubes=cubes,HostId=players.Select(p=>p.Id).DefaultIfEmpty(0).Min(),SandboxEnabled=sandboxEnabled,Devices=devicesChanged?sandbox.Devices.ToArray():[],Wires=devicesChanged?sandbox.Wires.ToArray():[],Cables=physics.CableSegments(),DevicesChanged=devicesChanged,CubeImpacts=physics.DrainCubeImpacts(),MonsterTuning=monsterSettings.Clone(),FlickerTuning=flickerSettings.Clone(),Monster=monster?.State });
     }
 
     public void Dispose() => physics.Dispose();

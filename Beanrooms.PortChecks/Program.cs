@@ -1,6 +1,7 @@
 using Beanrooms;
 using StbImageSharp;
 using System.Drawing;
+using System.Numerics;
 
 if(args.Contains("--ui-preview"))
 {
@@ -95,18 +96,65 @@ using(var photonAuthority=new PhotonAuthority([4,9]))
     var delay=new SandboxDevice { Id=2,Kind=SandboxKind.Delay };
     var lever=new SandboxDevice { Id=3,Kind=SandboxKind.Lever };
     var counter=new SandboxDevice { Id=4,Kind=SandboxKind.Counter };
-    sandbox.Devices.AddRange([plate,delay,lever,counter]);
-    sandbox.Connect(1,2);sandbox.Connect(3,4);
+    sandbox.Devices.AddRange([plate,delay,lever,counter,
+        new SandboxDevice { Id=5,Kind=SandboxKind.Generator,SwitchOn=true }]);
+    sandbox.Connect(1,2);sandbox.Connect(3,4);sandbox.Connect(5,1);sandbox.Connect(5,3);
     sandbox.Update(.1f,platePressed:_=>true);
     if(!plate.State) throw new Exception("Pressure plate did not report a nearby cube");
     for(int i=0;i<7;i++) sandbox.Update(.1f,platePressed:_=>true);
     if(!delay.State) throw new Exception("Delay gate did not hold then pass its input");
     for(int pulse=0;pulse<3;pulse++)
     {
-        lever.State=true;sandbox.Update(.02f);
-        lever.State=false;sandbox.Update(.02f);
+        sandbox.Interact(3);sandbox.Update(.02f);
+        sandbox.Interact(3);sandbox.Update(.02f);
     }
     if(!counter.State) throw new Exception("Counter did not fire on its third pulse");
+}
+{
+    // A cable must remain a simulated jointed chain after both endpoints are placed.
+    var from=new SandboxDevice { Id=31,Kind=SandboxKind.Generator,X=10f,Y=1.6f,Z=10f,SwitchOn=true };
+    var to=new SandboxDevice { Id=32,Kind=SandboxKind.Lamp,X=12.4f,Y=1.6f,Z=10f };
+    using var physics=new PhysicsBodies();
+    if(!physics.SpawnSandboxDevice(from,[],new Vector3(20f,1f,20f)) ||
+       !physics.SpawnSandboxDevice(to,[],new Vector3(20f,1f,20f)) ||
+       !physics.AttachCable(new SandboxWire { From=31,To=32,
+           Segments=PhysicsBodies.CableSegmentCount(Vector3.Distance(from.Position,to.Position)) },from,to))
+        throw new Exception("Could not attach a physical cable to both devices");
+    CableSegmentState[] initial=physics.CableSegments();
+    for(int i=0;i<90;i++) physics.Update(1f/60f,new Vector3(20f,1f,20f),Vector3.UnitZ,
+        Quaternion.Identity,[],new Vector3(20f,1f,20f));
+    CableSegmentState[] settled=physics.CableSegments();
+    if(settled.Length!=initial.Length || settled.Length<3 ||
+       settled.Any(segment=>!float.IsFinite(segment.Ay) || !float.IsFinite(segment.By)) ||
+       MathF.Abs(settled[settled.Length/2].Ay-initial[initial.Length/2].Ay)<.01f)
+        throw new Exception("Connected cable was not continuously simulated");
+    using var preview=new PhysicsBodies();
+    preview.StepCablePreview(1f/60f,from.Position,new Vector3(12f,1.6f,10f),[]);
+    if(preview.CableSegments().Length<3) throw new Exception("Cable preview did not simulate before placement");
+    var snapshot=new NetMessage { Type="snapshot",ProtocolVersion=NetProtocol.Version,
+        Cables=settled,Devices=[from,to] };
+    string json=System.Text.Json.JsonSerializer.Serialize(snapshot);
+    NetMessage? received=System.Text.Json.JsonSerializer.Deserialize<NetMessage>(json);
+    if(received?.Cables.Length!=settled.Length || received.Devices[0].Kind!=SandboxKind.Generator)
+        throw new Exception("Physical cable snapshot failed network serialization");
+}
+{
+    var power=new SandboxWorld();
+    var generator=new SandboxDevice { Id=1,Kind=SandboxKind.Generator,SwitchOn=true };
+    var battery=new SandboxDevice { Id=2,Kind=SandboxKind.Battery,X=1f,Charge=.5f };
+    var button=new SandboxDevice { Id=3,Kind=SandboxKind.Button,X=2f };
+    var lamp=new SandboxDevice { Id=4,Kind=SandboxKind.Lamp,X=3f };
+    power.Devices.AddRange([generator,battery,button,lamp]);
+    power.Connect(1,2);power.Connect(2,3);power.Connect(3,4);
+    power.Interact(3);power.Update(.02f);
+    if(!lamp.State || !button.Powered || battery.Charge<=.5f)
+        throw new Exception("Generator did not charge the battery and power a switched lamp");
+    power.Interact(1);
+    power.Update(.02f);
+    if(!lamp.State || battery.Charge>=.501f)
+        throw new Exception("Battery did not supply electricity after generator shutdown");
+    battery.Charge=0f;power.Update(.02f);
+    if(lamp.State || button.Powered) throw new Exception("Empty battery powered a device");
 }
 {
     var sandbox=new SandboxWorld();
@@ -117,9 +165,11 @@ using(var photonAuthority=new PhotonAuthority([4,9]))
         new SandboxDevice { Id=3,Kind=SandboxKind.Rope,State=true },
         new SandboxDevice { Id=4,Kind=SandboxKind.Conveyor },
         new SandboxDevice { Id=5,Kind=SandboxKind.SensorLight },
-        new SandboxDevice { Id=6,Kind=SandboxKind.Lever,State=true }
+        new SandboxDevice { Id=6,Kind=SandboxKind.Lever,SwitchOn=true },
+        new SandboxDevice { Id=7,Kind=SandboxKind.Generator,SwitchOn=true }
     ]);
     sandbox.Connect(6,1);sandbox.Connect(6,2);sandbox.Connect(6,3);sandbox.Connect(6,4);
+    sandbox.Connect(7,6);sandbox.Connect(7,5);
     sandbox.Update(.1f,playerNearby:_=>true,poweredMechanism:device=>powered.Add(device.Kind));
     if(!sandbox.Devices.Single(device=>device.Id==5).State ||
        !powered.SetEquals([SandboxKind.Hinge,SandboxKind.Wheel,SandboxKind.Rope,SandboxKind.Conveyor]))
@@ -360,10 +410,12 @@ using(var physics=new PhysicsBodies())
         new SandboxDevice { Id=2,Kind=SandboxKind.Lever,X=11f,Y=.36f,Z=10f },
         new SandboxDevice { Id=3,Kind=SandboxKind.And,X=12f,Y=.36f,Z=10f },
         new SandboxDevice { Id=4,Kind=SandboxKind.Lamp,X=13f,Y=.36f,Z=10f },
-        new SandboxDevice { Id=5,Kind=SandboxKind.Thruster,X=14f,Y=.36f,Z=10f }
+        new SandboxDevice { Id=5,Kind=SandboxKind.Thruster,X=14f,Y=.36f,Z=10f },
+        new SandboxDevice { Id=6,Kind=SandboxKind.Generator,X=10f,Y=.36f,Z=11f,SwitchOn=true }
     ]);
     if(!sandbox.Connect(1,3)||!sandbox.Connect(2,3)||!sandbox.Connect(3,4)||!sandbox.Connect(3,5))
         throw new Exception("Sandbox logic wires could not be connected");
+    sandbox.Connect(6,1);sandbox.Connect(6,2);
     sandbox.Interact(1);sandbox.Interact(2);
     int thrusts=0;
     sandbox.Update(.01f,_=>thrusts++);
@@ -383,10 +435,12 @@ using(var physics=new PhysicsBodies())
         new SandboxDevice { Id=4,Kind=SandboxKind.Nand,X=13f,Y=.36f,Z=10f },
         new SandboxDevice { Id=5,Kind=SandboxKind.Xnor,X=14f,Y=.36f,Z=10f },
         new SandboxDevice { Id=6,Kind=SandboxKind.Toggle,X=15f,Y=.36f,Z=10f },
-        new SandboxDevice { Id=7,Kind=SandboxKind.Timer,X=16f,Y=.36f,Z=10f }
+        new SandboxDevice { Id=7,Kind=SandboxKind.Timer,X=16f,Y=.36f,Z=10f },
+        new SandboxDevice { Id=8,Kind=SandboxKind.Generator,X=10f,Y=.36f,Z=11f,SwitchOn=true }
     ]);
     if(!sandbox.Connect(1,3)||!sandbox.Connect(2,3)||!sandbox.Connect(1,4)||!sandbox.Connect(2,4)||
-       !sandbox.Connect(1,5)||!sandbox.Connect(2,5)||!sandbox.Connect(2,6))
+       !sandbox.Connect(1,5)||!sandbox.Connect(2,5)||!sandbox.Connect(2,6)||
+       !sandbox.Connect(8,1)||!sandbox.Connect(8,2)||!sandbox.Connect(8,7))
         throw new Exception("New sandbox gate wires could not be connected");
     sandbox.Update(.01f);
     // Both inputs off: XOR false, NAND true (not-all), XNOR true (even parity).

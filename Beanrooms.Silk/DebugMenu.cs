@@ -28,7 +28,7 @@ internal sealed class DebugMenu
     static readonly SandboxKind[][] SandboxItems =
     [
         [SandboxKind.Cube,SandboxKind.GlowCube],
-        [SandboxKind.Thruster,SandboxKind.Lamp,SandboxKind.Piston,SandboxKind.PressurePlate,SandboxKind.ProximitySensor,
+        [SandboxKind.Battery,SandboxKind.Generator,SandboxKind.Thruster,SandboxKind.Lamp,SandboxKind.Piston,SandboxKind.PressurePlate,SandboxKind.ProximitySensor,
          SandboxKind.Hinge,SandboxKind.Wheel,SandboxKind.Rope,SandboxKind.Conveyor,SandboxKind.SensorLight,SandboxKind.DisplayPanel],
         [SandboxKind.Button,SandboxKind.Lever,SandboxKind.And,SandboxKind.Or,SandboxKind.Not,
          SandboxKind.Xor,SandboxKind.Nand,SandboxKind.Xnor,SandboxKind.Toggle,SandboxKind.Timer,
@@ -42,6 +42,7 @@ internal sealed class DebugMenu
     static string SandboxName(SandboxKind kind) => kind switch
     {
         SandboxKind.GlowCube=>"GLOW CUBE",SandboxKind.And=>"AND GATE",
+        SandboxKind.Battery=>"BATTERY",SandboxKind.Generator=>"GENERATOR",
         SandboxKind.Or=>"OR GATE",SandboxKind.Not=>"NOT GATE",SandboxKind.Xor=>"XOR GATE",
         SandboxKind.Nand=>"NAND GATE",SandboxKind.Xnor=>"XNOR GATE",SandboxKind.Toggle=>"TOGGLE FLIP",
         SandboxKind.Timer=>"TIMER CLOCK",SandboxKind.PressurePlate=>"PRESSURE PLATE",
@@ -52,8 +53,9 @@ internal sealed class DebugMenu
     static string SandboxDetail(SandboxKind kind) => kind switch
     {
         SandboxKind.Cube=>"PHYSICS BOX",SandboxKind.GlowCube=>"LIGHT BOX",
-        SandboxKind.Thruster=>"POWER PUSHES CUBE",SandboxKind.Button=>"PULSE OUTPUT",
-        SandboxKind.Lever=>"TOGGLE OUTPUT",SandboxKind.And=>"ALL INPUTS ON",
+        SandboxKind.Battery=>"FINITE STORED POWER",SandboxKind.Generator=>"TOGGLE CONSTANT POWER",
+        SandboxKind.Thruster=>"POWER PUSHES CUBE",SandboxKind.Button=>"POWERED PULSE OUTPUT",
+        SandboxKind.Lever=>"POWERED SWITCH",SandboxKind.And=>"ALL INPUTS ON",
         SandboxKind.Or=>"ANY INPUT ON",SandboxKind.Not=>"INVERT INPUT",
         SandboxKind.Xor=>"ODD PARITY",SandboxKind.Nand=>"NOT ALL INPUTS",
         SandboxKind.Xnor=>"EVEN PARITY",SandboxKind.Toggle=>"LATCHES ON RISING EDGE",
@@ -232,7 +234,7 @@ internal sealed class DebugMenu
         new[] { "POST FX", "TONEMAP", "EXPOSURE", "AUTO EXPOSURE", "BRIGHTEN SPEED", "DARKEN SPEED", "BLOOM", "BLOOM STRENGTH", "BLOOM THRESHOLD", "BLOOM RADIUS" },
         new[] { "MINOR FLICKER", "MINOR INTERVAL", "MINOR CHANCE", "MINOR DURATION", "RANDOM EVENTS", "EVENT INTERVAL", "EVENT LENGTH", "EVENT SPEED MIN", "EVENT SPEED MAX", "EVENT OFF CHANCE", "CHASE FLICKER", "CHASE FOG", "CHASE FOG MAX", "FOG RISE", "FOG FALL", "CHASE RED", "CHASE RED CHANCE", "BLACKOUT CHANCE" },
         new[] { "RESUME", "ONLINE", "SETTINGS", "HELP", "LEAVE ROOM", "MAIN MENU", "QUIT GAME", "SANDBOX MODE" },
-        new[] { "FPS COUNTER", "OBJECT BRACKETS", "PLAYER NAMES", "WIRES IN PLAY", "DEBUG INFO", "MONSTER VECTORS" }
+        new[] { "FPS COUNTER", "OBJECT BRACKETS", "PLAYER NAMES", "CABLE GUIDES", "DEBUG INFO", "MONSTER VECTORS" }
     };
 
     internal void Toggle()
@@ -1364,7 +1366,7 @@ internal sealed class DebugMenu
                     PixelText(g,ObjectPrompt,white,Math.Clamp((int)frame.Left,5,315-ObjectPrompt.Length*6),
                         Math.Clamp((int)frame.Bottom+3,10,211));
             }
-            if(WireTool||ShowWiresInPlay) foreach(var wire in SandboxWires)
+            if(ShowWiresInPlay) foreach(var wire in SandboxWires)
             {
                 using var pen=new Pen(wire.Ink);
                 g.DrawLine(pen,wire.A,wire.B);

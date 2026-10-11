@@ -112,13 +112,30 @@ Hit trace(vec3 ro, vec3 rd, float limit) {
     }
     for(int object=0;object<objectCount;object++) {
         vec4 data=objectData(object);
-        float radius=objectCode(object)<-0.5 ? 1.55 : data.w*1.733;
+        float radius=objectCode(object)<-1.5 ? data.w+0.05 : objectCode(object)<-0.5 ? 1.55 : data.w*1.733;
         vec3 toCenter=data.xyz-ro;
         float along=dot(toCenter,rd);
         if(along < -radius || along > h.t+radius || dot(toCenter-rd*along,toCenter-rd*along)>radius*radius) continue;
         vec4 inverseRotation=vec4(-objectRotation(object).xyz,objectRotation(object).w);
         vec3 localOrigin=rotateQ(inverseRotation,ro-data.xyz);
         vec3 localDirection=rotateQ(inverseRotation,rd);
+        if(objectCode(object)<-1.5) {
+            // Each black cable link is a narrow Bepu-driven rod along local Y.
+            vec3 safeDirection=vec3(
+                localDirection.x>=0.0?max(localDirection.x,0.000001):min(localDirection.x,-0.000001),
+                localDirection.y>=0.0?max(localDirection.y,0.000001):min(localDirection.y,-0.000001),
+                localDirection.z>=0.0?max(localDirection.z,0.000001):min(localDirection.z,-0.000001));
+            vec3 halfSize=vec3(0.0275,data.w,0.0275);
+            vec3 lo=min((-halfSize-localOrigin)/safeDirection,(halfSize-localOrigin)/safeDirection);
+            vec3 hi=max((-halfSize-localOrigin)/safeDirection,(halfSize-localOrigin)/safeDirection);
+            float entry=max(max(lo.x,lo.y),lo.z),leave=min(min(hi.x,hi.y),hi.z);
+            if(entry>0.001 && entry<leave && entry<h.t) {
+                vec3 n=lo.x>lo.y && lo.x>lo.z ? vec3(-sign(localDirection.x),0,0) :
+                       lo.y>lo.z ? vec3(0,-sign(localDirection.y),0) : vec3(0,0,-sign(localDirection.z));
+                h.t=entry;h.normal=rotateQ(objectRotation(object),n);h.baseColor=objectColor(object);h.material=4;
+            }
+            continue;
+        }
         if(objectCode(object)<-0.5) {
             // Five top boards on three lower runners make a square wooden pallet.
             vec3 safe=sign(localDirection)*max(abs(localDirection),vec3(0.000001));
@@ -195,6 +212,16 @@ Hit trace(vec3 ro, vec3 rd, float limit) {
                     if(part==1) { halfSize=vec3(0.28,0.21,0.06);center=vec3(0.0,0.01,-0.10);color=vec3(0.08,0.11,0.13); }
                     if(part==2) { halfSize=vec3(0.22,0.14,0.012);center=vec3(0.0,0.03,-0.17);color=devicePowered(object)?objectColor(object)*1.4:objectColor(object)*0.25; }
                     if(part==3 && kind==24) { halfSize=vec3(0.035,0.035,0.035);center=vec3(0.0,-0.14,-0.19);color=devicePowered(object)?vec3(0.8,1.0,0.65):vec3(0.15); }
+                } else if(kind==26) {
+                    // Compact battery with two raised terminals and a charge indicator.
+                    if(part==1) { halfSize=vec3(0.26,0.21,0.23);center.y=-0.02;color=objectColor(object); }
+                    if(part==2) { halfSize=vec3(0.055,0.045,0.055);center=vec3(-0.13,0.24,0.0);color=vec3(0.72,0.28,0.13); }
+                    if(part==3) { halfSize=vec3(0.055,0.045,0.055);center=vec3(0.13,0.24,0.0);color=vec3(0.65,0.67,0.70); }
+                } else if(kind==27) {
+                    // Generator: metal housing, dark vent, and a visible running switch.
+                    if(part==1) { halfSize=vec3(0.29,0.23,0.25);center.y=-0.01;color=objectColor(object); }
+                    if(part==2) { halfSize=vec3(0.22,0.11,0.018);center=vec3(0.0,-0.01,-0.27);color=vec3(0.055,0.065,0.065); }
+                    if(part==3) { halfSize=vec3(0.055,0.055,0.022);center=vec3(0.18,0.10,-0.29);color=devicePowered(object)?vec3(0.16,0.8,0.38):vec3(0.22,0.08,0.07); }
                 }
                 if(any(lessThanEqual(halfSize,vec3(0.0)))) continue;
                 vec3 nearPart=(-halfSize-(localOrigin-center))/safe;

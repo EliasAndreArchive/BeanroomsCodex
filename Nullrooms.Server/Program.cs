@@ -361,7 +361,13 @@ internal sealed class LocalServer : IDisposable
                 case "wire":
                     if(sandboxEnabled && sandbox.Devices.Any(d=>d.Id==message.FromId &&
                         Vector3.DistanceSquared(d.Position,new Vector3(peer.X,peer.Y,peer.Z))<6f*6f))
-                        sandbox.Connect(message.FromId,message.ToId);
+                        if(sandbox.Connect(message.FromId,message.ToId))
+                        {
+                            SandboxDevice? source=sandbox.Devices.FirstOrDefault(d=>d.Id==message.FromId);
+                            SandboxDevice? target=sandbox.Devices.FirstOrDefault(d=>d.Id==message.ToId);
+                            if(source==null||target==null||!physics.AttachCable(sandbox.Wires[^1],source,target))
+                                sandbox.Disconnect(message.FromId,message.ToId);
+                        }
                     break;
                 case "weld":
                     if(physics.Bodies.Any(body=>body.Id==message.FromId &&
@@ -398,7 +404,7 @@ internal sealed class LocalServer : IDisposable
         foreach(SandboxDevice d in sandbox.Devices)
         { hash.Add(d.Id);hash.Add(d.Kind);hash.Add((int)(d.X*100));hash.Add((int)(d.Y*100));hash.Add((int)(d.Z*100));
           hash.Add((int)(d.Qx*1000));hash.Add((int)(d.Qy*1000));hash.Add((int)(d.Qz*1000));hash.Add((int)(d.Qw*1000));
-          hash.Add(d.State);hash.Add(d.BodyId); }
+          hash.Add(d.State);hash.Add(d.Powered);hash.Add(d.SwitchOn);hash.Add((int)(d.Charge*100));hash.Add(d.BodyId); }
         foreach(SandboxWire wire in sandbox.Wires) { hash.Add(wire.From);hash.Add(wire.To); }
         return hash.ToHashCode();
     }
@@ -427,7 +433,7 @@ internal sealed class LocalServer : IDisposable
             R=body.Color.X,G=body.Color.Y,B=body.Color.Z
         }).ToArray();
         var message=new NetMessage { Type="snapshot",Seed=seed,Players=players,Cubes=cubes,
-            SandboxEnabled=sandboxEnabled,Devices=devicesChanged?sandbox.Devices.ToArray():[],Wires=devicesChanged?sandbox.Wires.ToArray():[],DevicesChanged=devicesChanged,
+            SandboxEnabled=sandboxEnabled,Devices=devicesChanged?sandbox.Devices.ToArray():[],Wires=devicesChanged?sandbox.Wires.ToArray():[],Cables=physics.CableSegments(),DevicesChanged=devicesChanged,
             CubeImpacts=physics.DrainCubeImpacts(),
             HostId=players.Select(player=>player.Id).DefaultIfEmpty(0).Min(),
             MonsterTuning=monsterSettings.Clone(),
