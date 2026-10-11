@@ -19,6 +19,8 @@ internal sealed class RigidCube
     internal Vector3 HoldTarget, HoldTargetVelocity;
     internal Quaternion CarryRotationOffset = Quaternion.Identity;
     internal float HalfSize, Drag = 0.025f, RestDrag;
+    // Cubes leave this empty; pallets use their actual low rectangular bounds.
+    internal Vector3 LocalHalfExtents;
     internal bool HasHoldTarget, Grounded, Emissive, Plank;
     internal float ImpactCooldown;
     internal BodyHandle Handle;
@@ -197,19 +199,22 @@ internal sealed class PhysicsBodies : IDisposable
         simulation.Statics.Add(new StaticDescription(new RigidPose(new Vector3(x, y, z), Quaternion.Identity), shapeIndex));
     }
 
+    internal static Vector3 LocalExtents(RigidCube body)
+        => body.LocalHalfExtents.LengthSquared()>0.000001f ? body.LocalHalfExtents : new Vector3(body.HalfSize);
+
     internal static Vector3 Extents(RigidCube body)
-    {
-        return RotatedExtents(body.HalfSize,body.Rotation);
-    }
+        => RotatedExtents(LocalExtents(body),body.Rotation);
 
     internal static Vector3 RotatedExtents(float half,Quaternion rotation)
+        => RotatedExtents(new Vector3(half),rotation);
+
+    internal static Vector3 RotatedExtents(Vector3 localExtents,Quaternion rotation)
     {
         Matrix4x4 m = Matrix4x4.CreateFromQuaternion(rotation);
-        float s = half;
         return new Vector3(
-            s * (MathF.Abs(m.M11) + MathF.Abs(m.M21) + MathF.Abs(m.M31)),
-            s * (MathF.Abs(m.M12) + MathF.Abs(m.M22) + MathF.Abs(m.M32)),
-            s * (MathF.Abs(m.M13) + MathF.Abs(m.M23) + MathF.Abs(m.M33)));
+            localExtents.X*MathF.Abs(m.M11) + localExtents.Y*MathF.Abs(m.M21) + localExtents.Z*MathF.Abs(m.M31),
+            localExtents.X*MathF.Abs(m.M12) + localExtents.Y*MathF.Abs(m.M22) + localExtents.Z*MathF.Abs(m.M32),
+            localExtents.X*MathF.Abs(m.M13) + localExtents.Y*MathF.Abs(m.M23) + localExtents.Z*MathF.Abs(m.M33));
     }
 
     // A powered piston shoves the nearest free body directly in front of its face
@@ -338,7 +343,8 @@ internal sealed class PhysicsBodies : IDisposable
             new RigidPose(position,rotation),new BodyVelocity(),inertia,
             new CollidableDescription(shapeIndex,0f,3f,ContinuousDetection.Continuous()),
             new BodyActivityDescription(.0001f,60)));
-        Bodies.Add(new RigidCube { Id=nextBodyId++,Position=position,HalfSize=half,Plank=true,
+        Bodies.Add(new RigidCube { Id=nextBodyId++,Position=position,HalfSize=half,
+            LocalHalfExtents=new Vector3(half,halfHeight,half),Plank=true,
             Rotation=rotation,Color=new Vector3(.43f,.24f,.10f),Handle=handle });
         return true;
     }
@@ -438,7 +444,7 @@ internal sealed class PhysicsBodies : IDisposable
         {
             if (grabs.Values.Any(grab=>grab.Cube==body)) continue;
             Quaternion inverse = Quaternion.Inverse(body.Rotation);
-            float t = RayBox(Vector3.Transform(eye - body.Position, inverse), Vector3.Transform(direction, inverse), Vector3.Zero, new Vector3(body.HalfSize));
+            float t = RayBox(Vector3.Transform(eye - body.Position, inverse), Vector3.Transform(direction, inverse), Vector3.Zero, LocalExtents(body));
             if (t >= 0f && t < nearest) { nearest = t; candidate = body; }
         }
         if (candidate == null) return false;
@@ -469,7 +475,7 @@ internal sealed class PhysicsBodies : IDisposable
             ServoSettings = new ServoSettings(float.MaxValue, 0f, 360f),
             SpringSettings = new SpringSettings(MathF.Max(0.1f, frequency), MathF.Max(0.05f, damping))
         };
-        float side = cube.HalfSize * 2f;
+        float side = MathF.Max(LocalExtents(cube).X,MathF.Max(LocalExtents(cube).Y,LocalExtents(cube).Z))*2f;
         float inertia = side * side / 6f;
         var angular = new OneBodyAngularServo
         {
@@ -534,11 +540,11 @@ internal sealed class PhysicsBodies : IDisposable
                 Quaternion desiredOrientation=Quaternion.Normalize(current.Rotation*handRotation*cube.CarryRotationOffset);
                 Vector3 desiredTarget=current.Eye+current.Forward*MathF.Max(0f,current.HoldDistance+grab.DistanceOffset);
                 Vector3 worldGrabOffset=Vector3.Transform(grab.LocalPoint,desiredOrientation);
-                float halfHeight=RotatedExtents(cube.HalfSize,desiredOrientation).Y;
+                float halfHeight=RotatedExtents(LocalExtents(cube),desiredOrientation).Y;
                 float centerY=Math.Clamp(desiredTarget.Y-worldGrabOffset.Y,halfHeight+0.005f,Ceiling-halfHeight-0.005f);
                 desiredTarget.Y=centerY+worldGrabOffset.Y;
                 Vector3 center=desiredTarget-worldGrabOffset;
-                Vector3 extents=RotatedExtents(cube.HalfSize,desiredOrientation);
+                Vector3 extents=RotatedExtents(LocalExtents(cube),desiredOrientation);
                 foreach(Vector3 playerPosition in playerPositions??[player])
                 {
                     if(center.Y-extents.Y>2.15f) continue;

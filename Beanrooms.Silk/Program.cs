@@ -878,8 +878,10 @@ internal sealed class GameWindow : SilkForm
         {
             foreach(CubeState cube in networkCubes)
             {
-                float extent=cube.HalfSize*1.65f;
-                if(MathF.Abs(x-cube.X)<extent+Radius && MathF.Abs(z-cube.Z)<extent+Radius && cube.Y<2.2f) return true;
+                Quaternion rotation=new(cube.Qx,cube.Qy,cube.Qz,cube.Qw);
+                if(rotation.LengthSquared()<.001f) rotation=Quaternion.Identity;
+                Vector3 extent=PhysicsBodies.RotatedExtents(CubeLocalExtents(cube),rotation);
+                if(MathF.Abs(x-cube.X)<extent.X+Radius && MathF.Abs(z-cube.Z)<extent.Z+Radius && cube.Y-extent.Y<2.2f) return true;
             }
         }
         else if(physics.CollidesPlayer(x,z,Radius)) return true;
@@ -987,6 +989,9 @@ internal sealed class GameWindow : SilkForm
         pendingWireId=0;
     }
 
+    static Vector3 CubeLocalExtents(CubeState cube)
+        => cube.Plank ? new Vector3(.90f,.11f,.90f) : new Vector3(cube.HalfSize);
+
     int AimedGrabbable()
     {
         ViewPose(out Vector3 eye,out Vector3 forward);
@@ -997,7 +1002,7 @@ internal sealed class GameWindow : SilkForm
             foreach(RigidCube body in physics.Bodies)
             {
                 Quaternion inverse=Quaternion.Inverse(body.Rotation);
-                float hit=PhysicsBodies.RayBox(Vector3.Transform(eye-body.Position,inverse),Vector3.Transform(forward,inverse),Vector3.Zero,new Vector3(body.HalfSize));
+                float hit=PhysicsBodies.RayBox(Vector3.Transform(eye-body.Position,inverse),Vector3.Transform(forward,inverse),Vector3.Zero,PhysicsBodies.LocalExtents(body));
                 if(hit>=0f&&hit<nearest) { nearest=hit;id=body.Id; }
             }
             return id;
@@ -1009,7 +1014,7 @@ internal sealed class GameWindow : SilkForm
             Quaternion rotation=new(cube.Qx,cube.Qy,cube.Qz,cube.Qw);
             if(rotation.LengthSquared()<.001f) rotation=Quaternion.Identity;
             Quaternion inverse=Quaternion.Inverse(rotation);
-            float hit=PhysicsBodies.RayBox(Vector3.Transform(eye-new Vector3(cube.X,cube.Y,cube.Z),inverse),Vector3.Transform(forward,inverse),Vector3.Zero,new Vector3(cube.HalfSize));
+            float hit=PhysicsBodies.RayBox(Vector3.Transform(eye-new Vector3(cube.X,cube.Y,cube.Z),inverse),Vector3.Transform(forward,inverse),Vector3.Zero,CubeLocalExtents(cube));
             if(hit>=0f&&hit<distance) { distance=hit;selected=cube.Id; }
         }
         foreach(SandboxDevice device in networkDevices)

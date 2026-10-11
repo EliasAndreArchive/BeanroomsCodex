@@ -77,6 +77,9 @@ using(var photonAuthority=new PhotonAuthority([4,9]))
         physics.SpawnCornerPlank(plank.Position,plank.Yaw,layout.Walls,new System.Numerics.Vector3(96f,1.68f,96f));
     RigidCube? pallet=physics.Bodies.FirstOrDefault(body=>body.Plank);
     if(pallet==null || pallet.HalfSize<.89f) throw new Exception("Seeded world did not place a full-size corner pallet");
+    pallet.Rotation=System.Numerics.Quaternion.CreateFromAxisAngle(System.Numerics.Vector3.UnitX,MathF.PI*.5f);
+    System.Numerics.Vector3 tippedExtents=PhysicsBodies.Extents(pallet);
+    if(tippedExtents.Y<.89f || tippedExtents.Z>.12f) throw new Exception("Pallet collider did not rotate with its low side");
 }
 foreach(string asset in new[]{"wall.png","floor.png","ceiling.png","beanface.png","eye.png"})
 {
