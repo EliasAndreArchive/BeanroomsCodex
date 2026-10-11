@@ -85,8 +85,9 @@ internal sealed class PhysicalSounds : IDisposable
         foreach(int id in stepTravel.Keys.Where(id=>!active.Contains(id)).ToArray())
         { stepTravel.Remove(id);nextStride.Remove(id);lastStepClip.Remove(id); }
 
-        List<CubeImpactEvent> audibleImpacts=new(impacts);
-        HashSet<int> officialImpactIds=impacts.Select(impact=>impact.CubeId).ToHashSet();
+        HashSet<int> heldCubes=cubes.Where(cube=>cube.Held).Select(cube=>cube.Id).ToHashSet();
+        List<CubeImpactEvent> audibleImpacts=impacts.Where(impact=>!heldCubes.Contains(impact.CubeId)).ToList();
+        HashSet<int> officialImpactIds=audibleImpacts.Select(impact=>impact.CubeId).ToHashSet();
         foreach(int id in impactCooldown.Keys.ToArray())
         {
             float remaining=impactCooldown[id]-Math.Clamp(dt,0f,0.05f);

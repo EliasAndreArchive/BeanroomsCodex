@@ -212,9 +212,6 @@ internal sealed class GameWindow : SilkForm
                 if(menu.SandboxPage)
                 {
                     if(e.KeyCode is Keys.B or Keys.Escape) ToggleSandboxMenu();
-                    else if(e.KeyCode==Keys.Left) menu.SandboxCategory=Math.Max(0,menu.SandboxCategory-1);
-                    else if(e.KeyCode==Keys.Right) menu.SandboxCategory=Math.Min(2,menu.SandboxCategory+1);
-                    else if(e.KeyCode==Keys.Enter) SpawnSandboxItem(menu.SelectedSandboxItem);
                     menu.Dirty=true;e.Handled=true;return;
                 }
                 if(menu.EditingText)
@@ -278,6 +275,17 @@ internal sealed class GameWindow : SilkForm
         }
         if(menu.Open)
         {
+            if(menu.SandboxPage)
+            {
+                switch(keyData)
+                {
+                    case Keys.Up: menu.SelectSandbox(-1); return true;
+                    case Keys.Down: menu.SelectSandbox(1); return true;
+                    case Keys.Left: menu.CycleSandboxCategory(-1); return true;
+                    case Keys.Right: menu.CycleSandboxCategory(1); return true;
+                    case Keys.Enter or Keys.Space: SpawnSandboxItem(menu.SelectedSandboxItem); return true;
+                }
+            }
             switch(keyData)
             {
                 case Keys.Up: menu.Select(-1); return true;
@@ -1411,8 +1419,13 @@ internal sealed class GameWindow : SilkForm
     }
     void PrepareObjectFrames(Vector3 eye,Vector3 right,Vector3 up,Vector3 forward)
     {
-        int cubeCount=network.Connected?networkCubes.Length:physics.Bodies.Count;
-        int count=network.Connected?cubeCount+networkDevices.Length:cubeCount;
+        // Cubes are packed first and devices after, matching UploadObjects. Only cubes
+        // own a birth-scale slot, so the device tail must never index CubeVisualScale.
+        RigidCube[] localCubes=network.Connected?[]:physics.Bodies.Where(body=>body.SandboxDeviceId==0).ToArray();
+        RigidCube[] localDevices=network.Connected?[]:physics.Bodies.Where(body=>body.SandboxDeviceId!=0).ToArray();
+        int cubeCount=network.Connected?networkCubes.Length:localCubes.Length;
+        int deviceCount=network.Connected?networkDevices.Length:localDevices.Length;
+        int count=cubeCount+deviceCount;
         if(!menu.ShowObjectFrames||count==0)
         { if(menu.ObjectFrames.Length>0) { menu.ObjectFrames=[];menu.Dirty=true; } return; }
         float nearest=MathF.Min(menu.PickupRange,PhysicsBodies.WallRay(eye,forward,boxes,menu.PickupRange));
@@ -1420,20 +1433,24 @@ internal sealed class GameWindow : SilkForm
         Quaternion hitRotation=Quaternion.Identity;
         float hitHalf=0f;
         bool found=false;
+        double now=watch.Elapsed.TotalSeconds;
         for(int i=0;i<count;i++)
         {
+            bool isDevice=i>=cubeCount;
             Vector3 position;
             float half;
             int id;
             Quaternion rotation;
+            float scale=1f;
             if(network.Connected)
             {
-                if(i<cubeCount)
+                if(!isDevice)
                 {
                     CubeState cube=networkCubes[i];
                     position=new Vector3(cube.X,cube.Y,cube.Z);
                     half=cube.HalfSize;id=cube.Id;
                     rotation=new Quaternion(cube.Qx,cube.Qy,cube.Qz,cube.Qw);
+                    scale=CubeVisualScale(i,id,now);
                 }
                 else
                 {
@@ -1442,9 +1459,16 @@ internal sealed class GameWindow : SilkForm
                 }
                 rotation=rotation.LengthSquared()<0.001f?Quaternion.Identity:Quaternion.Normalize(rotation);
             }
+            else if(!isDevice)
+            {
+                RigidCube cube=localCubes[i];
+                position=cube.Position;half=cube.HalfSize;id=cube.Id;
+                rotation=cube.Rotation;
+                scale=CubeVisualScale(i,id,now);
+            }
             else
             {
-                RigidCube cube=physics.Bodies[i];
+                RigidCube cube=localDevices[i-cubeCount];
                 position=cube.Position;half=cube.HalfSize;id=cube.Id;
                 rotation=cube.Rotation;
             }
@@ -1453,7 +1477,7 @@ internal sealed class GameWindow : SilkForm
                 Vector3.Transform(forward,inverse),Vector3.Zero,new Vector3(half));
             if(t<0f||t>=nearest) continue;
             nearest=t;hitPosition=position;hitRotation=rotation;
-            hitHalf=half*CubeVisualScale(i,id,watch.Elapsed.TotalSeconds);found=true;
+            hitHalf=half*scale;found=true;
         }
         menu.ObjectFrames=found&&ProjectCubeFrame(hitPosition,hitRotation,hitHalf,eye,right,up,forward,out RectangleF bounds)
             ?[bounds]:[];

@@ -245,6 +245,50 @@ using(var physics=new PhysicsBodies())
        physics.HolderOf(physics.Bodies[0])!=3)
         throw new Exception("Another player could not take a released cube");
 }
+using(var physics=new PhysicsBodies())
+using(var audio=new AudioSystem())
+using(var physical=new PhysicalSounds(audio))
+{
+    // A cube dragged along the floor while held must stay silent: no scrape loop,
+    // no landing click, and no click even if a stale impact packet names its id.
+    var eye=new System.Numerics.Vector3(10f,1.68f,10f);
+    var forward=System.Numerics.Vector3.UnitZ;
+    if(!physics.Spawn(eye,forward,false,[],eye))
+        throw new Exception("Could not spawn cube for carried-sound check");
+    if(!physics.TryPickup(eye,forward,System.Numerics.Quaternion.Identity,[],1))
+        throw new Exception("Could not hold cube for carried-sound check");
+    var scrapes=(LoopingSound[])typeof(PhysicalSounds).GetField("scrapes",
+        System.Reflection.BindingFlags.Instance|System.Reflection.BindingFlags.NonPublic)!.GetValue(physical)!;
+    int hits=physical.ImpactPlayCount;
+    for(int i=0;i<120;i++)
+    {
+        eye+=forward*0.02f;
+        physics.Update(1f/120f,eye,forward,System.Numerics.Quaternion.Identity,[],eye);
+        RigidCube body=physics.Bodies[0];
+        physical.Update(eye,0f,new FootstepSource(0,eye,0f,0f,0f),[],
+            [new CubeSoundSource(body.Id,body.Position,body.Velocity,body.HalfSize,
+                body.Grounded,body.HasHoldTarget,body.Rotation,body.AngularVelocity,
+                PhysicsBodies.ContactSlipSpeed(body))],
+            physics.DrainCubeImpacts(),
+            1f/120f);
+    }
+    if(physical.ImpactPlayCount!=hits)
+        throw new Exception("A carried cube still played a hit sound");
+    if(scrapes.Any(scrape=>scrape.TargetVolume>0.001))
+        throw new Exception("A carried cube still played a scrape loop");
+    // A held cube must also ignore a stale impact packet that names it, and never
+    // scrape even with a high server-measured slip speed.
+    int staleHits=physical.ImpactPlayCount;
+    physical.Update(eye,0f,new FootstepSource(0,eye,0f,0f,0f),[],
+        [new CubeSoundSource(999,new System.Numerics.Vector3(10f,0.5f,10f),
+            System.Numerics.Vector3.Zero,0.4f,true,true,
+            System.Numerics.Quaternion.Identity,System.Numerics.Vector3.Zero,3f)],
+        [new CubeImpactEvent { CubeId=999,X=10f,Y=0.5f,Z=10f,Strength=1f }],1f/120f);
+    if(physical.ImpactPlayCount!=staleHits)
+        throw new Exception("A held cube played a stale impact packet");
+    if(scrapes.Any(scrape=>scrape.TargetVolume>0.001))
+        throw new Exception("A held cube scraped with a high slip speed");
+}
 using(var game=new GameWindow())
 {
     var key=typeof(GameWindow).GetMethod("ProcessCmdKey",
@@ -289,6 +333,26 @@ using(var game=new GameWindow())
     keyDown(game,new KeyEventArgs(Keys.B,false));
     if(gameMenu.SandboxPage)
         throw new Exception("B opened the sandbox browser while sandbox mode was off");
+    // The browser now follows the settings-menu list design and keyboard routing.
+    gameMenu.SandboxEnabled=true;
+    gameMenu.ToggleSandbox();
+    if(!gameMenu.SandboxPage) throw new Exception("The sandbox browser did not open");
+    gameMenu.CycleSandboxCategory(1);
+    if(gameMenu.SandboxCategory!=1 || gameMenu.SandboxSelected!=0)
+        throw new Exception("Sandbox category change did not reset the selection");
+    gameMenu.SelectSandbox(5);
+    if(gameMenu.SandboxSelected!=gameMenu.SandboxItemCount-1)
+        throw new Exception("Sandbox selection did not clamp to the category");
+    int settingsRow=gameMenu.Selected;
+    key.Invoke(game,[new Message(),Keys.Down]);
+    if(gameMenu.Selected!=settingsRow)
+        throw new Exception("Sandbox arrow keys changed the settings selection");
+    using(var sandboxImage=gameMenu.Draw())
+        if(sandboxImage.Width!=320 || sandboxImage.Height!=240 ||
+           !sandboxImage.Pixels.Where((_,i)=>i%4==3).Any(alpha=>alpha!=0))
+            throw new Exception("The sandbox browser did not render");
+    gameMenu.ToggleSandbox();
+    gameMenu.SandboxEnabled=false;
 }
 if(!Beanrooms.Program.TryOnlineEndpoint("https://beanrooms-game.onrender.com","test-key",out string endpoint)
     || endpoint!="wss://beanrooms-game.onrender.com/ws?key=test-key")
@@ -344,4 +408,37 @@ if(args.Contains("--network") || args.Contains("--websocket"))
             throw new Exception("Sandbox wire state did not replicate");
     }
     Console.WriteLine($"PASS: {(webSocket?"WebSocket":"local TCP")} multiplayer welcome and world state");
+}
+if(args.Contains("--netmenu"))
+{
+    using var host=new LocalNetClient("127.0.0.1",27075);host.Start();
+    using var guest=new LocalNetClient("127.0.0.1",27075);guest.Start();
+    var deadline=DateTime.UtcNow.AddSeconds(8);
+    while((!host.Connected||!guest.Connected) && DateTime.UtcNow<deadline) Thread.Sleep(25);
+    if(!host.Connected||!guest.Connected) throw new Exception("Session-menu test: handshake failed");
+    deadline=DateTime.UtcNow.AddSeconds(3);
+    while((host.Snapshot().HostId==0||guest.Snapshot().HostId==0) && DateTime.UtcNow<deadline) Thread.Sleep(25);
+    if(host.Snapshot().HostId!=host.Id) throw new Exception("Session-menu test: first peer was not the host");
+    if(guest.Snapshot().HostId==guest.Id) throw new Exception("Session-menu test: second peer was treated as host");
+    // Drive the real host session-menu toggle method against the live server.
+    var window=new GameWindow();
+    var networkField=typeof(GameWindow).GetField("network",
+        System.Reflection.BindingFlags.Instance|System.Reflection.BindingFlags.NonPublic)!;
+    networkField.SetValue(window,host);
+    var windowMenu=(DebugMenu)typeof(GameWindow).GetField("menu",
+        System.Reflection.BindingFlags.Instance|System.Reflection.BindingFlags.NonPublic)!.GetValue(window)!;
+    windowMenu.NetworkConnected=true;windowMenu.NetworkId=host.Id;
+    windowMenu.NetworkHost=host.Snapshot().HostId;windowMenu.SandboxHost=true;
+    var toggle=typeof(GameWindow).GetMethod("ToggleSandboxPermission",
+        System.Reflection.BindingFlags.Instance|System.Reflection.BindingFlags.NonPublic)!;
+    toggle.Invoke(window,[]);
+    deadline=DateTime.UtcNow.AddSeconds(3);
+    while(!host.Snapshot().SandboxEnabled && DateTime.UtcNow<deadline) Thread.Sleep(25);
+    if(!host.Snapshot().SandboxEnabled)
+        throw new Exception("Host session-menu toggle did not enable sandbox");
+    if(!guest.Snapshot().SandboxEnabled)
+        throw new Exception("Sandbox mode did not replicate to the guest");
+    networkField.SetValue(window,new LocalNetClient());
+    window.Dispose();
+    Console.WriteLine("PASS: host session-menu sandbox toggle reached the server and guest");
 }

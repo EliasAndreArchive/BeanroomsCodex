@@ -17,11 +17,31 @@ internal sealed class DebugMenu
         [SandboxKind.Button,SandboxKind.Lever,SandboxKind.And,SandboxKind.Or,SandboxKind.Not]
     ];
     internal SandboxKind SelectedSandboxItem => SandboxItems[SandboxCategory][SandboxSelected];
+    internal int SandboxItemCount => SandboxItems[SandboxCategory].Length;
+    static readonly string[] SandboxCategories=["OBJECTS","DEVICES","LOGIC"];
     static string SandboxName(SandboxKind kind) => kind switch
     {
         SandboxKind.GlowCube=>"GLOW CUBE",SandboxKind.And=>"AND GATE",
         SandboxKind.Or=>"OR GATE",SandboxKind.Not=>"NOT GATE",_=>kind.ToString().ToUpperInvariant()
     };
+    static string SandboxDetail(SandboxKind kind) => kind switch
+    {
+        SandboxKind.Cube=>"PHYSICS BOX",SandboxKind.GlowCube=>"LIGHT BOX",
+        SandboxKind.Thruster=>"POWER PUSHES CUBE",SandboxKind.Button=>"PULSE OUTPUT",
+        SandboxKind.Lever=>"TOGGLE OUTPUT",SandboxKind.And=>"ALL INPUTS ON",
+        SandboxKind.Or=>"ANY INPUT ON",SandboxKind.Not=>"INVERT INPUT",
+        _=>"POWERED LIGHT"
+    };
+    internal void SelectSandbox(int step)
+    {
+        int selected=Math.Clamp(SandboxSelected+step,0,SandboxItemCount-1);
+        if(selected!=SandboxSelected) { SandboxSelected=selected;Dirty=true;InteractionSound?.Invoke(); }
+    }
+    internal void CycleSandboxCategory(int step)
+    {
+        int category=Math.Clamp(SandboxCategory+step,0,SandboxItems.Length-1);
+        if(category!=SandboxCategory) { SandboxCategory=category;SandboxSelected=0;Dirty=true;InteractionSound?.Invoke(); }
+    }
     internal void ToggleSandbox()
     {
         FinishEditing();
@@ -312,21 +332,24 @@ internal sealed class DebugMenu
     {
         if(SandboxPage)
         {
-            if(x>=294 && y>=24 && y<39) { ToggleSandbox();return; }
-            if(y>=43 && y<59 && x>=13 && x<211)
-            { SandboxCategory=Math.Clamp((x-13)/66,0,2);SandboxSelected=0;Dirty=true;InteractionSound?.Invoke();return; }
-            if(x>=13 && x<210 && y>=67 && y<161)
+            if(y<14 && x>=307) { ToggleSandbox();return; }
+            if(y>=17 && y<29 && x>=12)
             {
-                int col=(x-13)/64,itemRow=(y-67)/48,index=itemRow*3+col;
-                if(index<SandboxItems[SandboxCategory].Length)
-                { SandboxSelected=index;Dirty=true;InteractionSound?.Invoke(); }
-                return;
+                int category=(x-12)/75;
+                if(category>=0 && category<SandboxItems.Length && (x-12)%75<70)
+                { SandboxCategory=category;SandboxSelected=0;Dirty=true;InteractionSound?.Invoke();return; }
             }
-            if(x>=218 && x<305 && y>=170 && y<189)
+            if(x>=15 && x<305 && y>=54)
             {
-                SandboxKind kind=SandboxItems[SandboxCategory][SandboxSelected];
-                if(SandboxEnabled || kind==SandboxKind.Cube) SandboxSpawn?.Invoke(kind);
-                Dirty=true;InteractionSound?.Invoke();return;
+                int itemRow=(y-54)/14;
+                if(itemRow>=0 && itemRow<SandboxItemCount)
+                {
+                    SandboxSelected=itemRow;
+                    SandboxKind kind=SandboxItems[SandboxCategory][SandboxSelected];
+                    if(SandboxEnabled || kind==SandboxKind.Cube) SandboxSpawn?.Invoke(kind);
+                    Dirty=true;InteractionSound?.Invoke();
+                }
+                return;
             }
             return;
         }
@@ -922,29 +945,6 @@ internal sealed class DebugMenu
         g.FillRectangle(brush,right-corner,bottom-1,corner,1);
         g.FillRectangle(brush,right-1,bottom-corner,1,corner);
     }
-    static void DrawSandboxIcon(Graphics g,SandboxKind kind,int x,int y)
-    {
-        using var metal=new SolidBrush(Color.FromArgb(139,150,159));
-        using var dark=new SolidBrush(Color.FromArgb(76,86,98));
-        using var accent=new SolidBrush(kind==SandboxKind.GlowCube || kind==SandboxKind.Lamp?
-            Color.FromArgb(244,227,135):kind==SandboxKind.Thruster?
-            Color.FromArgb(238,122,63):Color.FromArgb(89,205,169));
-        if(kind is SandboxKind.Cube or SandboxKind.GlowCube)
-        { g.FillRectangle(metal,x-10,y-10,20,20);g.FillRectangle(dark,x-8,y-8,16,16);
-          if(kind==SandboxKind.GlowCube) g.FillRectangle(accent,x-5,y-5,10,10); }
-        else if(kind==SandboxKind.Thruster)
-        { g.FillRectangle(metal,x-9,y-6,18,13);g.FillRectangle(dark,x-5,y-9,10,4);
-          g.FillRectangle(accent,x-5,y+7,10,5); }
-        else if(kind==SandboxKind.Lever)
-        { g.FillRectangle(metal,x-11,y+4,22,6);g.FillRectangle(accent,x+2,y-10,4,16); }
-        else if(kind==SandboxKind.Button)
-        { g.FillRectangle(metal,x-11,y-2,22,11);g.FillRectangle(accent,x-7,y-7,14,7); }
-        else if(kind==SandboxKind.Lamp)
-        { g.FillRectangle(metal,x-11,y+4,22,5);g.FillRectangle(accent,x-8,y-10,16,16); }
-        else
-        { g.FillRectangle(metal,x-12,y-9,24,19);g.FillRectangle(dark,x-9,y-6,18,13);
-          PixelText(g,kind==SandboxKind.And?"&":kind==SandboxKind.Or?"+":"!",accent,x-3,y-4); }
-    }
     internal Bitmap Draw()
     {
         var image = new Bitmap(320, 240, PixelFormat.Format32bppArgb);
@@ -958,48 +958,28 @@ internal sealed class DebugMenu
         using var unfilled = new SolidBrush(Color.FromArgb(130, 160, 171));
         if(Open && SandboxPage)
         {
-            using var panel=new SolidBrush(Color.FromArgb(235,34,35,44));
-            using var inset=new SolidBrush(Color.FromArgb(255,20,22,29));
-            using var tile=new SolidBrush(Color.FromArgb(255,45,46,57));
-            using var blue=new SolidBrush(Color.FromArgb(45,79,183));
-            using var amber=new SolidBrush(Color.FromArgb(220,184,101));
-            g.FillRectangle(panel,8,24,304,195);
-            g.FillRectangle(inset,8,24,304,15);
-            PixelText(g,"SANDBOX MENU",white,117,28);
-            PixelText(g,"X",white,299,28);
-            string[] categories=["OBJECTS","DEVICES","LOGIC"];
-            for(int i=0;i<3;i++)
-            {
-                g.FillRectangle(i==SandboxCategory?amber:tile,13+i*66,43,63,16);
-                PixelText(g,categories[i],i==SandboxCategory?inset:white,16+i*66,47);
-            }
+            PixelText(g,"BEANROOMS MENU",paleBlue,12,4);
+            PixelText(g,"X",white,310,4);
+            for(int category=0;category<SandboxCategories.Length;category++)
+                PixelText(g,SandboxCategories[category],category==SandboxCategory?green:white,
+                    12+category*75,17);
             SandboxKind[] items=SandboxItems[SandboxCategory];
-            for(int i=0;i<items.Length;i++)
+            const int sandboxPitch=14;
+            for(int row=0;row<items.Length;row++)
             {
-                int x=13+(i%3)*64,y=67+(i/3)*48;
-                g.FillRectangle(i==SandboxSelected?blue:tile,x,y,60,44);
-                DrawSandboxIcon(g,items[i],x+30,y+17);
-                string name=SandboxName(items[i]);
-                PixelText(g,name.Length>9?name[..9]:name,white,x+2,y+34);
+                int y=54+row*sandboxPitch;
+                bool focused=row==SandboxSelected;
+                bool spawnable=SandboxEnabled || items[row]==SandboxKind.Cube;
+                Brush ink=spawnable?focused?green:white:unfilled;
+                PixelText(g,$"{row+1}.",ink,21,y+3);
+                PixelText(g,SandboxName(items[row]),ink,44,y+3);
+                string value=spawnable?focused?"SPAWN <":"SPAWN":"LOCKED";
+                PixelText(g,value,ink,316-value.Length*6,y+3);
             }
-            g.FillRectangle(inset,214,43,92,116);
-            SandboxKind selected=items[SandboxSelected];
-            DrawSandboxIcon(g,selected,260,77);
-            PixelText(g,SandboxName(selected),white,220,106);
-            string detail=selected switch
-            {
-                SandboxKind.Cube=>"PHYSICS BOX",SandboxKind.GlowCube=>"LIGHT BOX",
-                SandboxKind.Thruster=>"POWER PUSHES CUBE",SandboxKind.Button=>"PULSE OUTPUT",
-                SandboxKind.Lever=>"TOGGLE OUTPUT",SandboxKind.And=>"ALL INPUTS ON",
-                SandboxKind.Or=>"ANY INPUT ON",SandboxKind.Not=>"INVERT INPUT",
-                _=>"POWERED LIGHT"
-            };
-            PixelText(g,detail.Length>14?detail[..14]:detail,paleBlue,219,128);
-            g.FillRectangle(blue,218,170,87,19);
-            PixelText(g,SandboxEnabled || selected==SandboxKind.Cube?"SPAWN":"LOCKED",white,239,176);
-            PixelText(g,NetworkConnected?"HOST CONTROLS":"LOCAL SANDBOX",paleBlue,218,198);
-            PixelText(g,"TAB > SESSION",paleBlue,218,207);
-            PixelText(g,"B CLOSE  G WIRE  K WELD  E USE",paleBlue,13,225);
+            string detail=SandboxDetail(items[SandboxSelected]);
+            PixelText(g,detail.Length>22?detail[..22]:detail,paleBlue,13,225);
+            PixelText(g,NetworkConnected?"HOST CONTROLS":"LOCAL SANDBOX",paleBlue,251,225);
+            PixelText(g,"B CLOSE  G WIRE  K WELD  E USE",paleBlue,13,231);
         }
         else if(Open && TitleScreen)
         {
