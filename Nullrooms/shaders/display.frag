@@ -73,7 +73,9 @@ void main() {
     vec3 c = texelFetch(accumulation,pixel,0).rgb;
     float exposureScale = postEnabled != 0 ? exposure * (autoExposure != 0 ? texelFetch(exposureTexture,ivec2(0),0).r : 1.0) : 1.0;
     c *= exposureScale;
-    if (postEnabled != 0 && bloomEnabled != 0) c += texture(bloomTexture,imageUv).rgb*bloomStrength*exposureScale;
+    // Sample bloom once per game pixel so its smooth filter cannot vary inside an enlarged pixel.
+    vec2 gamePixelUv = (vec2(pixel)+0.5)/vec2(size);
+    if (postEnabled != 0 && bloomEnabled != 0) c += texture(bloomTexture,gamePixelUv).rgb*bloomStrength*exposureScale;
     if (postEnabled == 0) c=clamp(c,0.0,1.0);
     else if (tonemapMode == 1) c=filmicTonemap(c);
     else if (tonemapMode == 2) c=acesTonemap(c);
