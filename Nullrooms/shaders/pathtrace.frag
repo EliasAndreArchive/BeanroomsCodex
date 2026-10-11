@@ -176,6 +176,25 @@ Hit trace(vec3 ro, vec3 rd, float limit) {
                     if(part==1) { halfSize=vec3(0.24,0.15,0.12);center=vec3(0.0,-0.06,-0.18);color=objectColor(object); }
                     if(part==2) { halfSize=vec3(0.12,0.075,0.035);center=vec3(0.0,0.03,0.02);color=devicePowered(object)?objectColor(object)*1.3:vec3(0.12); }
                     if(part==3) { halfSize=vec3(0.035,0.035,0.035);center=vec3(0.0,0.03,0.10);color=vec3(0.8,0.9,0.75); }
+                } else if(kind==20) {
+                    if(part==1) { halfSize=vec3(0.26,0.08,0.26);center.y=-0.16; }
+                    if(part==2) { halfSize=vec3(0.08,0.23,0.08);center.y=0.04;color=objectColor(object); }
+                    if(part==3) { halfSize=vec3(0.20,0.035,0.035);center.y=0.12;color=devicePowered(object)?vec3(1.0,0.62,0.18):vec3(0.24); }
+                } else if(kind==21) {
+                    if(part==1) { halfSize=vec3(0.27,0.27,0.08);center.y=-0.02;color=vec3(0.08); }
+                    if(part==2) { halfSize=vec3(0.08,0.08,0.12);center=vec3(0.0,-0.02,0.10);color=objectColor(object); }
+                } else if(kind==22) {
+                    if(part==1) { halfSize=vec3(0.20,0.20,0.08);center.y=-0.02;color=objectColor(object); }
+                    if(part==2) { halfSize=vec3(0.11,0.11,0.13);center=vec3(0.0,-0.02,0.10);color=vec3(0.16); }
+                    if(part==3) { halfSize=vec3(0.018,0.018,0.32);center=vec3(0.0,-0.02,0.38);color=vec3(0.52,0.35,0.18); }
+                } else if(kind==23) {
+                    if(part==1) { halfSize=vec3(0.32,0.08,0.25);center.y=-0.14;color=vec3(0.10,0.12,0.14); }
+                    if(part==2) { halfSize=vec3(0.26,0.035,0.18);center.y=-0.02;color=objectColor(object); }
+                    if(part==3) { halfSize=vec3(0.04,0.04,0.15);center=vec3(0.0,0.05,devicePowered(object)?0.05:-0.05);color=devicePowered(object)?vec3(0.35,0.95,0.55):vec3(0.12); }
+                } else if(kind==24 || kind==25) {
+                    if(part==1) { halfSize=vec3(0.28,0.21,0.06);center=vec3(0.0,0.01,-0.10);color=vec3(0.08,0.11,0.13); }
+                    if(part==2) { halfSize=vec3(0.22,0.14,0.012);center=vec3(0.0,0.03,-0.17);color=devicePowered(object)?objectColor(object)*1.4:objectColor(object)*0.25; }
+                    if(part==3 && kind==24) { halfSize=vec3(0.035,0.035,0.035);center=vec3(0.0,-0.14,-0.19);color=devicePowered(object)?vec3(0.8,1.0,0.65):vec3(0.15); }
                 }
                 if(any(lessThanEqual(halfSize,vec3(0.0)))) continue;
                 vec3 nearPart=(-halfSize-(localOrigin-center))/safe;

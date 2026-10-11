@@ -193,7 +193,8 @@ internal sealed class LocalNetClient : INetClient
                 players=message.Players;cubes=message.Cubes;monster=message.Monster;
                 monsterTuning=message.MonsterTuning;flickerTuning=message.FlickerTuning;
                 hostId=message.HostId;
-                devices=message.Devices;wires=message.Wires;sandboxEnabled=message.SandboxEnabled;
+                if(message.DevicesChanged||message.Devices.Length>0||message.Wires.Length>0) { devices=message.Devices;wires=message.Wires; }
+                sandboxEnabled=message.SandboxEnabled;
                 foreach(CubeImpactEvent impact in message.CubeImpacts) pendingCubeImpacts.Enqueue(impact);
                 while(pendingCubeImpacts.Count>128) pendingCubeImpacts.Dequeue();
             }

@@ -5,7 +5,8 @@ namespace Beanrooms;
 
 internal readonly record struct FootstepSource(int Id,Vector3 Position,float Speed,float Sprint,float Crouch);
 internal readonly record struct CubeSoundSource(int Id,Vector3 Position,Vector3 Velocity,float HalfSize,
-    bool Grounded,bool Held,Quaternion Rotation,Vector3 AngularVelocity,float SlipSpeed);
+    bool Grounded,bool Held,Quaternion Rotation,Vector3 AngularVelocity,float SlipSpeed,
+    PhysicsMaterial Material=PhysicsMaterial.Wood,Vector3 LocalHalfExtents=default);
 
 internal sealed class PhysicalSounds : IDisposable
 {
@@ -31,6 +32,10 @@ internal sealed class PhysicalSounds : IDisposable
     readonly AudioClip[] stepClips,impactClips;
     readonly AudioVoice[][] stepVoices,impactVoices;
     readonly LoopingSound[] scrapes;
+    readonly Dictionary<PhysicsMaterial,AudioClip[]> materialImpactClips=[];
+    readonly Dictionary<PhysicsMaterial,AudioVoice[][]> materialImpacts=[];
+    readonly Dictionary<PhysicsMaterial,LoopingSound[]> materialScrapes=[];
+    readonly Dictionary<PhysicsMaterial,int> nextMaterialImpact=[];
     readonly Dictionary<int,float> vertexSlip=new();
     readonly Dictionary<int,float> stepTravel=new();
     readonly Dictionary<int,float> nextStride=new();
@@ -38,17 +43,24 @@ internal sealed class PhysicalSounds : IDisposable
     readonly Dictionary<int,(Vector3 Position,float VerticalSpeed,bool Grounded)> previousCubes=new();
     readonly Dictionary<int,float> impactCooldown=new();
     readonly Dictionary<int,VertexState> vertexStates=new();
-    int nextStepVoice,nextImpact;
+    int nextStepVoice;
     internal int ImpactPlayCount { get; private set; }
     internal int VertexHitCount { get; private set; }
 
     internal PhysicalSounds(AudioSystem system)
     {
         stepClips=Enumerable.Range(0,5).Select(i=>system.Load($"footstep_concrete_{i:000}.wav")).ToArray();
-        impactClips=Enumerable.Range(0,5).Select(i=>system.Load($"cube_wood_impact_{i:000}.wav")).ToArray();
         stepVoices=stepClips.Select(clip=>new[]{new AudioVoice(clip),new AudioVoice(clip)}).ToArray();
-        impactVoices=impactClips.Select(clip=>new[]{new AudioVoice(clip),new AudioVoice(clip)}).ToArray();
-        scrapes=Enumerable.Range(0,4).Select(_=>new LoopingSound(system,"cube_concrete_scrape.wav")).ToArray();
+        foreach(PhysicsMaterial material in Enum.GetValues<PhysicsMaterial>())
+        {
+            AudioClip[] clips=Enumerable.Range(0,2).Select(i=>system.Load($"impact_{material.ToString().ToLowerInvariant()}_{i:000}.wav")).ToArray();
+            materialImpactClips[material]=clips;
+            materialImpacts[material]=clips.Select(clip=>new[]{new AudioVoice(clip),new AudioVoice(clip)}).ToArray();
+            materialScrapes[material]=Enumerable.Range(0,4).Select(_=>new LoopingSound(system,$"slide_{material.ToString().ToLowerInvariant()}.wav")).ToArray();
+        }
+        impactClips=materialImpactClips[PhysicsMaterial.Wood];
+        impactVoices=materialImpacts[PhysicsMaterial.Wood];
+        scrapes=materialScrapes[PhysicsMaterial.Wood];
     }
 
     static (float Gain,float Pan) Spatial(Vector3 listener,Vector3 source,Vector2 right,float falloff=100f)
@@ -70,8 +82,10 @@ internal sealed class PhysicalSounds : IDisposable
     // A tipping cube can move its centre sideways while the edge on the floor is stationary.
     // Scraping follows the velocity of the lowest contact points, not the centre of mass.
     // Online cubes carry the server-measured value in CubeSoundSource.SlipSpeed.
+    static Vector3 LocalExtents(CubeSoundSource cube)
+        => cube.LocalHalfExtents.LengthSquared()>0.000001f?cube.LocalHalfExtents:new Vector3(cube.HalfSize);
     internal static float FloorSlipSpeed(CubeSoundSource cube)
-        => PhysicsBodies.ContactSlipSpeed(cube.Velocity,cube.AngularVelocity,cube.Rotation,cube.HalfSize);
+        => PhysicsBodies.ContactSlipSpeed(cube.Velocity,cube.AngularVelocity,cube.Rotation,LocalExtents(cube));
 
     internal void Update(Vector3 listener,float yaw,FootstepSource local,IReadOnlyList<FootstepSource> remote,
         IReadOnlyList<CubeSoundSource> cubes,IReadOnlyList<CubeImpactEvent> impacts,float dt,
@@ -101,7 +115,7 @@ internal sealed class PhysicalSounds : IDisposable
         foreach(CubeSoundSource cube in cubes)
         {
             seenCubes.Add(cube.Id);
-            bool grounded=cube.Grounded || cube.Position.Y-cube.HalfSize<0.065f;
+            bool grounded=cube.Grounded || cube.Position.Y-PhysicsBodies.RotatedExtents(LocalExtents(cube),Normalize(cube.Rotation)).Y<0.065f;
             if(previousCubes.TryGetValue(cube.Id,out var previous))
             {
                 float measuredSpeed=Math.Clamp((cube.Position.Y-previous.Position.Y)/MathF.Max(dt,0.005f),-20f,20f);
@@ -109,7 +123,7 @@ internal sealed class PhysicalSounds : IDisposable
                    !impactCooldown.ContainsKey(cube.Id))
                 {
                     audibleImpacts.Add(new CubeImpactEvent { CubeId=cube.Id,X=cube.Position.X,Y=cube.Position.Y,Z=cube.Position.Z,
-                        Strength=Math.Clamp(-previous.VerticalSpeed/5f,0.25f,1f) });
+                        Strength=Math.Clamp(-previous.VerticalSpeed/5f,0.25f,1f),Material=cube.Material });
                     impactCooldown[cube.Id]=0.25f;
                 }
                 previousCubes[cube.Id]=(cube.Position,measuredSpeed,grounded);
@@ -119,7 +133,7 @@ internal sealed class PhysicalSounds : IDisposable
         foreach(int id in previousCubes.Keys.Where(id=>!seenCubes.Contains(id)).ToArray()) previousCubes.Remove(id);
 
         foreach(CubeImpactEvent impact in audibleImpacts)
-            PlayImpact(impact.CubeId,new Vector3(impact.X,impact.Y,impact.Z),impact.Strength,listener,right,FilterFor,GroupFor);
+            PlayImpact(impact.CubeId,new Vector3(impact.X,impact.Y,impact.Z),impact.Strength,impact.Material,listener,right,FilterFor,GroupFor);
 
         UpdateVertexHits(cubes,listener,right,walls??[],dt,FilterFor,GroupFor);
 
@@ -132,29 +146,36 @@ internal sealed class PhysicalSounds : IDisposable
                 float speed=cube.Held?vertexSlip.GetValueOrDefault(cube.Id):cube.SlipSpeed;
                 var (gain,pan)=Spatial(listener,cube.Position,right);
                 VercidiumAcoustics.Filter filter=FilterFor(AcousticSourceIds.Cube(cube.Id));
-                return (Gain:Math.Clamp((speed-0.12f)/2.2f,0f,1f)*gain*0.8f*filter.Gain,
+                return (cube.Material,Gain:Math.Clamp((speed-0.12f)/2.2f,0f,1f)*gain*0.8f*filter.Gain,
                     Pan:pan,HighRatio:filter.HighRatio,Group:GroupFor(AcousticSourceIds.Cube(cube.Id)));
             })
             .Where(sound=>sound.Gain>0.012f)
-            .OrderByDescending(sound=>sound.Gain).Take(scrapes.Length).ToArray();
-        for(int i=0;i<scrapes.Length;i++)
+            .OrderByDescending(sound=>sound.Gain).Take(8).ToArray();
+        foreach(PhysicsMaterial material in Enum.GetValues<PhysicsMaterial>())
         {
-            scrapes[i].SetHighFrequencyGain(i<sliding.Length?sliding[i].HighRatio:1f);
-            scrapes[i].SetReverbGroup(i<sliding.Length?sliding[i].Group:-1);
-            scrapes[i].SetTarget(i<sliding.Length?sliding[i].Gain:0f,i<sliding.Length?sliding[i].Pan:0f);
-            scrapes[i].Update(dt);
+            LoopingSound[] loops=materialScrapes[material];
+            var sounds=sliding.Where(sound=>sound.Material==material).Take(loops.Length).ToArray();
+            for(int i=0;i<loops.Length;i++)
+            {
+                loops[i].SetHighFrequencyGain(i<sounds.Length?sounds[i].HighRatio:1f);
+                loops[i].SetReverbGroup(i<sounds.Length?sounds[i].Group:-1);
+                loops[i].SetTarget(i<sounds.Length?sounds[i].Gain:0f,i<sounds.Length?sounds[i].Pan:0f);
+                loops[i].Update(dt);
+            }
         }
     }
 
-    bool PlayImpact(int cubeId,Vector3 position,float strength,Vector3 listener,Vector2 right,
+    bool PlayImpact(int cubeId,Vector3 position,float strength,PhysicsMaterial material,Vector3 listener,Vector2 right,
         Func<int,VercidiumAcoustics.Filter> filterFor,Func<int,int> groupFor)
     {
         var (gain,pan)=Spatial(listener,position,right,400f);
         VercidiumAcoustics.Filter filter=filterFor(AcousticSourceIds.Cube(cubeId));
         gain*=filter.Gain;
         if(gain<0.02f) return false;
-        int index=nextImpact++;
-        AudioVoice voice=impactVoices[index%impactVoices.Length][(index/impactVoices.Length)%2];
+        AudioVoice[][] voices=materialImpacts[material];
+        int index=nextMaterialImpact.GetValueOrDefault(material);
+        nextMaterialImpact[material]=index+1;
+        AudioVoice voice=voices[index%voices.Length][(index/voices.Length)%2];
         voice.SetPitch(0.88f+Random.Shared.NextSingle()*0.12f);
         voice.SetHighFrequencyGain(filter.HighRatio);
         voice.SetReverbGroup(groupFor(AcousticSourceIds.Cube(cubeId)));
@@ -175,13 +196,13 @@ internal sealed class PhysicalSounds : IDisposable
             seen.Add(cube.Id);
             if(!vertexStates.TryGetValue(cube.Id,out VertexState? state)) { state=new VertexState();vertexStates[cube.Id]=state; }
             Quaternion rotation=Normalize(cube.Rotation);
-            float half=cube.HalfSize;
+            Vector3 half=LocalExtents(cube);
             float slip=0f;
             for(int index=0;index<8;index++)
             {
                 state.Cooldown[index]=MathF.Max(0f,state.Cooldown[index]-step);
                 int bx=(index&1)==0?-1:1,by=(index&2)==0?-1:1,bz=(index&4)==0?-1:1;
-                Vector3 radius=Vector3.Transform(new Vector3(bx*half,by*half,bz*half),rotation);
+                Vector3 radius=Vector3.Transform(new Vector3(bx*half.X,by*half.Y,bz*half.Z),rotation);
                 Vector3 vertex=cube.Position+radius;
                 Vector3 velocity=cube.Velocity+Vector3.Cross(cube.AngularVelocity,radius);
                 Contact contact=VertexContact(cube,vertex,velocity,walls,cubes);
@@ -190,7 +211,7 @@ internal sealed class PhysicalSounds : IDisposable
                     slip=MathF.Max(slip,contact.Slip);
                     if(!state.Touching[index] && state.Cooldown[index]<=0f &&
                        contact.Impact>=VertexImpactSpeed && !impactCooldown.ContainsKey(cube.Id) &&
-                       PlayImpact(cube.Id,vertex,Math.Clamp(contact.Impact/6f,0.15f,1f),listener,right,filterFor,groupFor))
+                       PlayImpact(cube.Id,vertex,Math.Clamp(contact.Impact/6f,0.15f,1f),cube.Material,listener,right,filterFor,groupFor))
                     {
                         state.Cooldown[index]=VertexCooldown;
                         VertexHitCount++;
@@ -228,7 +249,7 @@ internal sealed class PhysicalSounds : IDisposable
         {
             CubeSoundSource other=cubes[i];
             if(other.Id==cube.Id) continue;
-            float reach=other.HalfSize*2.2f;
+            float reach=LocalExtents(other).Length()*1.15f;
             if(Vector3.DistanceSquared(vertex,other.Position)>reach*reach) continue;
             if(!InsideOrientedBox(vertex,other,out Vector3 normal)) continue;
             Vector3 relative=velocity-other.Velocity;
@@ -255,10 +276,10 @@ internal sealed class PhysicalSounds : IDisposable
     {
         Quaternion rotation=Normalize(other.Rotation);
         Vector3 local=Vector3.Transform(point-other.Position,Quaternion.Inverse(rotation));
-        float half=other.HalfSize+VertexSurfaceTolerance;
-        if(MathF.Abs(local.X)>=half || MathF.Abs(local.Y)>=half || MathF.Abs(local.Z)>=half)
+        Vector3 half=LocalExtents(other)+new Vector3(VertexSurfaceTolerance);
+        if(MathF.Abs(local.X)>=half.X || MathF.Abs(local.Y)>=half.Y || MathF.Abs(local.Z)>=half.Z)
         { normal=Vector3.Zero;return false; }
-        float dx=half-MathF.Abs(local.X),dy=half-MathF.Abs(local.Y),dz=half-MathF.Abs(local.Z);
+        float dx=half.X-MathF.Abs(local.X),dy=half.Y-MathF.Abs(local.Y),dz=half.Z-MathF.Abs(local.Z);
         Vector3 localNormal;
         if(dx<=dy && dx<=dz) localNormal=new(MathF.Sign(local.X)==0f?1f:MathF.Sign(local.X),0f,0f);
         else if(dy<=dz) localNormal=new(0f,MathF.Sign(local.Y)==0f?1f:MathF.Sign(local.Y),0f);
@@ -305,9 +326,9 @@ internal sealed class PhysicalSounds : IDisposable
 
     public void Dispose()
     {
-        foreach(LoopingSound scrape in scrapes) scrape.Dispose();
+        foreach(LoopingSound scrape in materialScrapes.Values.SelectMany(loops=>loops)) scrape.Dispose();
         foreach(AudioVoice voice in stepVoices.SelectMany(voices=>voices)) voice.Dispose();
-        foreach(AudioVoice voice in impactVoices.SelectMany(voices=>voices)) voice.Dispose();
-        foreach(AudioClip clip in stepClips.Concat(impactClips)) clip.Dispose();
+        foreach(AudioVoice voice in materialImpacts.Values.SelectMany(groups=>groups).SelectMany(voices=>voices)) voice.Dispose();
+        foreach(AudioClip clip in stepClips.Concat(materialImpactClips.Values.SelectMany(clips=>clips))) clip.Dispose();
     }
 }

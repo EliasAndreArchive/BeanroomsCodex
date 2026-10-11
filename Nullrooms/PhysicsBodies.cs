@@ -22,12 +22,14 @@ internal sealed class RigidCube
     // Cubes leave this empty; pallets use their actual low rectangular bounds.
     internal Vector3 LocalHalfExtents;
     internal bool HasHoldTarget, Grounded, Emissive, Plank;
+    internal PhysicsMaterial Material=PhysicsMaterial.Wood;
     internal float ImpactCooldown;
     internal BodyHandle Handle;
 }
 
 internal readonly record struct GrabInput(Vector3 Eye,Vector3 Forward,Quaternion Rotation,
-    float HoldDistance,float Frequency,float Damping,float Smoothing,float RotateYaw=0f,float RotatePitch=0f);
+    float HoldDistance,float Frequency,float Damping,float Smoothing,float RotateYaw=0f,float RotatePitch=0f,
+    bool SnapHold=false,float SnapStep=.25f);
 
 internal struct PhysicsNarrowPhaseCallbacks : INarrowPhaseCallbacks
 {
@@ -140,7 +142,9 @@ internal sealed class PhysicsBodies : IDisposable
         reference.Velocity.Linear+=new Vector3(MathF.Sin(yaw),0f,MathF.Cos(yaw))*10f*dt;
     }
     internal float PickupRange = 5f, HoldDistance = 2.25f, Frequency = 8.5f, Damping = 1.35f, TargetSmoothing = 18f, SlideResistance = 4.5f;
-    internal float RotateYaw,RotatePitch;
+    internal float RotateYaw=0f,RotatePitch=0f;
+    internal bool SnapHold=false;
+    internal float SnapStep=.25f;
 
     const float Step = 1f / 120f;
     const float Ceiling = 3.4f;
@@ -240,6 +244,38 @@ internal sealed class PhysicsBodies : IDisposable
         if(cube==null) return;
         simulation.Bodies[cube.Handle].Velocity.Linear+=forward*11f*dt;
     }
+    internal void ApplyMechanism(SandboxDevice device,float dt)
+    {
+        RigidCube? source=Bodies.FirstOrDefault(body=>body.SandboxDeviceId==device.Id);
+        Vector3 forward=Vector3.Transform(Vector3.UnitZ,device.Rotation);
+        if(forward.LengthSquared()<.5f) forward=Vector3.UnitZ;
+        forward=Vector3.Normalize(forward);
+        if(device.Kind==SandboxKind.Hinge && source!=null)
+        { simulation.Bodies[source.Handle].Velocity.Angular+=Vector3.UnitY*5f*dt;return; }
+        if(device.Kind==SandboxKind.Wheel && source!=null)
+        { simulation.Bodies[source.Handle].Velocity.Linear+=forward*8f*dt;return; }
+        if(device.Kind==SandboxKind.Rope)
+        {
+            RigidCube? target=Bodies.Where(body=>body!=source&&!body.HasHoldTarget)
+                .OrderBy(body=>Vector3.DistanceSquared(body.Position,device.Position)).FirstOrDefault();
+            if(target!=null)
+            {
+                Vector3 pull=device.Position-target.Position;
+                if(pull.LengthSquared()<36f&&pull.LengthSquared()>.04f)
+                    simulation.Bodies[target.Handle].Velocity.Linear+=Vector3.Normalize(pull)*7f*dt;
+            }
+            return;
+        }
+        if(device.Kind==SandboxKind.Conveyor)
+            foreach(RigidCube body in Bodies)
+            {
+                if(body==source||body.HasHoldTarget) continue;
+                Vector3 delta=body.Position-device.Position;
+                if(MathF.Abs(delta.X)<.8f&&MathF.Abs(delta.Z)<.8f&&delta.Y>.05f&&delta.Y<.85f)
+                    simulation.Bodies[body.Handle].Velocity.Linear+=forward*5f*dt;
+            }
+    }
+
     internal bool DevicePressed(SandboxDevice device)
     {
         foreach(RigidCube body in Bodies)
@@ -251,13 +287,16 @@ internal sealed class PhysicsBodies : IDisposable
         return false;
     }
     internal static float ContactSlipSpeed(Vector3 velocity,Vector3 angularVelocity,Quaternion rotation,float halfSize)
+        => ContactSlipSpeed(velocity,angularVelocity,rotation,new Vector3(halfSize));
+
+    internal static float ContactSlipSpeed(Vector3 velocity,Vector3 angularVelocity,Quaternion rotation,Vector3 localExtents)
     {
         float lengthSquared=rotation.LengthSquared();
         Quaternion normalized=lengthSquared<0.5f?Quaternion.Identity:
             MathF.Abs(lengthSquared-1f)>0.001f?Quaternion.Normalize(rotation):rotation;
-        Vector3 xAxis=Vector3.Transform(Vector3.UnitX*halfSize,normalized);
-        Vector3 yAxis=Vector3.Transform(Vector3.UnitY*halfSize,normalized);
-        Vector3 zAxis=Vector3.Transform(Vector3.UnitZ*halfSize,normalized);
+        Vector3 xAxis=Vector3.Transform(Vector3.UnitX*localExtents.X,normalized);
+        Vector3 yAxis=Vector3.Transform(Vector3.UnitY*localExtents.Y,normalized);
+        Vector3 zAxis=Vector3.Transform(Vector3.UnitZ*localExtents.Z,normalized);
         Vector3[] radii=new Vector3[8];
         float minY=float.MaxValue;
         int index=0;
@@ -283,7 +322,7 @@ internal sealed class PhysicsBodies : IDisposable
     }
 
     internal static float ContactSlipSpeed(RigidCube body)
-        => ContactSlipSpeed(body.Velocity,body.AngularVelocity,body.Rotation,body.HalfSize);
+        => ContactSlipSpeed(body.Velocity,body.AngularVelocity,body.Rotation,LocalExtents(body));
 
     static bool Overlap(Vector3 a, Vector3 ae, Vector3 b, Vector3 be) =>
         MathF.Abs(a.X - b.X) < ae.X + be.X && MathF.Abs(a.Y - b.Y) < ae.Y + be.Y && MathF.Abs(a.Z - b.Z) < ae.Z + be.Z;
@@ -308,7 +347,8 @@ internal sealed class PhysicsBodies : IDisposable
     internal bool Spawn(Vector3 eye, Vector3 forward, bool emissive, IReadOnlyList<RectangleF> walls, Vector3 player)
         => Spawn(eye, forward, emissive, walls, player, emissive ? new Vector3(0.2f, 0.72f, 1f) : new Vector3(0.82f, 0.69f, 0.22f));
 
-    internal bool Spawn(Vector3 eye, Vector3 forward, bool emissive, IReadOnlyList<RectangleF> walls, Vector3 player, Vector3 color)
+    internal bool Spawn(Vector3 eye, Vector3 forward, bool emissive, IReadOnlyList<RectangleF> walls, Vector3 player, Vector3 color,
+        PhysicsMaterial material=PhysicsMaterial.Wood)
     {
         EnsureEnvironment(walls);
         float half = emissive ? 0.38f : 0.43f;
@@ -324,7 +364,8 @@ internal sealed class PhysicsBodies : IDisposable
             new CollidableDescription(shapeIndex, 0f, 3f, ContinuousDetection.Continuous()),
             new BodyActivityDescription(0.0001f, 60));
         BodyHandle handle = simulation.Bodies.Add(description);
-        Bodies.Add(new RigidCube { Id = nextBodyId++, Position = position, HalfSize = half, Emissive = emissive, Color = color, Handle = handle });
+        Bodies.Add(new RigidCube { Id = nextBodyId++, Position = position, HalfSize = half, Emissive = emissive,
+            Material=material, Color = color, Handle = handle });
         return true;
     }
 
@@ -345,7 +386,7 @@ internal sealed class PhysicsBodies : IDisposable
             new BodyActivityDescription(.0001f,60)));
         Bodies.Add(new RigidCube { Id=nextBodyId++,Position=position,HalfSize=half,
             LocalHalfExtents=new Vector3(half,halfHeight,half),Plank=true,
-            Rotation=rotation,Color=new Vector3(.43f,.24f,.10f),Handle=handle });
+            Rotation=rotation,Material=PhysicsMaterial.Wood,Color=new Vector3(.43f,.24f,.10f),Handle=handle });
         return true;
     }
 
@@ -365,7 +406,7 @@ internal sealed class PhysicsBodies : IDisposable
             new CollidableDescription(shapeIndex,0f,3f,ContinuousDetection.Continuous()),
             new BodyActivityDescription(0.0001f,60)));
         var body=new RigidCube { Id=nextBodyId++,SandboxDeviceId=device.Id,Position=position,
-            HalfSize=half,Color=new Vector3(.42f,.48f,.52f),Handle=handle };
+            HalfSize=half,Material=PhysicsMaterial.Metal,Color=new Vector3(.42f,.48f,.52f),Handle=handle };
         Bodies.Add(body);device.BodyId=body.Id;
         return true;
     }
@@ -535,7 +576,7 @@ internal sealed class PhysicsBodies : IDisposable
             {
                 Grab grab=pair.Value;
                 GrabInput? input=onlineInput==null
-                    ? new GrabInput(eye,forward,cameraRotation,HoldDistance,Frequency,Damping,TargetSmoothing,RotateYaw,RotatePitch)
+                    ? new GrabInput(eye,forward,cameraRotation,HoldDistance,Frequency,Damping,TargetSmoothing,RotateYaw,RotatePitch,SnapHold,SnapStep)
                     : onlineInput(pair.Key);
                 if(input==null) { Release(pair.Key); continue; }
                 GrabInput current=input.Value;
@@ -549,6 +590,11 @@ internal sealed class PhysicsBodies : IDisposable
                 float centerY=Math.Clamp(desiredTarget.Y-worldGrabOffset.Y,halfHeight+0.005f,Ceiling-halfHeight-0.005f);
                 desiredTarget.Y=centerY+worldGrabOffset.Y;
                 Vector3 center=desiredTarget-worldGrabOffset;
+                if(current.SnapHold)
+                {
+                    float step=Math.Clamp(current.SnapStep,.05f,2f);
+                    center=new Vector3(MathF.Round(center.X/step)*step,MathF.Round(center.Y/step)*step,MathF.Round(center.Z/step)*step);
+                }
                 Vector3 extents=RotatedExtents(LocalExtents(cube),desiredOrientation);
                 foreach(Vector3 playerPosition in playerPositions??[player])
                 {
@@ -582,7 +628,7 @@ internal sealed class PhysicsBodies : IDisposable
                 if(impulse<1.5f) continue;
                 Vector3 point=reference.Pose.Position;
                 cubeImpacts.Add(new CubeImpactEvent { CubeId=body.Id,X=point.X,Y=point.Y,Z=point.Z,
-                    Strength=Math.Clamp((impulse-1f)/6f,0.15f,1f) });
+                    Strength=Math.Clamp((impulse-1f)/6f,0.15f,1f),Material=body.Material });
                 body.ImpactCooldown=0.11f;
             }
             ApplyRestingResistance();

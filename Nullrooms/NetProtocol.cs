@@ -1,10 +1,12 @@
 namespace Beanrooms;
 
+internal enum PhysicsMaterial { Concrete, Wood, Metal, Plastic }
+
 internal static class NetProtocol
 {
     // Bump when a server changes a feature whose absence would otherwise look like
     // a valid, but ignored, client command.
-    internal const int Version=2;
+    internal const int Version=3;
 }
 
 internal sealed class NetMessage
@@ -35,9 +37,12 @@ internal sealed class NetMessage
     public float SpringDamping { get; set; }
     public float PidSmoothing { get; set; }
     public float SlideResistance { get; set; }
+    public bool SnapHold { get; set; }
+    public float SnapStep { get; set; }
     public float R { get; set; }
     public float G { get; set; }
     public float B { get; set; }
+    public PhysicsMaterial Material { get; set; } = PhysicsMaterial.Wood;
     public string Name { get; set; } = "";
     public PlayerState[] Players { get; set; } = [];
     public CubeState[] Cubes { get; set; } = [];
@@ -49,6 +54,7 @@ internal sealed class NetMessage
     public bool SandboxEnabled { get; set; }
     public SandboxDevice[] Devices { get; set; } = [];
     public SandboxWire[] Wires { get; set; } = [];
+    public bool DevicesChanged { get; set; }
     public int FromId { get; set; }
     public int ToId { get; set; }
 }
@@ -230,6 +236,7 @@ internal sealed class CubeState
     public float HalfSize { get; set; }
     public bool Emissive { get; set; }
     public bool Plank { get; set; }
+    public PhysicsMaterial Material { get; set; } = PhysicsMaterial.Wood;
     public float R { get; set; }
     public float G { get; set; }
     public float B { get; set; }
@@ -242,4 +249,5 @@ internal sealed class CubeImpactEvent
     public float Y { get; set; }
     public float Z { get; set; }
     public float Strength { get; set; }
+    public PhysicsMaterial Material { get; set; } = PhysicsMaterial.Wood;
 }

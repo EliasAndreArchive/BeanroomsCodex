@@ -2,7 +2,7 @@ using System.Numerics;
 
 namespace Beanrooms;
 
-internal enum SandboxKind { Cube, GlowCube, Thruster, Button, Lever, And, Or, Not, Lamp, Xor, Nand, Xnor, Toggle, Timer, Piston, PressurePlate, ProximitySensor, Delay, Counter, Randomizer }
+internal enum SandboxKind { Cube, GlowCube, Thruster, Button, Lever, And, Or, Not, Lamp, Xor, Nand, Xnor, Toggle, Timer, Piston, PressurePlate, ProximitySensor, Delay, Counter, Randomizer, Hinge, Wheel, Rope, Conveyor, SensorLight, DisplayPanel }
 
 internal sealed class SandboxDevice
 {
@@ -95,8 +95,8 @@ internal sealed class SandboxWorld
         if(from==to || Wires.Count>=128 || Wires.Any(w=>w.From==from && w.To==to)) return false;
         SandboxDevice? source=Devices.FirstOrDefault(d=>d.Id==from);
         SandboxDevice? target=Devices.FirstOrDefault(d=>d.Id==to);
-        if(source==null || target==null || source.Kind is SandboxKind.Thruster or SandboxKind.Lamp or SandboxKind.Piston ||
-           target.Kind is SandboxKind.Button or SandboxKind.Lever or SandboxKind.PressurePlate or SandboxKind.ProximitySensor or SandboxKind.Randomizer) return false;
+        if(source==null || target==null || source.Kind is SandboxKind.Thruster or SandboxKind.Lamp or SandboxKind.Piston or SandboxKind.Hinge or SandboxKind.Wheel or SandboxKind.Rope or SandboxKind.Conveyor or SandboxKind.SensorLight or SandboxKind.DisplayPanel ||
+           target.Kind is SandboxKind.Button or SandboxKind.Lever or SandboxKind.PressurePlate or SandboxKind.ProximitySensor or SandboxKind.Randomizer or SandboxKind.SensorLight) return false;
         if(Vector3.DistanceSquared(source.Position,target.Position)>20f*20f) return false;
         Wires.Add(new SandboxWire { From=from,To=to });
         return true;
@@ -110,7 +110,8 @@ internal sealed class SandboxWorld
     }
 
     internal void Update(float dt,Action<SandboxDevice>? poweredThruster=null,Action<SandboxDevice>? poweredPiston=null,
-        Func<SandboxDevice,bool>? platePressed=null,Func<SandboxDevice,bool>? playerNearby=null)
+        Func<SandboxDevice,bool>? platePressed=null,Func<SandboxDevice,bool>? playerNearby=null,
+        Action<SandboxDevice>? poweredMechanism=null)
     {
         foreach(SandboxDevice device in Devices)
             if(device.Kind==SandboxKind.Button && device.PressTime>0f)
@@ -118,7 +119,7 @@ internal sealed class SandboxWorld
         foreach(SandboxDevice device in Devices)
         {
             if(device.Kind==SandboxKind.PressurePlate) device.State=platePressed?.Invoke(device)==true;
-            else if(device.Kind==SandboxKind.ProximitySensor) device.State=playerNearby?.Invoke(device)==true;
+            else if(device.Kind is SandboxKind.ProximitySensor or SandboxKind.SensorLight) device.State=playerNearby?.Invoke(device)==true;
             else if(device.Kind==SandboxKind.Randomizer)
             {
                 device.Timer+=dt;
@@ -162,7 +163,7 @@ internal sealed class SandboxWorld
             bool changed=false;
             foreach(SandboxDevice device in Devices)
             {
-                if(device.Kind is SandboxKind.Button or SandboxKind.Lever or SandboxKind.Toggle or SandboxKind.Timer or SandboxKind.Counter or SandboxKind.Delay or SandboxKind.PressurePlate or SandboxKind.ProximitySensor or SandboxKind.Randomizer) continue;
+                if(device.Kind is SandboxKind.Button or SandboxKind.Lever or SandboxKind.Toggle or SandboxKind.Timer or SandboxKind.Counter or SandboxKind.Delay or SandboxKind.PressurePlate or SandboxKind.ProximitySensor or SandboxKind.Randomizer or SandboxKind.SensorLight) continue;
                 int inputs=0,active=0;
                 foreach(SandboxWire wire in Wires)
                     if(wire.To==device.Id)
@@ -185,5 +186,8 @@ internal sealed class SandboxWorld
             if(device.Kind==SandboxKind.Thruster && device.State) poweredThruster(device);
         if(poweredPiston!=null) foreach(SandboxDevice device in Devices)
             if(device.Kind==SandboxKind.Piston && device.State) poweredPiston(device);
+        if(poweredMechanism!=null) foreach(SandboxDevice device in Devices)
+            if(device.State && device.Kind is (SandboxKind.Hinge or SandboxKind.Wheel or SandboxKind.Rope or SandboxKind.Conveyor))
+                poweredMechanism(device);
     }
 }

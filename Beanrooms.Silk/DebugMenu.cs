@@ -6,7 +6,8 @@ namespace Beanrooms;
 internal sealed class DebugMenu
 {
     internal bool Open, TitleScreen, SettingsFromTitle, Dithering = true, PaletteReduction = true, PostEnabled = true, AutoExposure, Bloom = true, Lights = true, Vsync = true, Dirty = true, Volumetrics = true;
-    internal bool SandboxPage, SandboxEnabled, SandboxHost=true, SandboxSupported=true, WireTool, WeldTool;
+    internal bool SandboxPage, PonderPage, SandboxEnabled, SandboxHost=true, SandboxSupported=true, WireTool, WeldTool;
+    internal int PonderStep;
     internal string ToolStatus="";
     internal int SandboxCategory, SandboxSelected, SandboxScroll;
     internal Action<SandboxKind>? SandboxSpawn;
@@ -14,7 +15,8 @@ internal sealed class DebugMenu
     static readonly SandboxKind[][] SandboxItems =
     [
         [SandboxKind.Cube,SandboxKind.GlowCube],
-        [SandboxKind.Thruster,SandboxKind.Lamp,SandboxKind.Piston,SandboxKind.PressurePlate,SandboxKind.ProximitySensor],
+        [SandboxKind.Thruster,SandboxKind.Lamp,SandboxKind.Piston,SandboxKind.PressurePlate,SandboxKind.ProximitySensor,
+         SandboxKind.Hinge,SandboxKind.Wheel,SandboxKind.Rope,SandboxKind.Conveyor,SandboxKind.SensorLight,SandboxKind.DisplayPanel],
         [SandboxKind.Button,SandboxKind.Lever,SandboxKind.And,SandboxKind.Or,SandboxKind.Not,
          SandboxKind.Xor,SandboxKind.Nand,SandboxKind.Xnor,SandboxKind.Toggle,SandboxKind.Timer,
          SandboxKind.Delay,SandboxKind.Counter,SandboxKind.Randomizer]
@@ -31,6 +33,7 @@ internal sealed class DebugMenu
         SandboxKind.Nand=>"NAND GATE",SandboxKind.Xnor=>"XNOR GATE",SandboxKind.Toggle=>"TOGGLE FLIP",
         SandboxKind.Timer=>"TIMER CLOCK",SandboxKind.PressurePlate=>"PRESSURE PLATE",
         SandboxKind.ProximitySensor=>"PROXIMITY SENSOR",SandboxKind.Randomizer=>"RANDOM PULSE",
+        SandboxKind.SensorLight=>"SENSOR LIGHT",SandboxKind.DisplayPanel=>"DISPLAY PANEL",
         _=>kind.ToString().ToUpperInvariant()
     };
     static string SandboxDetail(SandboxKind kind) => kind switch
@@ -46,6 +49,9 @@ internal sealed class DebugMenu
         SandboxKind.PressurePlate=>"CUBE MAKES OUTPUT",SandboxKind.ProximitySensor=>"PLAYER MAKES OUTPUT",
         SandboxKind.Delay=>"WAITS BEFORE OUTPUT",SandboxKind.Counter=>"EVERY THIRD PULSE",
         SandboxKind.Randomizer=>"RANDOM OUTPUT EACH SEC",
+        SandboxKind.Hinge=>"POWERED ROTARY MOUNT",SandboxKind.Wheel=>"POWERED DRIVE WHEEL",
+        SandboxKind.Rope=>"POWERED WINCH PULL",SandboxKind.Conveyor=>"MOVES BLOCKS ON TOP",
+        SandboxKind.SensorLight=>"PLAYER DETECTED LIGHT",SandboxKind.DisplayPanel=>"SHOWS WIRE STATE",
         _=>"POWERED LIGHT"
     };
     internal void SelectSandbox(int step)
@@ -77,6 +83,15 @@ internal sealed class DebugMenu
         int category=Math.Clamp(SandboxCategory+step,0,SandboxItems.Length-1);
         if(category!=SandboxCategory) { SandboxCategory=category;SandboxSelected=0;SandboxScroll=0;Dirty=true;InteractionSound?.Invoke(); }
     }
+    internal void TogglePonder()
+    {
+        FinishEditing();
+        if(Open&&PonderPage) { Open=false;PonderPage=false; }
+        else { Open=true;PonderPage=true;SandboxPage=false;TitleScreen=false; }
+        Dirty=true;InteractionSound?.Invoke();
+    }
+    internal void MovePonder(int direction)
+    { PonderStep=(PonderStep+direction+4)%4;Dirty=true;InteractionSound?.Invoke(); }
     internal void ToggleSandbox()
     {
         FinishEditing();
@@ -134,7 +149,10 @@ internal sealed class DebugMenu
     internal Action<int>? SessionAction;
     internal Action? InteractionSound, HoverSound;
     internal float PickupRange=5f, HoldDistance=2.25f, SpringFrequency=8.5f, SpringDamping=1.35f, PidSmoothing=18f, SlideResistance=4.5f;
-    internal int CubeColorIndex = 6;
+    internal bool SnapHold;
+    internal float SnapStep=.25f;
+    internal int CubeColorIndex = 6, CubeMaterialIndex=1;
+    static readonly PhysicsMaterial[] CubeMaterials=[PhysicsMaterial.Concrete,PhysicsMaterial.Wood,PhysicsMaterial.Metal,PhysicsMaterial.Plastic];
     static readonly (string Name, Vector3 Color)[] CubeColors =
     {
         ("AMBER", new Vector3(0.82f,0.69f,0.22f)),
@@ -147,8 +165,11 @@ internal sealed class DebugMenu
         ("ORANGE", new Vector3(1f,0.36f,0.08f))
     };
     internal Vector3 CubeColor => CubeColors[CubeColorIndex].Color;
+    internal PhysicsMaterial CubeMaterial => CubeMaterials[CubeMaterialIndex];
     internal void CycleCubeColor(int direction)
     { CubeColorIndex=(CubeColorIndex+direction+CubeColors.Length)%CubeColors.Length;Dirty=true;InteractionSound?.Invoke(); }
+    internal void CycleCubeMaterial(int direction)
+    { CubeMaterialIndex=(CubeMaterialIndex+direction+CubeMaterials.Length)%CubeMaterials.Length;Dirty=true;InteractionSound?.Invoke(); }
     int dragging = -1;
     int hoveredItem = -1;
     static readonly int[] SampleChoices = { 16, 32, 64, 128, 256 };
@@ -191,7 +212,7 @@ internal sealed class DebugMenu
         new[] { "RENDER MODE", "PATH SAMPLES", "PATH BOUNCES", "BOUNCE LIGHT", "AO STRENGTH", "LIGHT INTENSITY", "LIGHT DENSITY", "RESOLUTION", "FIXTURES", "FPS LIMIT", "VSYNC", "VOLUMETRICS", "FOG DENSITY", "FOG STEPS", "PROBE GRID", "PROBE BOUNCES", "DIRECT SAMPLES" },
         new[] { "WALK SPEED", "SPRINT X", "CROUCH X", "ACCELERATION", "DECELERATION", "STANCE SMOOTH", "SPRINT SMOOTH", "CROUCH HEIGHT", "STEP LENGTH" },
         new[] { "MOUSE SENS", "IDLE SHAKE", "WALK SHAKE", "SPRINT SHAKE", "CROUCH SHAKE", "HEAD BOB", "SWAY AMOUNT", "STRAFE ROLL", "TURN ROLL", "MOVE PITCH", "LOOK SMOOTH" },
-        new[] { "PICKUP RANGE", "HOLD DIST", "SPRING FREQ", "SPRING DAMP", "HOLD SMOOTH", "SLIDE RESIST", "CUBE COUNT", "DEBUG UI", "OBJECT FRAMES" },
+        new[] { "PICKUP RANGE", "HOLD DIST", "SPRING FREQ", "SPRING DAMP", "HOLD SMOOTH", "SLIDE RESIST", "GRID SNAP", "SNAP STEP", "CUBE COUNT", "DEBUG UI", "OBJECT FRAMES" },
         new[] { "MONSTER", "ROAM SPEED", "SEARCH SPEED", "CHASE SPEED", "CHASE TURN", "SEARCH TURN", "ROAM TURN", "SIGHT RANGE", "SIGHT ANGLE", "SEARCH RADIUS", "ROAM RADIUS" },
         new[] { "PLAYER NAME", "BEAN COLOR", "RED", "GREEN", "BLUE", "PHOTON REGION", "JOIN KEY", "CONNECT", "DISCONNECT", "CONNECTION", "PLAYER ID", "PLAYERS", "ROLE" },
         new[] { "POST FX", "TONEMAP", "EXPOSURE", "AUTO EXPOSURE", "BRIGHTEN SPEED", "DARKEN SPEED", "BLOOM", "BLOOM STRENGTH", "BLOOM THRESHOLD", "BLOOM RADIUS", "SPATIAL DENOISE", "DENOISE STRENGTH", "DENOISE RADIUS" },
@@ -201,6 +222,7 @@ internal sealed class DebugMenu
 
     internal void Toggle()
     {
+        if(PonderPage) { TogglePonder();return; }
         if(SandboxPage) { ToggleSandbox();return; }
         FinishEditing();
         if(Open && SettingsFromTitle && !TitleScreen) ShowTitle();
@@ -275,7 +297,8 @@ internal sealed class DebugMenu
         PickupRange=defaults.PickupRange; HoldDistance=defaults.HoldDistance;
         SpringFrequency=defaults.SpringFrequency; SpringDamping=defaults.SpringDamping;
         PidSmoothing=defaults.PidSmoothing; SlideResistance=defaults.SlideResistance;
-        CubeColorIndex=defaults.CubeColorIndex;
+        SnapHold=defaults.SnapHold;SnapStep=defaults.SnapStep;
+        CubeColorIndex=defaults.CubeColorIndex;CubeMaterialIndex=defaults.CubeMaterialIndex;
         ShowDebugOverlay=defaults.ShowDebugOverlay; ShowObjectFrames=defaults.ShowObjectFrames;
         MonsterDebug=defaults.MonsterDebug;
         if(MonsterControlsWritable) MonsterSettings.CopyFrom(defaults.MonsterSettings);
@@ -374,7 +397,8 @@ internal sealed class DebugMenu
         {
             if(y<14 && x>=307) { ToggleSandbox();return; }
             if(y>=148 && y<164) { CycleCubeColor(x<155?-1:1);return; }
-            if(y>=168 && y<184) { ObjectAction?.Invoke(2);Dirty=true;InteractionSound?.Invoke();return; }
+            if(y>=168 && y<184) { CycleCubeMaterial(x<155?-1:1);return; }
+            if(y>=186 && y<202) { ObjectAction?.Invoke(2);Dirty=true;InteractionSound?.Invoke();return; }
             if(y>=17 && y<29 && x>=12)
             {
                 int category=(x-12)/75;
@@ -605,8 +629,10 @@ internal sealed class DebugMenu
                 case 3: SpringDamping=Math.Clamp(SpringDamping+direction*0.01f,0.3f,2f); break;
                 case 4: PidSmoothing=Math.Clamp(PidSmoothing+direction*0.1f,4f,30f); break;
                 case 5: SlideResistance=Math.Clamp(SlideResistance+direction*0.1f,0f,12f); break;
-                case 7: ShowDebugOverlay=!ShowDebugOverlay; break;
-                case 8: ShowObjectFrames=!ShowObjectFrames; break;
+                case 6: SnapHold=!SnapHold;break;
+                case 7: SnapStep=Math.Clamp(SnapStep+direction*.05f,.05f,1f);break;
+                case 9: ShowDebugOverlay=!ShowDebugOverlay; break;
+                case 10: ShowObjectFrames=!ShowObjectFrames; break;
             }
         }
         else if(Page == 5)
@@ -794,8 +820,8 @@ internal sealed class DebugMenu
             0 => $"{PickupRange:0.0}",1 => $"{HoldDistance:0.0}",
             2 => $"{SpringFrequency:0.0}",3 => $"{SpringDamping:0.00}",
             4 => $"{PidSmoothing:0.0}",5 => $"{SlideResistance:0.0}",
-            6 => $"{BodyCount}",7 => ShowDebugOverlay ? "ON" : "OFF",
-            8 => ShowObjectFrames ? "ON" : "OFF",_ => ""
+            6 => SnapHold?"ON":"OFF",7 => $"{SnapStep:0.00}",8 => $"{BodyCount}",
+            9 => ShowDebugOverlay ? "ON" : "OFF",10 => ShowObjectFrames ? "ON" : "OFF",_ => ""
         };
         if (Page == 0) return row switch
         {
@@ -996,6 +1022,43 @@ internal sealed class DebugMenu
         g.FillRectangle(brush,right-corner,bottom-1,corner,1);
         g.FillRectangle(brush,right-1,bottom-corner,1,corner);
     }
+    void DrawPonder(Graphics g,Brush white,Brush paleBlue,Brush green)
+    {
+        g.FillRectangle(new SolidBrush(Color.FromArgb(218,5,10,13)),18,24,284,194);
+        using var border=new Pen(Color.FromArgb(120,84,224,160));
+        g.DrawLine(border,new PointF(18,24),new PointF(302,24));
+        g.DrawLine(border,new PointF(302,24),new PointF(302,218));
+        g.DrawLine(border,new PointF(302,218),new PointF(18,218));
+        g.DrawLine(border,new PointF(18,218),new PointF(18,24));
+        for(int y=28;y<216;y+=4) g.FillRectangle(new SolidBrush(Color.FromArgb(18,130,220,180)),20,y,280,1);
+        string[] titles=["PONDER: BUILD GRID","PONDER: WIRE POWER","PONDER: WELD SHAPES","PONDER: MATERIALS"];
+        string[] details=["PLACE DEVICES ON THE 5X5X5 GRID","G CONNECTS OUTPUT TO INPUT","K JOINS ANY TWO GRABBABLES","SELECT CONCRETE WOOD METAL PLASTIC"];
+        PixelText(g,titles[PonderStep],green,28,34);
+        PixelText(g,details[PonderStep],paleBlue,28,47);
+        PointF Project(int x,int y,int z) => new(160+(x-z)*12,144+(x+z)*6-y*12);
+        using var gridPen=new Pen(Color.FromArgb(96,120,196,207));
+        for(int layer=0;layer<5;layer++)
+        for(int line=0;line<=5;line++)
+        {
+            g.DrawLine(gridPen,Project(line,layer,0),Project(line,layer,5));
+            g.DrawLine(gridPen,Project(0,layer,line),Project(5,layer,line));
+        }
+        for(int x=0;x<=5;x+=5)
+        for(int z=0;z<=5;z+=5) g.DrawLine(gridPen,Project(x,0,z),Project(x,4,z));
+        void Block(int x,int y,int z,Color color,string label)
+        {
+            PointF at=Project(x,y,z); using var fill=new SolidBrush(color);
+            g.FillRectangle(fill,(int)at.X-6,(int)at.Y-6,13,13);
+            PixelText(g,label,white,(int)at.X-3,(int)at.Y-3);
+        }
+        if(PonderStep==0) { Block(2,0,2,Color.FromArgb(155,181,108,46),"C");Block(3,1,2,Color.FromArgb(155,62,117,144),"T"); }
+        else if(PonderStep==1) { Block(1,0,2,Color.FromArgb(180,190,54,40),"B");Block(3,0,2,Color.FromArgb(180,239,201,70),"L"); using var wire=new Pen(Color.FromArgb(210,84,224,160));g.DrawLine(wire,Project(1,0,2),Project(3,0,2)); }
+        else if(PonderStep==2) { Block(1,0,2,Color.FromArgb(165,122,72,34),"P");Block(3,1,2,Color.FromArgb(165,122,72,34),"P");using var weld=new Pen(Color.FromArgb(220,236,244,247));g.DrawLine(weld,Project(1,0,2),Project(3,1,2)); }
+        else { Block(1,0,2,Color.FromArgb(180,105,105,105),"C");Block(2,0,2,Color.FromArgb(180,142,82,38),"W");Block(3,0,2,Color.FromArgb(180,145,170,181),"M");Block(4,0,2,Color.FromArgb(180,82,156,190),"P"); }
+        PixelText(g,"< LEFT RIGHT >    ESC CLOSE",paleBlue,64,202);
+        PixelText(g,$"{PonderStep+1}/4",white,266,34);
+    }
+
     internal Bitmap Draw()
     {
         var image = new Bitmap(320, 240, PixelFormat.Format32bppArgb);
@@ -1007,7 +1070,11 @@ internal sealed class DebugMenu
         using var paleBlue = new SolidBrush(Color.FromArgb(170, 211, 231));
         using var green = new SolidBrush(Color.FromArgb(84, 224, 160));
         using var unfilled = new SolidBrush(Color.FromArgb(130, 160, 171));
-        if(Open && SandboxPage)
+        if(Open && PonderPage)
+        {
+            DrawPonder(g,white,paleBlue,green);
+        }
+        else if(Open && SandboxPage)
         {
             PixelText(g,"BEANROOMS MENU",paleBlue,12,4);
             PixelText(g,"X",white,310,4);
@@ -1032,11 +1099,13 @@ internal sealed class DebugMenu
             if(SandboxScroll<SandboxMaxScroll) PixelText(g,"v",paleBlue,8,SandboxTop+SandboxRows*SandboxPitch-3);
             PixelText(g,"CUBE COLOR",white,21,151);
             PixelText(g,"< "+CubeColors[CubeColorIndex].Name+" >",green,215,151);
-            PixelText(g,"CLEAR CUBES",white,21,171);
-            PixelText(g,"CLEAR",white,274,171);
+            PixelText(g,"MATERIAL",white,21,171);
+            PixelText(g,"< "+CubeMaterial.ToString().ToUpperInvariant()+" >",green,215,171);
+            PixelText(g,"CLEAR CUBES",white,21,189);
+            PixelText(g,"CLEAR",white,274,189);
             string detail=SandboxDetail(items[SandboxSelected]);
-            PixelText(g,detail.Length>22?detail[..22]:detail,paleBlue,13,225);
-            PixelText(g,NetworkConnected?(SandboxHost?"HOST CONTROLS":"GUEST CONTROLS"):"LOCAL SANDBOX",paleBlue,251,225);
+            PixelText(g,detail.Length>22?detail[..22]:detail,paleBlue,13,215);
+            PixelText(g,NetworkConnected?(SandboxHost?"HOST CONTROLS":"GUEST CONTROLS"):"LOCAL SANDBOX",paleBlue,251,215);
             PixelText(g,"B CLOSE  G WIRE  K WELD  E USE",paleBlue,13,231);
         }
         else if(Open && TitleScreen)

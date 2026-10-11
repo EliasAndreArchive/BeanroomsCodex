@@ -30,9 +30,9 @@ available everywhere with **F** (glow cubes require sandbox mode). Sandbox
 devices are physical and can be grabbed like cubes. In sandbox sessions, use
 **E** on a button or lever, **G** to toggle the wire tool and click a source
 then target, **K** to toggle the weld tool and click two nearby grabbable
-objects. Welding is available for every grabbable object, including the wooden pallets, even without sandbox mode. **Y** copies an aimed sandbox cube or device and **V** places the copy. The sandbox browser uses **C** to cycle cube color and **X** to clear cubes. Hold the left mouse button to carry an object, use the wheel to move
+objects. Welding is available for every grabbable object, including the wooden pallets, even without sandbox mode. **Y** copies an aimed sandbox cube or device and **V** places the copy. The sandbox browser uses **C** to cycle cube color, **M** to choose the cube material, and **X** to clear cubes. Hold the left mouse button to carry an object, use the wheel to move
 it closer or farther, and hold the right mouse button while moving the mouse
-to rotate its target. Fixed path tracing is the default renderer. Realtime GI
+to rotate its target. In **Tab → Physics**, enable **Grid Snap** and set **Snap Step** to place held objects on a construction grid. Press **O** to open the private Ponder screen: it locks movement, shows a 5×5×5 example build, and uses Left/Right to change lessons; press **Escape** or **O** to leave. Fixed path tracing is the default renderer. Realtime GI
 is available in the settings menu when a faster dynamic diffuse radiance cache
 is useful. Post FX includes optional current-frame spatial denoising for path
 tracing. A random roomwide flicker can leave the lights blacked out until the

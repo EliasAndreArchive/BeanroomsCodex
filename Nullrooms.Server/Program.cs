@@ -55,6 +55,8 @@ internal sealed class LocalServer : IDisposable
     int nextId, seed = 82317;
     double nextFlickerEvent,lastFlickerEvent=double.NegativeInfinity;
     bool blackout,blackoutAfterEvent;
+    float deviceSnapshotAge;
+    int lastSandboxSignature=int.MinValue;
 
     internal LocalServer(IPAddress listenAddress,int port,int healthPort=0)
     {
@@ -67,6 +69,7 @@ internal sealed class LocalServer : IDisposable
     {
         physics.Clear();
         sandbox.Clear();
+        lastSandboxSignature=int.MinValue;deviceSnapshotAge=1f;
         walls = WorldLayout.Generate(seed).Walls;
         foreach(var plank in WorldLayout.CornerPlanks(seed,walls))
             physics.SpawnCornerPlank(plank.Position,plank.Yaw,walls,new Vector3(96f,1.68f,96f));
@@ -110,7 +113,8 @@ internal sealed class LocalServer : IDisposable
                 sandbox.Update(Step,device=>physics.ApplyThruster(device.Position,device.Yaw,Step,device.Id),
                 device=>physics.ApplyPiston(device.Position,device.Rotation,Step,device.Id),
                 device=>physics.DevicePressed(device),device=>peers.Values.Any(peer=>
-                    Vector3.DistanceSquared(device.Position,new Vector3(peer.X,peer.Y,peer.Z))<3f*3f));
+                    Vector3.DistanceSquared(device.Position,new Vector3(peer.X,peer.Y,peer.Z))<3f*3f),
+                device=>physics.ApplyMechanism(device,Step));
                 Vector3 eye=new(96f,1.68f,96f), forward=Vector3.UnitZ;
                 Quaternion rotation=Quaternion.Identity;
                 foreach(Peer peer in peers.Values)
@@ -278,6 +282,7 @@ internal sealed class LocalServer : IDisposable
                         if(message.SpringDamping>0f) peer.SpringDamping=Math.Clamp(message.SpringDamping,0.1f,5f);
                         if(message.PidSmoothing>0f) peer.PidSmoothing=Math.Clamp(message.PidSmoothing,1f,50f);
                         if(message.SlideResistance>0f) peer.SlideResistance=Math.Clamp(message.SlideResistance,0.1f,20f);
+                        peer.SnapHold=message.SnapHold;peer.SnapStep=Math.Clamp(message.SnapStep,0.05f,1f);
                     }
                     if(message.MonsterTuning!=null && peer.Id==peers.Keys.Min())
                     {
@@ -314,7 +319,8 @@ internal sealed class LocalServer : IDisposable
                         if(message.Action==1 && !sandboxEnabled) break;
                         Vector3 eye=new(peer.X,peer.Y,peer.Z);
                         Vector3 color=new(Math.Clamp(message.R,0f,1f),Math.Clamp(message.G,0f,1f),Math.Clamp(message.B,0f,1f));
-                        physics.Spawn(eye,LookDirection(peer.Yaw,peer.Pitch),message.Action==1,walls,eye,color);
+                        physics.Spawn(eye,LookDirection(peer.Yaw,peer.Pitch),message.Action==1,walls,eye,color,
+                            Enum.IsDefined(message.Material)?message.Material:PhysicsMaterial.Wood);
                         break;
                     }
                 case "sandbox_toggle":
@@ -334,7 +340,8 @@ internal sealed class LocalServer : IDisposable
                     {
                         Vector3 eye=new(peer.X,peer.Y,peer.Z);
                         physics.Spawn(eye,LookDirection(peer.Yaw,peer.Pitch),message.Action==1,walls,eye,
-                            new Vector3(Math.Clamp(message.R,0f,1f),Math.Clamp(message.G,0f,1f),Math.Clamp(message.B,0f,1f)));
+                            new Vector3(Math.Clamp(message.R,0f,1f),Math.Clamp(message.G,0f,1f),Math.Clamp(message.B,0f,1f)),
+                            Enum.IsDefined(message.Material)?message.Material:PhysicsMaterial.Wood);
                     }
                     break;
                 case "copy_device":
@@ -385,8 +392,22 @@ internal sealed class LocalServer : IDisposable
         }
     }
 
+    int SandboxSignature()
+    {
+        var hash=new HashCode();
+        foreach(SandboxDevice d in sandbox.Devices)
+        { hash.Add(d.Id);hash.Add(d.Kind);hash.Add((int)(d.X*100));hash.Add((int)(d.Y*100));hash.Add((int)(d.Z*100));
+          hash.Add((int)(d.Qx*1000));hash.Add((int)(d.Qy*1000));hash.Add((int)(d.Qz*1000));hash.Add((int)(d.Qw*1000));
+          hash.Add(d.State);hash.Add(d.BodyId); }
+        foreach(SandboxWire wire in sandbox.Wires) { hash.Add(wire.From);hash.Add(wire.To); }
+        return hash.ToHashCode();
+    }
+
     void BroadcastSnapshot()
     {
+        int signature=SandboxSignature();
+        bool devicesChanged=signature!=lastSandboxSignature||deviceSnapshotAge>=1f;
+        if(devicesChanged) { lastSandboxSignature=signature;deviceSnapshotAge=0f; } else deviceSnapshotAge+=.05f;
         PlayerState[] players=peers.Values.Select(peer=>new PlayerState
         {
             Id=peer.Id,X=peer.X,Y=peer.Y,Z=peer.Z,Yaw=peer.Yaw,
@@ -402,11 +423,11 @@ internal sealed class LocalServer : IDisposable
             Ax=body.AngularVelocity.X,Ay=body.AngularVelocity.Y,Az=body.AngularVelocity.Z,
             SlipSpeed=PhysicsBodies.ContactSlipSpeed(body),
             Qx=body.Rotation.X,Qy=body.Rotation.Y,Qz=body.Rotation.Z,Qw=body.Rotation.W,
-            HalfSize=body.HalfSize,Emissive=body.Emissive,Plank=body.Plank,
+            HalfSize=body.HalfSize,Emissive=body.Emissive,Plank=body.Plank,Material=body.Material,
             R=body.Color.X,G=body.Color.Y,B=body.Color.Z
         }).ToArray();
         var message=new NetMessage { Type="snapshot",Seed=seed,Players=players,Cubes=cubes,
-            SandboxEnabled=sandboxEnabled,Devices=sandbox.Devices.ToArray(),Wires=sandbox.Wires.ToArray(),
+            SandboxEnabled=sandboxEnabled,Devices=devicesChanged?sandbox.Devices.ToArray():[],Wires=devicesChanged?sandbox.Wires.ToArray():[],DevicesChanged=devicesChanged,
             CubeImpacts=physics.DrainCubeImpacts(),
             HostId=players.Select(player=>player.Id).DefaultIfEmpty(0).Min(),
             MonsterTuning=monsterSettings.Clone(),
@@ -447,7 +468,7 @@ internal sealed class Peer : IDisposable
     internal float MoveSpeed,SprintBlend,CrouchBlend;
     internal string Name;
     internal float R=0.78f,G=0.76f,B=0.70f;
-    internal float PickupRange=5f,SpringFrequency=8.5f,SpringDamping=1.35f,PidSmoothing=18f,SlideResistance=4.5f;
+    internal float PickupRange=5f,SpringFrequency=8.5f,SpringDamping=1.35f,PidSmoothing=18f,SlideResistance=4.5f,SnapStep=.25f; internal bool SnapHold;
     internal int RespawnId;
     internal double RespawnProtectedUntil;
 

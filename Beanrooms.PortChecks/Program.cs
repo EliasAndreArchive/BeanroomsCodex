@@ -23,6 +23,10 @@ menu.SandboxSupported=false;menu.AdjustSelected(1);
 if(sandboxToggles!=2) throw new Exception("Unsupported server still exposed sandbox mode");
 menu.NetworkConnected=false;menu.AdjustSelected(1);
 if(sandboxToggles!=3) throw new Exception("Solo session menu did not expose sandbox mode");
+menu.SetPage(4);menu.Selected=6;menu.AdjustSelected(1);
+if(!menu.SnapHold) throw new Exception("Physics menu did not toggle grid snap");
+menu.Selected=7;float snapStep=menu.SnapStep;menu.AdjustSelected(1);
+if(menu.SnapStep<=snapStep) throw new Exception("Physics menu did not adjust snap step");
 using(var staleClient=new LocalNetClient())
 {
     var receive=typeof(LocalNetClient).GetMethod("ReceiveMessage",
@@ -71,6 +75,23 @@ using(var photonAuthority=new PhotonAuthority([4,9]))
     if(!counter.State) throw new Exception("Counter did not fire on its third pulse");
 }
 {
+    var sandbox=new SandboxWorld();
+    var powered=new HashSet<SandboxKind>();
+    sandbox.Devices.AddRange([
+        new SandboxDevice { Id=1,Kind=SandboxKind.Hinge,State=true },
+        new SandboxDevice { Id=2,Kind=SandboxKind.Wheel,State=true },
+        new SandboxDevice { Id=3,Kind=SandboxKind.Rope,State=true },
+        new SandboxDevice { Id=4,Kind=SandboxKind.Conveyor },
+        new SandboxDevice { Id=5,Kind=SandboxKind.SensorLight },
+        new SandboxDevice { Id=6,Kind=SandboxKind.Lever,State=true }
+    ]);
+    sandbox.Connect(6,1);sandbox.Connect(6,2);sandbox.Connect(6,3);sandbox.Connect(6,4);
+    sandbox.Update(.1f,playerNearby:_=>true,poweredMechanism:device=>powered.Add(device.Kind));
+    if(!sandbox.Devices.Single(device=>device.Id==5).State ||
+       !powered.SetEquals([SandboxKind.Hinge,SandboxKind.Wheel,SandboxKind.Rope,SandboxKind.Conveyor]))
+        throw new Exception("Sandbox mechanisms did not receive their powered update");
+}
+{
     var layout=WorldLayout.Generate(82317);
     using var physics=new PhysicsBodies();
     foreach(var plank in WorldLayout.CornerPlanks(82317,layout.Walls))
@@ -93,7 +114,9 @@ foreach(string asset in new[]{"spawn-boom.mp3","ui-click.wav","ui-hover.wav","la
     "footstep_concrete_002.wav","footstep_concrete_003.wav","footstep_concrete_004.wav",
     "cube_wood_impact_000.wav","cube_wood_impact_001.wav",
     "cube_wood_impact_002.wav","cube_wood_impact_003.wav","cube_wood_impact_004.wav",
-    "cube_concrete_scrape.wav"})
+    "cube_concrete_scrape.wav",
+    "impact_concrete_000.wav","impact_wood_001.wav","impact_metal_000.wav","impact_plastic_001.wav",
+    "slide_concrete.wav","slide_wood.wav","slide_metal.wav","slide_plastic.wav"})
 {
     using var clip=audio.Load(asset);
     if(clip.Duration<=0) throw new Exception("Failed to decode "+asset);
@@ -119,6 +142,10 @@ using(var physical=new PhysicalSounds(audio))
     if(!footstepVoices.SelectMany(voices=>voices).Any(voice=>voice.IsPlaying))
         throw new Exception("Moving did not start a footstep voice");
     physical.Update(listener,0f,walker,[],[],[new CubeImpactEvent { X=10f,Y=0.5f,Z=10f,Strength=1f }],1f/60f);
+    int woodImpactCount=physical.ImpactPlayCount;
+    physical.Update(listener,0f,walker,[],[],[new CubeImpactEvent { X=10f,Y=0.5f,Z=10f,Strength=1f,Material=PhysicsMaterial.Metal }],1f/60f);
+    if(physical.ImpactPlayCount<=woodImpactCount)
+        throw new Exception("A metal collision did not select a material impact voice");
     var impactVoices=(AudioVoice[][])typeof(PhysicalSounds).GetField("impactVoices",
         System.Reflection.BindingFlags.Instance|System.Reflection.BindingFlags.NonPublic)!.GetValue(physical)!;
     if(!impactVoices.SelectMany(voices=>voices).Any(voice=>voice.IsPlaying))
@@ -522,6 +549,15 @@ using(var game=new GameWindow())
     if(gameMenu.Open && gameMenu.SandboxPage)
         throw new Exception("Typing B in a connection field opened the sandbox page");
     gameMenu.FinishEditing();gameMenu.Open=false;
+    // O opens a private Ponder screen, consumes movement/menu navigation, and Escape closes it.
+    keyDown(game,new KeyEventArgs(Keys.O,false));
+    if(!gameMenu.Open || !gameMenu.PonderPage) throw new Exception("O did not open the Ponder screen");
+    int ponderStep=gameMenu.PonderStep;
+    var ponderMessage=new Message();
+    key.Invoke(game,[ponderMessage,Keys.Right]);
+    if(gameMenu.PonderStep==(ponderStep)) throw new Exception("Ponder navigation was captured by the settings menu");
+    keyDown(game,new KeyEventArgs(Keys.Escape,false));
+    if(gameMenu.Open || gameMenu.PonderPage) throw new Exception("Escape did not close the Ponder screen");
     // ... but pressing B during gameplay still opens it (solo needs no lobby).
     keyDown(game,new KeyEventArgs(Keys.B,false));
     if(!gameMenu.SandboxPage)
@@ -539,7 +575,7 @@ using(var game=new GameWindow())
     gameMenu.CycleSandboxCategory(1);
     if(gameMenu.SandboxCategory!=1 || gameMenu.SandboxSelected!=0)
         throw new Exception("Sandbox category change did not reset the selection");
-    gameMenu.SelectSandbox(5);
+    gameMenu.SelectSandbox(99);
     if(gameMenu.SandboxSelected!=gameMenu.SandboxItemCount-1)
         throw new Exception("Sandbox selection did not clamp to the category");
     gameMenu.CycleSandboxCategory(2);
