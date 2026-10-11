@@ -14,6 +14,7 @@ internal interface INetClient : IDisposable
     int Id { get; }
     int ProtocolVersion { get; }
     bool SupportsSandbox { get; }
+    ChickenState? Chicken { get; }
     void Start();
     void Service(float dt);
     void Send(NetMessage message);
@@ -53,6 +54,7 @@ internal sealed class LocalNetClient : INetClient
     SandboxDevice[] devices=[];
     SandboxWire[] wires=[];
     bool sandboxEnabled;
+    ChickenState? chicken;
     int id, connected, hostId, protocolVersion;
     string status="OFFLINE";
 
@@ -67,6 +69,7 @@ internal sealed class LocalNetClient : INetClient
     public int Id => Volatile.Read(ref id);
     public int ProtocolVersion => Volatile.Read(ref protocolVersion);
     public bool SupportsSandbox => ProtocolVersion>=NetProtocol.Version;
+    public ChickenState? Chicken { get { lock(stateLock) return chicken?.Clone(); } }
     public void Start() { Volatile.Write(ref status,"CONNECTING"); _ = Task.Run(RunAsync); }
     public void Service(float dt) { }
 
@@ -195,6 +198,7 @@ internal sealed class LocalNetClient : INetClient
                 hostId=message.HostId;
                 if(message.DevicesChanged||message.Devices.Length>0||message.Wires.Length>0) { devices=message.Devices;wires=message.Wires; }
                 sandboxEnabled=message.SandboxEnabled;
+                    chicken=message.Chicken?.Clone();
                 foreach(CubeImpactEvent impact in message.CubeImpacts) pendingCubeImpacts.Enqueue(impact);
                 while(pendingCubeImpacts.Count>128) pendingCubeImpacts.Dequeue();
             }

@@ -128,6 +128,7 @@ internal sealed class GameWindow : SilkForm
     readonly Dictionary<int, string> remoteNames = new();
     readonly List<FootstepSource> remoteFootsteps = new();
     CubeState[] networkCubes = [];
+    ChickenState? networkChicken;
     double nextNetworkSend;
     bool networkHolding;
     int networkHeldId;
@@ -551,7 +552,15 @@ internal sealed class GameWindow : SilkForm
         RigidCube[] localCubes=network.Connected?[]:physics.Bodies.Where(body=>body.SandboxDeviceId==0).ToArray();
         int cubeCount=network.Connected?networkCubes.Length:localCubes.Length;
         SandboxDevice[] devices=network.Connected?networkDevices:localSandbox.Devices.ToArray();
-        int bodyCount=cubeCount+devices.Length;
+        bool showChicken=false;
+        if(network.Connected&&networkChicken is { Active:true })
+        {
+            ViewPose(out Vector3 chickenEye,out Vector3 chickenForward);
+            Vector3 toChicken=new(networkChicken.X-chickenEye.X,networkChicken.Y-chickenEye.Y,networkChicken.Z-chickenEye.Z);
+            showChicken=toChicken.LengthSquared()<55f*55f && toChicken.LengthSquared()>0.01f &&
+                Vector3.Dot(chickenForward,Vector3.Normalize(toChicken))>0.05f;
+        }
+        int bodyCount=cubeCount+devices.Length+(showChicken?1:0);
         if(cubeVisualIds.Length<cubeCount)
         {
             Array.Resize(ref cubeVisualIds,cubeCount);
@@ -618,6 +627,14 @@ internal sealed class GameWindow : SilkForm
             };
             texels[j+8]=color.X;texels[j+9]=color.Y;texels[j+10]=color.Z;
             texels[j+11]=(int)device.Kind+2+(device.State?0.5f:0f);
+        }
+        if(showChicken)
+        {
+            int j=(cubeCount+devices.Length)*12;
+            texels[j]=networkChicken!.X;texels[j+1]=networkChicken.Y;texels[j+2]=networkChicken.Z;texels[j+3]=.72f;
+            Quaternion q=Quaternion.CreateFromAxisAngle(Vector3.UnitY,networkChicken.Yaw);
+            texels[j+4]=q.X;texels[j+5]=q.Y;texels[j+6]=q.Z;texels[j+7]=q.W;
+            texels[j+8]=.72f;texels[j+9]=.42f;texels[j+10]=.18f;texels[j+11]=-2f;
         }
         int textureUnit=program==probeProgram?4:9;
         Bind(textureUnit,objectTexture);
@@ -1253,6 +1270,7 @@ internal sealed class GameWindow : SilkForm
             double now=watch.Elapsed.TotalSeconds;
             if(now>=nextNetworkSend) { SendPlayerState(); nextNetworkSend=now+0.05; }
             var snapshot=network.Snapshot();
+            networkChicken=network.Chicken;
             SandboxDevice[] devices=snapshot.Devices;
             if(networkDevices.Length!=devices.Length || devices.Where((device,index)=>device.Id!=networkDevices[index].Id).Any())
                 networkDevices=devices.Select(CloneDevice).ToArray();

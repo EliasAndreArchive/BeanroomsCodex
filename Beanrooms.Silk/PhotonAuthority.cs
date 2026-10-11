@@ -20,6 +20,8 @@ internal sealed class PhotonAuthority : IDisposable
     int seed=82317;
     float accumulator,snapshotTimer,flickerTimer,lastFlicker=-99f,deviceSnapshotAge;
     int lastSandboxSignature=int.MinValue;
+    ChickenState chicken=new();
+    float chickenClock, chickenNext=Random.Shared.Next(120,301);
 
     internal PhotonAuthority(IEnumerable<int> playerIds)
     {
@@ -71,6 +73,7 @@ internal sealed class PhotonAuthority : IDisposable
     {
         ProcessMessages();
         flickerTimer+=dt;
+        UpdateChicken(dt);
         accumulator=Math.Min(accumulator+Math.Clamp(dt,0,.05f),.1f);
         while(accumulator>=Step)
         {
@@ -96,6 +99,42 @@ internal sealed class PhotonAuthority : IDisposable
             BroadcastFlicker(true);
         snapshotTimer+=dt;
         if(snapshotTimer>=.05f) { snapshotTimer=0; BroadcastSnapshot(); }
+    }
+
+    void UpdateChicken(float dt)
+    {
+        if(peers.Count==0) return;
+        if(!chicken.Active)
+        {
+            chickenClock+=dt;
+            if(chickenClock>=chickenNext) SpawnChicken();
+            return;
+        }
+        chicken.Progress=Math.Clamp(chicken.Progress+dt/chicken.Duration,0f,1f);
+        float x=chicken.StartX+(chicken.EndX-chicken.StartX)*chicken.Progress;
+        float z=chicken.StartZ+(chicken.EndZ-chicken.StartZ)*chicken.Progress;
+        chicken.X=x; chicken.Z=z;
+        if(chicken.Progress>=1f)
+        {
+            chicken.Active=false;
+            chickenClock=0f;
+            chickenNext=Random.Shared.Next(120,301);
+        }
+    }
+
+    void SpawnChicken()
+    {
+        PhotonPeer viewer=peers.Values.OrderBy(p=>p.Id).First();
+        Vector3 forward=Look(viewer.Yaw,0f);
+        Vector3 right=new(-forward.Z,0f,forward.X);
+        Vector3 center=new Vector3(viewer.X,0.58f,viewer.Z)+forward*6f;
+        Vector3 start=center+right*10f, end=center-right*10f;
+        start.X=Math.Clamp(start.X,5f,187f); start.Z=Math.Clamp(start.Z,5f,187f);
+        end.X=Math.Clamp(end.X,5f,187f); end.Z=Math.Clamp(end.Z,5f,187f);
+        chicken=new ChickenState { Active=true,Id=Random.Shared.Next(1, int.MaxValue),Y=.58f,
+            StartX=start.X,StartZ=start.Z,EndX=end.X,EndZ=end.Z,Progress=0f,Duration=12f,
+            X=start.X,Z=start.Z,Yaw=MathF.Atan2(end.X-start.X,end.Z-start.Z) };
+        chickenClock=0f;
     }
 
     void ProcessMessages()
@@ -208,7 +247,7 @@ internal sealed class PhotonAuthority : IDisposable
         if(devicesChanged) { lastSandboxSignature=signature;deviceSnapshotAge=0f; } else deviceSnapshotAge+=.05f;
         PlayerState[] players=peers.Values.Select(p=>new PlayerState { Id=p.Id,X=p.X,Y=p.Y,Z=p.Z,Yaw=p.Yaw,MoveSpeed=p.MoveSpeed,SprintBlend=p.SprintBlend,CrouchBlend=p.CrouchBlend,Name=p.Name,R=p.R,G=p.G,B=p.B }).ToArray();
         CubeState[] cubes=physics.Bodies.Where(b=>b.SandboxDeviceId==0).Select(b=>new CubeState { Id=b.Id,HolderId=physics.HolderOf(b),X=b.Position.X,Y=b.Position.Y,Z=b.Position.Z,Vx=b.Velocity.X,Vy=b.Velocity.Y,Vz=b.Velocity.Z,Ax=b.AngularVelocity.X,Ay=b.AngularVelocity.Y,Az=b.AngularVelocity.Z,Qx=b.Rotation.X,Qy=b.Rotation.Y,Qz=b.Rotation.Z,Qw=b.Rotation.W,Grounded=b.Grounded,SlipSpeed=PhysicsBodies.ContactSlipSpeed(b),HalfSize=b.HalfSize,Emissive=b.Emissive,Plank=b.Plank,Material=b.Material,R=b.Color.X,G=b.Color.Y,B=b.Color.Z }).ToArray();
-        Broadcast(new NetMessage { Type="snapshot",Seed=seed,Players=players,Cubes=cubes,HostId=players.Select(p=>p.Id).DefaultIfEmpty(0).Min(),SandboxEnabled=sandboxEnabled,Devices=devicesChanged?sandbox.Devices.ToArray():[],Wires=devicesChanged?sandbox.Wires.ToArray():[],DevicesChanged=devicesChanged,CubeImpacts=physics.DrainCubeImpacts(),MonsterTuning=monsterSettings.Clone(),FlickerTuning=flickerSettings.Clone(),Monster=monster?.State });
+        Broadcast(new NetMessage { Type="snapshot",Seed=seed,Players=players,Cubes=cubes,HostId=players.Select(p=>p.Id).DefaultIfEmpty(0).Min(),SandboxEnabled=sandboxEnabled,Devices=devicesChanged?sandbox.Devices.ToArray():[],Wires=devicesChanged?sandbox.Wires.ToArray():[],DevicesChanged=devicesChanged,CubeImpacts=physics.DrainCubeImpacts(),MonsterTuning=monsterSettings.Clone(),FlickerTuning=flickerSettings.Clone(),Monster=monster?.State,Chicken=chicken.Clone() });
     }
 
     public void Dispose() => physics.Dispose();

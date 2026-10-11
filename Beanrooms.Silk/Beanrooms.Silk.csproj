@@ -49,5 +49,7 @@
     <None Include="../Nullrooms/shaders/*.frag" Link="shaders/%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" />
     <None Include="../Nullrooms/shaders/*.vert" Link="shaders/%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" />
     <None Include="../Nullrooms/assets/*" Link="assets/%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" />
+    <None Include="../Nullrooms/assets/Chickensoft/chickensoft_mascot.glb" Link="assets/Chickensoft/chickensoft_mascot.glb" CopyToOutputDirectory="PreserveNewest" />
+    <None Include="../Nullrooms/assets/Chickensoft/CHICKEN-LICENSE.md" Link="assets/Chickensoft/CHICKEN-LICENSE.md" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 </Project>

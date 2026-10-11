@@ -6,7 +6,7 @@ internal static class NetProtocol
 {
     // Bump when a server changes a feature whose absence would otherwise look like
     // a valid, but ignored, client command.
-    internal const int Version=3;
+    internal const int Version=4;
 }
 
 internal sealed class NetMessage
@@ -55,8 +55,29 @@ internal sealed class NetMessage
     public SandboxDevice[] Devices { get; set; } = [];
     public SandboxWire[] Wires { get; set; } = [];
     public bool DevicesChanged { get; set; }
+    public ChickenState? Chicken { get; set; }
     public int FromId { get; set; }
     public int ToId { get; set; }
+}
+
+// A room-wide, non-interactive easter egg. The authority owns the path and
+// clients only decide whether it is in their current view frustum.
+internal sealed class ChickenState
+{
+    public bool Active { get; set; }
+    public int Id { get; set; }
+    public float X { get; set; }
+    public float Y { get; set; }
+    public float Z { get; set; }
+    public float Yaw { get; set; }
+    public float StartX { get; set; }
+    public float StartZ { get; set; }
+    public float EndX { get; set; }
+    public float EndZ { get; set; }
+    public float Progress { get; set; }
+    public float Duration { get; set; } = 12f;
+
+    internal ChickenState Clone() => (ChickenState)MemberwiseClone();
 }
 
 internal sealed class FlickerTuning

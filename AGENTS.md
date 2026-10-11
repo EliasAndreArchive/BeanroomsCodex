@@ -72,3 +72,13 @@ dotnet run --project Beanrooms.PortChecks/Beanrooms.PortChecks.csproj -c Release
 ```
 
 Run the client with `dotnet run --project Beanrooms.Silk/Beanrooms.Silk.csproj -c Release`. See `README.md` and `Beanrooms.Silk/README.md` for controls, Photon room setup, and publishing. Vercidium's license terms are in `Beanrooms.Silk/ThirdParty/VercidiumAudio/LICENCE.txt`; review them before distributing or monetizing the game.
+
+## Ambient easter eggs
+
+The Photon room master owns timed ambient events so every player receives the same
+event path. The current chicken easter egg waits a random 120–300 seconds, walks
+across a short path near the first player, and expires after the walk. Clients
+perform view culling independently, so a player who is not looking does not see
+the chicken while another player can still see the replicated event. The source
+asset and attribution are in `Nullrooms/assets/Chickensoft/`; the path tracer uses
+a compact procedural rendition to keep the packed object buffer efficient.

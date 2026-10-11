@@ -19,6 +19,7 @@ internal sealed class PhotonNetClient : INetClient, IConnectionCallbacks, IMatch
     PlayerState[] players=[]; CubeState[] cubes=[]; MonsterState? monster;
     MonsterTuning? monsterTuning; FlickerTuning? flickerTuning;
     SandboxDevice[] devices=[]; SandboxWire[] wires=[]; bool sandboxEnabled;
+    ChickenState? chicken;
     PhotonAuthority? authority;
     int id,hostId,protocolVersion;
     bool started,disposed;
@@ -35,6 +36,7 @@ internal sealed class PhotonNetClient : INetClient, IConnectionCallbacks, IMatch
     public int Id => id;
     public int ProtocolVersion => protocolVersion;
     public bool SupportsSandbox => protocolVersion>=NetProtocol.Version;
+    public ChickenState? Chicken { get { lock(stateLock) return chicken?.Clone(); } }
 
     public void Start()
     {
@@ -147,6 +149,7 @@ internal sealed class PhotonNetClient : INetClient, IConnectionCallbacks, IMatch
                     hostId=message.HostId;
                     if(message.DevicesChanged||message.Devices.Length>0||message.Wires.Length>0) { devices=message.Devices;wires=message.Wires; }
                     sandboxEnabled=message.SandboxEnabled;
+                    chicken=message.Chicken?.Clone();
                     foreach(CubeImpactEvent impact in message.CubeImpacts) pendingCubeImpacts.Enqueue(impact);
                     while(pendingCubeImpacts.Count>128) pendingCubeImpacts.Dequeue();
                     break;

@@ -119,6 +119,34 @@ Hit trace(vec3 ro, vec3 rd, float limit) {
         vec4 inverseRotation=vec4(-objectRotation(object).xyz,objectRotation(object).w);
         vec3 localOrigin=rotateQ(inverseRotation,ro-data.xyz);
         vec3 localDirection=rotateQ(inverseRotation,rd);
+        if(objectCode(object)<-1.5) {
+            // Low-poly easter-egg chicken. The downloaded Chickensoft asset is
+            // kept with the project as the authored reference; this compact
+            // procedural version keeps the path tracer's object buffer small.
+            vec3 safe=sign(localDirection)*max(abs(localDirection),vec3(0.000001));
+            float step=sin(float(frameIndex)*0.22)*0.07;
+            for(int part=0;part<7;part++) {
+                vec3 center=vec3(0.0),halfSize=vec3(0.0),color=objectColor(object);
+                if(part==0) { center=vec3(0.0,0.02,0.0);halfSize=vec3(0.52,0.34,0.34);color*=vec3(1.0,0.92,0.72); }
+                else if(part==1) { center=vec3(0.0,0.36,0.30);halfSize=vec3(0.24);color*=vec3(1.0,0.96,0.82); }
+                else if(part==2) { center=vec3(0.0,0.33,0.57);halfSize=vec3(0.08,0.07,0.16);color=vec3(0.92,0.33,0.05); }
+                else if(part==3) { center=vec3(0.0,0.50,0.30);halfSize=vec3(0.07,0.14,0.05);color=vec3(0.85,0.08,0.03); }
+                else if(part==4) { center=vec3(-0.18,-0.34,step);halfSize=vec3(0.055,0.30,0.055);color=vec3(0.78,0.34,0.05); }
+                else if(part==5) { center=vec3(0.18,-0.34,-step);halfSize=vec3(0.055,0.30,0.055);color=vec3(0.78,0.34,0.05); }
+                else { center=vec3(0.0,0.16,-0.30);halfSize=vec3(0.20,0.16,0.10);color=vec3(0.82,0.12,0.04); }
+                vec3 nearPart=(-halfSize-(localOrigin-center))/safe;
+                vec3 farPart=(halfSize-(localOrigin-center))/safe;
+                vec3 loPart=min(nearPart,farPart),hiPart=max(nearPart,farPart);
+                float entryPart=max(max(loPart.x,loPart.y),loPart.z);
+                float leavePart=min(min(hiPart.x,hiPart.y),hiPart.z);
+                if(entryPart>0.001 && entryPart<leavePart && entryPart<h.t) {
+                    vec3 n=loPart.x>loPart.y && loPart.x>loPart.z ? vec3(-sign(localDirection.x),0,0) :
+                           loPart.y>loPart.z ? vec3(0,-sign(localDirection.y),0) : vec3(0,0,-sign(localDirection.z));
+                    h.t=entryPart;h.normal=rotateQ(objectRotation(object),n);h.baseColor=color;h.material=4;
+                }
+            }
+            continue;
+        }
         if(objectCode(object)<-0.5) {
             // Five top boards on three lower runners make a square wooden pallet.
             vec3 safe=sign(localDirection)*max(abs(localDirection),vec3(0.000001));

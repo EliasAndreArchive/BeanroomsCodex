@@ -1,6 +1,7 @@
 using Beanrooms;
 using StbImageSharp;
 using System.Drawing;
+using System.Text.Json;
 
 var menu=new DebugMenu();
 var blackoutTuning=new FlickerTuning { MinorEnabled=false,EventDuration=2f };
@@ -54,6 +55,13 @@ using(var photonAuthority=new PhotonAuthority([4,9]))
     var guestAttempt=photonAuthority.DrainOutgoing().Last(entry=>entry.Target==0&&entry.Message.Type=="snapshot").Message;
     if(!guestAttempt.SandboxEnabled)
         throw new Exception("Photon authority accepted a guest sandbox toggle");
+}
+{
+    var source=new NetMessage { Type="snapshot",Chicken=new ChickenState
+        { Active=true,Id=7,X=12.5f,Y=.58f,Z=19f,StartX=22f,StartZ=19f,EndX=2f,EndZ=19f,Progress=.4f,Duration=12f } };
+    var roundTrip=JsonSerializer.Deserialize<NetMessage>(JsonSerializer.Serialize(source));
+    if(roundTrip?.Chicken is not { Active:true } egg || egg.Id!=7 || MathF.Abs(egg.Progress-.4f)>.001f)
+        throw new Exception("Chicken easter egg state did not survive protocol serialization");
 }
 {
     var sandbox=new SandboxWorld();
