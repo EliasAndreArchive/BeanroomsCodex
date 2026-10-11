@@ -39,6 +39,7 @@ internal sealed class NetMessage
     public float SlideResistance { get; set; }
     public bool SnapHold { get; set; }
     public float SnapStep { get; set; }
+    public bool Slab { get; set; }
     public float R { get; set; }
     public float G { get; set; }
     public float B { get; set; }
@@ -236,6 +237,7 @@ internal sealed class CubeState
     public float HalfSize { get; set; }
     public bool Emissive { get; set; }
     public bool Plank { get; set; }
+    public bool Slab { get; set; }
     public PhysicsMaterial Material { get; set; } = PhysicsMaterial.Wood;
     public float R { get; set; }
     public float G { get; set; }

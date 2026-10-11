@@ -567,6 +567,12 @@ using(var game=new GameWindow())
     spawn.Invoke(game,[SandboxKind.Lamp]);
     if(localSandbox.Devices.Count!=1 || localPhysics.Bodies.All(body=>body.SandboxDeviceId==0))
         throw new Exception("Solo sandbox spawn did not create a device body");
+    spawn.Invoke(game,[SandboxKind.Pallet]);
+    if(!localPhysics.Bodies.Any(body=>body.Plank && body.Material==PhysicsMaterial.Wood))
+        throw new Exception("Sandbox Objects tab did not spawn a wooden pallet");
+    spawn.Invoke(game,[SandboxKind.Slab]);
+    if(!localPhysics.Bodies.Any(body=>body.Slab && body.LocalHalfExtents.Y<.11f))
+        throw new Exception("Sandbox Objects tab did not spawn a small slab");
     // Typing "b" into a connection field must not open the sandbox browser.
     var keyDownField=typeof(SilkForm).GetField("KeyDown",
         System.Reflection.BindingFlags.Instance|System.Reflection.BindingFlags.NonPublic)!;

@@ -14,7 +14,7 @@ internal sealed class DebugMenu
     internal Action? SandboxToggle;
     static readonly SandboxKind[][] SandboxItems =
     [
-        [SandboxKind.Cube,SandboxKind.GlowCube],
+        [SandboxKind.Cube,SandboxKind.GlowCube,SandboxKind.Pallet,SandboxKind.Slab],
         [SandboxKind.Thruster,SandboxKind.Lamp,SandboxKind.Piston,SandboxKind.PressurePlate,SandboxKind.ProximitySensor,
          SandboxKind.Hinge,SandboxKind.Wheel,SandboxKind.Rope,SandboxKind.Conveyor,SandboxKind.SensorLight,SandboxKind.DisplayPanel],
         [SandboxKind.Button,SandboxKind.Lever,SandboxKind.And,SandboxKind.Or,SandboxKind.Not,
@@ -33,7 +33,7 @@ internal sealed class DebugMenu
         SandboxKind.Nand=>"NAND GATE",SandboxKind.Xnor=>"XNOR GATE",SandboxKind.Toggle=>"TOGGLE FLIP",
         SandboxKind.Timer=>"TIMER CLOCK",SandboxKind.PressurePlate=>"PRESSURE PLATE",
         SandboxKind.ProximitySensor=>"PROXIMITY SENSOR",SandboxKind.Randomizer=>"RANDOM PULSE",
-        SandboxKind.SensorLight=>"SENSOR LIGHT",SandboxKind.DisplayPanel=>"DISPLAY PANEL",
+        SandboxKind.SensorLight=>"SENSOR LIGHT",SandboxKind.DisplayPanel=>"DISPLAY PANEL",SandboxKind.Pallet=>"PALLET",SandboxKind.Slab=>"CUBE SLAB",
         _=>kind.ToString().ToUpperInvariant()
     };
     static string SandboxDetail(SandboxKind kind) => kind switch
@@ -51,7 +51,7 @@ internal sealed class DebugMenu
         SandboxKind.Randomizer=>"RANDOM OUTPUT EACH SEC",
         SandboxKind.Hinge=>"POWERED ROTARY MOUNT",SandboxKind.Wheel=>"POWERED DRIVE WHEEL",
         SandboxKind.Rope=>"POWERED WINCH PULL",SandboxKind.Conveyor=>"MOVES BLOCKS ON TOP",
-        SandboxKind.SensorLight=>"PLAYER DETECTED LIGHT",SandboxKind.DisplayPanel=>"SHOWS WIRE STATE",
+        SandboxKind.SensorLight=>"PLAYER DETECTED LIGHT",SandboxKind.DisplayPanel=>"SHOWS WIRE STATE",SandboxKind.Pallet=>"WOODEN GRABBABLE PLATFORM",SandboxKind.Slab=>"SMALL WOODEN PLATFORM",
         _=>"POWERED LIGHT"
     };
     internal void SelectSandbox(int step)

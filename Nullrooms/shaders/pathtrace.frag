@@ -119,6 +119,21 @@ Hit trace(vec3 ro, vec3 rd, float limit) {
         vec4 inverseRotation=vec4(-objectRotation(object).xyz,objectRotation(object).w);
         vec3 localOrigin=rotateQ(inverseRotation,ro-data.xyz);
         vec3 localDirection=rotateQ(inverseRotation,rd);
+        if(objectCode(object)<-1.5) {
+            vec3 safe=sign(localDirection)*max(abs(localDirection),vec3(0.000001));
+            vec3 halfSize=vec3(0.32,0.09,0.32);
+            vec3 nearPart=(-halfSize-localOrigin)/safe;
+            vec3 farPart=(halfSize-localOrigin)/safe;
+            vec3 loPart=min(nearPart,farPart),hiPart=max(nearPart,farPart);
+            float entryPart=max(max(loPart.x,loPart.y),loPart.z);
+            float leavePart=min(min(hiPart.x,hiPart.y),hiPart.z);
+            if(entryPart>0.001 && entryPart<leavePart && entryPart<h.t) {
+                h.t=entryPart;
+                h.normal=rotateQ(objectRotation(object),vec3(-sign(localDirection.x),-sign(localDirection.y),-sign(localDirection.z)));
+                h.baseColor=objectColor(object);h.material=4;
+            }
+            continue;
+        }
         if(objectCode(object)<-0.5) {
             // Five top boards on three lower runners make a square wooden pallet.
             vec3 safe=sign(localDirection)*max(abs(localDirection),vec3(0.000001));

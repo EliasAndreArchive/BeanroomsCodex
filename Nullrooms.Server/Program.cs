@@ -323,6 +323,20 @@ internal sealed class LocalServer : IDisposable
                             Enum.IsDefined(message.Material)?message.Material:PhysicsMaterial.Wood);
                         break;
                     }
+                case "spawn_pallet":
+                    if(sandboxEnabled)
+                    {
+                        Vector3 eye=new(peer.X,peer.Y,peer.Z);
+                        physics.SpawnPallet(eye,LookDirection(peer.Yaw,peer.Pitch),walls,eye);
+                    }
+                    break;
+                case "spawn_slab":
+                    if(sandboxEnabled)
+                    {
+                        Vector3 eye=new(peer.X,peer.Y,peer.Z);
+                        physics.SpawnSlab(eye,LookDirection(peer.Yaw,peer.Pitch),walls,eye);
+                    }
+                    break;
                 case "sandbox_toggle":
                     if(peer.Id==peers.Keys.Min()) sandboxEnabled=!sandboxEnabled;
                     break;
@@ -339,7 +353,8 @@ internal sealed class LocalServer : IDisposable
                     if(sandboxEnabled)
                     {
                         Vector3 eye=new(peer.X,peer.Y,peer.Z);
-                        physics.Spawn(eye,LookDirection(peer.Yaw,peer.Pitch),message.Action==1,walls,eye,
+                        if(message.Slab) physics.SpawnSlab(eye,LookDirection(peer.Yaw,peer.Pitch),walls,eye);
+                        else physics.Spawn(eye,LookDirection(peer.Yaw,peer.Pitch),message.Action==1,walls,eye,
                             new Vector3(Math.Clamp(message.R,0f,1f),Math.Clamp(message.G,0f,1f),Math.Clamp(message.B,0f,1f)),
                             Enum.IsDefined(message.Material)?message.Material:PhysicsMaterial.Wood);
                     }
@@ -423,7 +438,7 @@ internal sealed class LocalServer : IDisposable
             Ax=body.AngularVelocity.X,Ay=body.AngularVelocity.Y,Az=body.AngularVelocity.Z,
             SlipSpeed=PhysicsBodies.ContactSlipSpeed(body),
             Qx=body.Rotation.X,Qy=body.Rotation.Y,Qz=body.Rotation.Z,Qw=body.Rotation.W,
-            HalfSize=body.HalfSize,Emissive=body.Emissive,Plank=body.Plank,Material=body.Material,
+            HalfSize=body.HalfSize,Emissive=body.Emissive,Plank=body.Plank,Slab=body.Slab,Material=body.Material,
             R=body.Color.X,G=body.Color.Y,B=body.Color.Z
         }).ToArray();
         var message=new NetMessage { Type="snapshot",Seed=seed,Players=players,Cubes=cubes,

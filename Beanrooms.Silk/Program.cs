@@ -81,7 +81,7 @@ internal sealed class GameWindow : SilkForm
     int pendingWireId;
     int pendingWeldId;
     SandboxKind? copiedDeviceKind;
-    bool copiedCube,copiedEmissive;
+    bool copiedCube,copiedEmissive,copiedSlab;
     PhysicsMaterial copiedMaterial;
     Vector3 copiedColor;
     bool sandboxToggleKeyDown;
@@ -304,6 +304,7 @@ internal sealed class GameWindow : SilkForm
                     case Keys.Left: menu.CycleSandboxCategory(-1); return true;
                     case Keys.Right: menu.CycleSandboxCategory(1); return true;
                     case Keys.C: menu.CycleCubeColor(1); return true;
+                    case Keys.M: menu.CycleCubeMaterial(1); return true;
                     case Keys.X: HandleObjectAction(2); return true;
                     case Keys.Enter or Keys.Space: SpawnSandboxItem(menu.SelectedSandboxItem); return true;
                 }
@@ -577,7 +578,7 @@ internal sealed class GameWindow : SilkForm
                 texels[j+3]=b.HalfSize*(animate?CubeVisualScale(i,b.Id,now):1f);
                 texels[j+4]=b.Qx;texels[j+5]=b.Qy;texels[j+6]=b.Qz;texels[j+7]=b.Qw;
                 texels[j+8]=b.R;texels[j+9]=b.G;texels[j+10]=b.B;
-                texels[j+11]=b.Emissive?1f:b.Plank?-1f:0f;
+                texels[j+11]=b.Emissive?1f:b.Plank?-1f:b.Slab?-2f:0f;
             }
             else
             {
@@ -586,7 +587,7 @@ internal sealed class GameWindow : SilkForm
                 texels[j+3]=b.HalfSize*(animate?CubeVisualScale(i,b.Id,now):1f);
                 texels[j+4]=b.Rotation.X; texels[j+5]=b.Rotation.Y; texels[j+6]=b.Rotation.Z; texels[j+7]=b.Rotation.W;
                 texels[j+8]=b.Color.X; texels[j+9]=b.Color.Y; texels[j+10]=b.Color.Z;
-                texels[j+11]=b.Emissive?1f:b.Plank?-1f:0f;
+                texels[j+11]=b.Emissive?1f:b.Plank?-1f:b.Slab?-2f:0f;
             }
         }
         for(int i=0;i<devices.Length;i++)
@@ -1000,6 +1001,26 @@ internal sealed class GameWindow : SilkForm
         if(!menu.SandboxEnabled && kind!=SandboxKind.Cube) return;
         if(kind==SandboxKind.Cube) { HandleObjectAction(0);return; }
         if(kind==SandboxKind.GlowCube) { HandleObjectAction(1);return; }
+        if(kind==SandboxKind.Pallet)
+        {
+            ViewPose(out Vector3 palletEye,out Vector3 palletForward);
+            if(network.Connected)
+            { SendPlayerState();network.Send(new NetMessage { Type="spawn_pallet" }); }
+            else physics.SpawnPallet(palletEye,palletForward,boxes,camera);
+            menu.BodyCount=physics.Bodies.Count(body=>body.SandboxDeviceId==0);
+            menu.Dirty=true;
+            return;
+        }
+        if(kind==SandboxKind.Slab)
+        {
+            ViewPose(out Vector3 slabEye,out Vector3 slabForward);
+            if(network.Connected)
+            { SendPlayerState();network.Send(new NetMessage { Type="spawn_slab" }); }
+            else physics.SpawnSlab(slabEye,slabForward,boxes,camera);
+            menu.BodyCount=physics.Bodies.Count(body=>body.SandboxDeviceId==0);
+            menu.Dirty=true;
+            return;
+        }
         if(network.Connected)
         { SendPlayerState();network.Send(new NetMessage { Type="device_spawn",Action=(int)kind });return; }
         ViewPose(out Vector3 eye,out Vector3 forward);
@@ -1044,7 +1065,7 @@ internal sealed class GameWindow : SilkForm
     }
 
     static Vector3 CubeLocalExtents(CubeState cube)
-        => cube.Plank ? new Vector3(.90f,.11f,.90f) : new Vector3(cube.HalfSize);
+        => cube.Plank ? new Vector3(.90f,.11f,.90f) : cube.Slab ? new Vector3(.34f,.10f,.34f) : new Vector3(cube.HalfSize);
 
     int AimedGrabbable()
     {
@@ -1110,15 +1131,15 @@ internal sealed class GameWindow : SilkForm
         {
             CubeState? cube=networkCubes.FirstOrDefault(item=>item.Id==id);
             if(cube==null||cube.Plank) return;
-            copiedCube=true;copiedEmissive=cube.Emissive;copiedMaterial=cube.Material;copiedColor=new Vector3(cube.R,cube.G,cube.B);copiedDeviceKind=null;
+            copiedCube=true;copiedEmissive=cube.Emissive;copiedSlab=cube.Slab;copiedMaterial=cube.Material;copiedColor=new Vector3(cube.R,cube.G,cube.B);copiedDeviceKind=null;
         }
         else
         {
             RigidCube? cube=physics.Bodies.FirstOrDefault(item=>item.Id==id);
             if(cube==null||cube.Plank||cube.SandboxDeviceId!=0) return;
-            copiedCube=true;copiedEmissive=cube.Emissive;copiedMaterial=cube.Material;copiedColor=cube.Color;copiedDeviceKind=null;
+            copiedCube=true;copiedEmissive=cube.Emissive;copiedSlab=cube.Slab;copiedMaterial=cube.Material;copiedColor=cube.Color;copiedDeviceKind=null;
         }
-        menu.ToolStatus=$"COPIED {(copiedEmissive?"GLOW ":"")}CUBE • V PLACE";
+        menu.ToolStatus=$"COPIED {(copiedSlab?"SLAB":copiedEmissive?"GLOW CUBE":"CUBE")} • V PLACE";
         menu.Dirty=true;
     }
 
@@ -1144,12 +1165,13 @@ internal sealed class GameWindow : SilkForm
         if(network.Connected)
         {
             SendPlayerState();
-            network.Send(new NetMessage { Type="copy_cube",Action=copiedEmissive?1:0,R=copiedColor.X,G=copiedColor.Y,B=copiedColor.Z,Material=copiedMaterial });
+            network.Send(new NetMessage { Type="copy_cube",Action=copiedEmissive?1:0,R=copiedColor.X,G=copiedColor.Y,B=copiedColor.Z,Material=copiedMaterial,Slab=copiedSlab });
         }
         else
         {
             ViewPose(out Vector3 eye,out Vector3 forward);
-            physics.Spawn(eye,forward,copiedEmissive,boxes,camera,copiedColor,copiedMaterial);
+            if(copiedSlab) physics.SpawnSlab(eye,forward,boxes,camera);
+            else physics.Spawn(eye,forward,copiedEmissive,boxes,camera,copiedColor,copiedMaterial);
             menu.BodyCount=physics.Bodies.Count(body=>body.SandboxDeviceId==0);
             menu.Dirty=true;
         }
@@ -1330,7 +1352,7 @@ internal sealed class GameWindow : SilkForm
                 Quaternion qb=new(target.Qx,target.Qy,target.Qz,target.Qw);
                 Quaternion q=Quaternion.Slerp(qa,qb,blend);
                 current.Qx=q.X;current.Qy=q.Y;current.Qz=q.Z;current.Qw=q.W;
-                current.HalfSize=target.HalfSize;current.Emissive=target.Emissive;current.Plank=target.Plank;current.Material=target.Material;
+                current.HalfSize=target.HalfSize;current.Emissive=target.Emissive;current.Plank=target.Plank;current.Slab=target.Slab;current.Material=target.Material;
                 current.HolderId=target.HolderId;
                 current.Vx=target.Vx;current.Vy=target.Vy;current.Vz=target.Vz;current.Grounded=target.Grounded;
                 current.Ax=target.Ax;current.Ay=target.Ay;current.Az=target.Az;
@@ -1401,7 +1423,7 @@ internal sealed class GameWindow : SilkForm
         X=source.X,Y=source.Y,Z=source.Z,Qx=source.Qx,Qy=source.Qy,Qz=source.Qz,Qw=source.Qw,
         Vx=source.Vx,Vy=source.Vy,Vz=source.Vz,Grounded=source.Grounded,
         Ax=source.Ax,Ay=source.Ay,Az=source.Az,SlipSpeed=source.SlipSpeed,
-        HalfSize=source.HalfSize,Emissive=source.Emissive,Plank=source.Plank,Material=source.Material,R=source.R,G=source.G,B=source.B
+        HalfSize=source.HalfSize,Emissive=source.Emissive,Plank=source.Plank,Slab=source.Slab,Material=source.Material,R=source.R,G=source.G,B=source.B
     };
     static SandboxDevice CloneDevice(SandboxDevice source) => new()
     {

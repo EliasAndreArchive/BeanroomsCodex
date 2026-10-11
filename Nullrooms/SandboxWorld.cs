@@ -2,7 +2,7 @@ using System.Numerics;
 
 namespace Beanrooms;
 
-internal enum SandboxKind { Cube, GlowCube, Thruster, Button, Lever, And, Or, Not, Lamp, Xor, Nand, Xnor, Toggle, Timer, Piston, PressurePlate, ProximitySensor, Delay, Counter, Randomizer, Hinge, Wheel, Rope, Conveyor, SensorLight, DisplayPanel }
+internal enum SandboxKind { Cube, GlowCube, Thruster, Button, Lever, And, Or, Not, Lamp, Xor, Nand, Xnor, Toggle, Timer, Piston, PressurePlate, ProximitySensor, Delay, Counter, Randomizer, Hinge, Wheel, Rope, Conveyor, SensorLight, DisplayPanel, Pallet, Slab }
 
 internal sealed class SandboxDevice
 {
@@ -49,7 +49,7 @@ internal sealed class SandboxWorld
     internal SandboxDevice? Spawn(SandboxKind kind,Vector3 eye,Vector3 forward,float yaw,
         IReadOnlyList<System.Drawing.RectangleF> walls)
     {
-        if(kind is SandboxKind.Cube or SandboxKind.GlowCube || Devices.Count>=64) return null;
+        if(kind is SandboxKind.Cube or SandboxKind.GlowCube or SandboxKind.Pallet or SandboxKind.Slab || Devices.Count>=64) return null;
         Vector3 horizontal=new(forward.X,0f,forward.Z);
         if(horizontal.LengthSquared()<.001f) horizontal=Vector3.UnitZ;
         horizontal=Vector3.Normalize(horizontal);

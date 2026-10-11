@@ -19,9 +19,9 @@ internal sealed class RigidCube
     internal Vector3 HoldTarget, HoldTargetVelocity;
     internal Quaternion CarryRotationOffset = Quaternion.Identity;
     internal float HalfSize, Drag = 0.025f, RestDrag;
-    // Cubes leave this empty; pallets use their actual low rectangular bounds.
+    // Cubes leave this empty; rectangular props use their actual low bounds.
     internal Vector3 LocalHalfExtents;
-    internal bool HasHoldTarget, Grounded, Emissive, Plank;
+    internal bool HasHoldTarget, Grounded, Emissive, Plank, Slab;
     internal PhysicsMaterial Material=PhysicsMaterial.Wood;
     internal float ImpactCooldown;
     internal BodyHandle Handle;
@@ -154,6 +154,7 @@ internal sealed class PhysicsBodies : IDisposable
     double accumulator;
     bool environmentReady;
     int nextBodyId = 1;
+    static readonly Vector2[] ConstructionOffsets=[Vector2.Zero,new(1.5f,0),new(-1.5f,0),new(0,1.2f),new(0,-1.2f),new(1.5f,1),new(-1.5f,1)];
 
     internal PhysicsBodies() => ResetSimulation();
 
@@ -387,6 +388,50 @@ internal sealed class PhysicsBodies : IDisposable
         Bodies.Add(new RigidCube { Id=nextBodyId++,Position=position,HalfSize=half,
             LocalHalfExtents=new Vector3(half,halfHeight,half),Plank=true,
             Rotation=rotation,Material=PhysicsMaterial.Wood,Color=new Vector3(.43f,.24f,.10f),Handle=handle });
+        return true;
+    }
+
+    internal bool SpawnPallet(Vector3 eye,Vector3 forward,IReadOnlyList<RectangleF> walls,Vector3 player)
+    {
+        Vector3 horizontal=new(forward.X,0f,forward.Z);
+        if(horizontal.LengthSquared()<0.001f) horizontal=Vector3.UnitZ;
+        horizontal=Vector3.Normalize(horizontal);
+        float yaw=MathF.Atan2(horizontal.X,horizontal.Z);
+        Vector3 right=new(horizontal.Z,0f,-horizontal.X);
+        foreach(Vector2 offset in ConstructionOffsets)
+            if(SpawnCornerPlank(eye+horizontal*(3.1f+offset.Y*.9f)+right*offset.X*.9f,yaw,walls,player)) return true;
+        return false;
+    }
+
+    internal bool SpawnSlab(Vector3 eye,Vector3 forward,IReadOnlyList<RectangleF> walls,Vector3 player)
+    {
+        EnsureEnvironment(walls);
+        Vector3 horizontal=new(forward.X,0f,forward.Z);
+        if(horizontal.LengthSquared()<0.001f) horizontal=Vector3.UnitZ;
+        horizontal=Vector3.Normalize(horizontal);
+        const float half=.34f,halfHeight=.10f;
+        Quaternion rotation=Quaternion.CreateFromAxisAngle(Vector3.UnitY,MathF.Atan2(horizontal.X,horizontal.Z));
+        Vector3 right=new(horizontal.Z,0f,-horizontal.X);
+        Vector3 position=default;
+        bool found=false;
+        foreach(Vector2 offset in ConstructionOffsets)
+        {
+            position=eye+horizontal*(3f+offset.Y*.6f)+right*offset.X*.6f;
+            position.Y=halfHeight+.03f;
+            if(SpawnBlocked(position,new Vector3(half,halfHeight,half),walls,player)) continue;
+            found=true;break;
+        }
+        if(!found) return false;
+        var shape=new Box(half*2f,halfHeight*2f,half*2f);
+        TypedIndex shapeIndex=simulation.Shapes.Add(in shape);
+        BodyInertia inertia=shape.ComputeInertia(.8f);
+        BodyHandle handle=simulation.Bodies.Add(BodyDescription.CreateDynamic(
+            new RigidPose(position,rotation),new BodyVelocity(),inertia,
+            new CollidableDescription(shapeIndex,0f,3f,ContinuousDetection.Continuous()),
+            new BodyActivityDescription(.0001f,60)));
+        Bodies.Add(new RigidCube { Id=nextBodyId++,Position=position,HalfSize=half,
+            LocalHalfExtents=new Vector3(half,halfHeight,half),Slab=true,Rotation=rotation,
+            Material=PhysicsMaterial.Wood,Color=new Vector3(.43f,.24f,.10f),Handle=handle });
         return true;
     }
 

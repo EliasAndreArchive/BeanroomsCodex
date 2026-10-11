@@ -140,14 +140,34 @@ internal sealed class PhotonAuthority : IDisposable
                     if(message.Action==1&&!sandboxEnabled) break;
                     physics.Spawn(new Vector3(peer.X,peer.Y,peer.Z),Look(peer.Yaw,peer.Pitch),message.Action==1,walls,new Vector3(peer.X,peer.Y,peer.Z),new Vector3(Math.Clamp(message.R,0,1),Math.Clamp(message.G,0,1),Math.Clamp(message.B,0,1)),
                         Enum.IsDefined(message.Material)?message.Material:PhysicsMaterial.Wood); break;
+                case "spawn_pallet":
+                    if(sandboxEnabled)
+                    {
+                        Vector3 eye=new(peer.X,peer.Y,peer.Z);
+                        physics.SpawnPallet(eye,Look(peer.Yaw,peer.Pitch),walls,eye);
+                    }
+                    break;
+                case "spawn_slab":
+                    if(sandboxEnabled)
+                    {
+                        Vector3 eye=new(peer.X,peer.Y,peer.Z);
+                        physics.SpawnSlab(eye,Look(peer.Yaw,peer.Pitch),walls,eye);
+                    }
+                    break;
                 case "sandbox_toggle": if(IsHost(peer.Id)) sandboxEnabled=!sandboxEnabled; break;
                 case "device_spawn":
                     if(sandboxEnabled&&Enum.IsDefined((SandboxKind)message.Action))
                     { SandboxDevice? d=sandbox.Spawn((SandboxKind)message.Action,new Vector3(peer.X,peer.Y,peer.Z),Look(peer.Yaw,peer.Pitch),peer.Yaw,walls);
                       if(d!=null&&!physics.SpawnSandboxDevice(d,walls,new Vector3(peer.X,peer.Y,peer.Z))) sandbox.Remove(d.Id); } break;
                 case "copy_cube":
-                    if(sandboxEnabled) physics.Spawn(new Vector3(peer.X,peer.Y,peer.Z),Look(peer.Yaw,peer.Pitch),message.Action==1,walls,new Vector3(peer.X,peer.Y,peer.Z),new Vector3(Math.Clamp(message.R,0,1),Math.Clamp(message.G,0,1),Math.Clamp(message.B,0,1)),
-                        Enum.IsDefined(message.Material)?message.Material:PhysicsMaterial.Wood); break;
+                    if(sandboxEnabled)
+                    {
+                        Vector3 eye=new(peer.X,peer.Y,peer.Z);
+                        if(message.Slab) physics.SpawnSlab(eye,Look(peer.Yaw,peer.Pitch),walls,eye);
+                        else physics.Spawn(eye,Look(peer.Yaw,peer.Pitch),message.Action==1,walls,eye,new Vector3(Math.Clamp(message.R,0,1),Math.Clamp(message.G,0,1),Math.Clamp(message.B,0,1)),
+                            Enum.IsDefined(message.Material)?message.Material:PhysicsMaterial.Wood);
+                    }
+                    break;
                 case "copy_device":
                     if(sandboxEnabled&&Enum.IsDefined((SandboxKind)message.Action))
                     { SandboxDevice? d=sandbox.Spawn((SandboxKind)message.Action,new Vector3(peer.X,peer.Y,peer.Z),Look(peer.Yaw,peer.Pitch),peer.Yaw,walls);
@@ -207,7 +227,7 @@ internal sealed class PhotonAuthority : IDisposable
         bool devicesChanged=signature!=lastSandboxSignature||deviceSnapshotAge>=1f;
         if(devicesChanged) { lastSandboxSignature=signature;deviceSnapshotAge=0f; } else deviceSnapshotAge+=.05f;
         PlayerState[] players=peers.Values.Select(p=>new PlayerState { Id=p.Id,X=p.X,Y=p.Y,Z=p.Z,Yaw=p.Yaw,MoveSpeed=p.MoveSpeed,SprintBlend=p.SprintBlend,CrouchBlend=p.CrouchBlend,Name=p.Name,R=p.R,G=p.G,B=p.B }).ToArray();
-        CubeState[] cubes=physics.Bodies.Where(b=>b.SandboxDeviceId==0).Select(b=>new CubeState { Id=b.Id,HolderId=physics.HolderOf(b),X=b.Position.X,Y=b.Position.Y,Z=b.Position.Z,Vx=b.Velocity.X,Vy=b.Velocity.Y,Vz=b.Velocity.Z,Ax=b.AngularVelocity.X,Ay=b.AngularVelocity.Y,Az=b.AngularVelocity.Z,Qx=b.Rotation.X,Qy=b.Rotation.Y,Qz=b.Rotation.Z,Qw=b.Rotation.W,Grounded=b.Grounded,SlipSpeed=PhysicsBodies.ContactSlipSpeed(b),HalfSize=b.HalfSize,Emissive=b.Emissive,Plank=b.Plank,Material=b.Material,R=b.Color.X,G=b.Color.Y,B=b.Color.Z }).ToArray();
+        CubeState[] cubes=physics.Bodies.Where(b=>b.SandboxDeviceId==0).Select(b=>new CubeState { Id=b.Id,HolderId=physics.HolderOf(b),X=b.Position.X,Y=b.Position.Y,Z=b.Position.Z,Vx=b.Velocity.X,Vy=b.Velocity.Y,Vz=b.Velocity.Z,Ax=b.AngularVelocity.X,Ay=b.AngularVelocity.Y,Az=b.AngularVelocity.Z,Qx=b.Rotation.X,Qy=b.Rotation.Y,Qz=b.Rotation.Z,Qw=b.Rotation.W,Grounded=b.Grounded,SlipSpeed=PhysicsBodies.ContactSlipSpeed(b),HalfSize=b.HalfSize,Emissive=b.Emissive,Plank=b.Plank,Slab=b.Slab,Material=b.Material,R=b.Color.X,G=b.Color.Y,B=b.Color.Z }).ToArray();
         Broadcast(new NetMessage { Type="snapshot",Seed=seed,Players=players,Cubes=cubes,HostId=players.Select(p=>p.Id).DefaultIfEmpty(0).Min(),SandboxEnabled=sandboxEnabled,Devices=devicesChanged?sandbox.Devices.ToArray():[],Wires=devicesChanged?sandbox.Wires.ToArray():[],DevicesChanged=devicesChanged,CubeImpacts=physics.DrainCubeImpacts(),MonsterTuning=monsterSettings.Clone(),FlickerTuning=flickerSettings.Clone(),Monster=monster?.State });
     }
 
