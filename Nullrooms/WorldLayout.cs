@@ -115,18 +115,4 @@ internal static class WorldLayout
         }
         return (grid,walls);
     }
-
-    internal static IEnumerable<(Vector3 Position,float Yaw)> CornerPlanks(int seed,IReadOnlyList<RectangleF> walls)
-    {
-        var rng=new Random(unchecked(seed*486187739+17));
-        foreach(RectangleF wall in walls)
-        {
-            if(rng.NextDouble()>.075) continue;
-            // Keep the 1.8 metre pallet just clear of the wall at a selected wall corner.
-            float x=rng.Next(2)==0?wall.Left-1.02f:wall.Right+1.02f;
-            float z=rng.Next(2)==0?wall.Top-1.02f:wall.Bottom+1.02f;
-            if(x<4.95f||x>187.05f||z<4.95f||z>187.05f) continue;
-            yield return (new Vector3(x,.14f,z),(float)(rng.NextDouble()*MathF.PI));
-        }
-    }
 }

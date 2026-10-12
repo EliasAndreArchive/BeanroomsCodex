@@ -42,6 +42,14 @@ Check(menu.Dithering && menu.PaletteReduction && menu.MonsterSettings.Enabled,
 menu.SetPage(5);
 menu.ResetDefaults();
 Check(!menu.MonsterSettings.Enabled,"Developer monster reset failed.");
+menu.SetPage(9);
+int sessionChoice=-1;
+menu.SessionAction=choice=>sessionChoice=choice;
+menu.Selected=6;
+menu.AdjustSelected(1);
+Check(sessionChoice==2,"Pause menu exit did not route to quit game.");
+menu.Select(1);
+Check(menu.Selected==6,"Pause menu still has a hidden main-menu row.");
 using(var frame=menu.Draw())
     Check(frame.Width==320 && frame.Height==240,"Menu rendering size changed.");
 
@@ -64,6 +72,7 @@ using(var authority=new PhotonAuthority([4,9]))
     authority.Update(.06f);
     NetMessage? initial=authority.DrainOutgoing().LastOrDefault(item=>item.Message.Type=="snapshot").Message;
     Check(initial?.HostId==4 && initial.Players.Length==2,"Photon authority did not assign host and players.");
+    Check(initial?.Cubes.Length==0,"Photon world still seeds pallets.");
     var hostTuning=new MonsterTuning { Enabled=true };
     authority.Receive(4,new NetMessage { Type="state",MonsterTuning=hostTuning });
     authority.Update(.06f);

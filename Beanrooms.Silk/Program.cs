@@ -109,8 +109,7 @@ internal sealed partial class GameWindow : SilkForm
             {
                 case 0: menu.Toggle();if(!menu.Open) CloseSettings();break;
                 case 1: if(networkStarted) DisconnectNetwork();break;
-                case 2: DisconnectNetwork();menu.ShowTitle();wantsCapture=false;SuspendMouse();break;
-                case 3: Close();break;
+                case 2: Close();break;
             }
         };
         menu.InteractionSound=()=>audio?.PlayClick();
@@ -317,8 +316,6 @@ internal sealed partial class GameWindow : SilkForm
         grid=layout.Grid;
         boxes.Clear();
         boxes.AddRange(layout.Walls);
-        foreach(var plank in WorldLayout.CornerPlanks(seed,boxes))
-            physics.SpawnCornerPlank(plank.Position,plank.Yaw,boxes,camera);
         audio?.SetWorld(boxes);
         localMonster = new MonsterBrain(seed,boxes,menu.MonsterSettings);
         visibleMonster = localMonster.State;

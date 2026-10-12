@@ -18,7 +18,7 @@ The game starts fullscreen with a low resolution 4:3 image. **F11** toggles full
 | Shift | Sprint |
 | C or Ctrl | Crouch |
 | Mouse | Look |
-| Left mouse | Grab, carry, and release a cube or pallet |
+| Left mouse | Grab, carry, and release a cube |
 | Right mouse + mouse movement while carrying | Rotate the held object |
 | Mouse wheel while carrying | Change hold distance |
 | Tab | Pause menu |
@@ -28,7 +28,7 @@ The pause menu has separate **Settings** and **Developer** entries. Settings con
 
 Choose **JOIN ONLINE** on the title screen, enter the same Photon room name as the other players, then connect. `BEANROOMS_PHOTON_APP_ID` can override the included Photon App ID. The room master simulates online cubes and monster behavior; guests display its snapshots.
 
-Physics pickup, throwing, collision, and low pallets remain in both solo and online play. Spawnable sandbox cubes, the sandbox browser, devices, cables, welding, copy/place tools, and Ponder guide have been removed.
+Physics pickup, throwing, and collision remain in both solo and online play. Pallets no longer spawn. Spawnable sandbox cubes, the sandbox browser, devices, cables, welding, copy/place tools, and Ponder guide have been removed.
 
 ## Builds and checks
 

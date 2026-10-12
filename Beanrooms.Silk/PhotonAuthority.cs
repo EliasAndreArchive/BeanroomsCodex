@@ -28,8 +28,6 @@ internal sealed class PhotonAuthority : IDisposable
     {
         physics.Clear();
         walls=WorldLayout.Generate(seed).Walls;
-        foreach(var plank in WorldLayout.CornerPlanks(seed,walls))
-            physics.SpawnCornerPlank(plank.Position,plank.Yaw,walls,new Vector3(96f,1.68f,96f));
         monster=new MonsterBrain(seed,walls,monsterSettings);
     }
 

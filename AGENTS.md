@@ -25,7 +25,7 @@ Beanrooms is a .NET 8 desktop game. The main client uses Silk.NET/GLFW, OpenGL 4
 - Do not predict held cube movement or throws on guests without reconciliation. `CubeState.HolderId` identifies a current holder.
 - Keep seeded world props deterministic across solo and Photon authority setup.
 - Changes to object encoding must update both `GameWindow.Rendering.cs` and `pathtrace.frag`.
-- Settings are for player preferences. Developer controls contain world/AI behavior, physics tuning, detailed GI/post parameters, and diagnostics. Host-only controls must stay host-only online.
+- Settings are for player preferences, including image post effects. Developer controls contain world/AI behavior, physics tuning, detailed GI parameters, and diagnostics. Host-only controls must stay host-only online.
 - Preserve raytraced audio and original impact/scrape sounds. Retain Photon, Vercidium, and sound asset licenses.
 - The sandbox device, wire, weld, copy/place, Ponder, and legacy dedicated-server systems were removed. Avoid reintroducing their controls or protocol fields unintentionally.
 

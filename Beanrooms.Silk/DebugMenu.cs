@@ -125,7 +125,7 @@ internal sealed partial class DebugMenu
         new[] { "PLAYER NAME", "BEAN COLOR", "RED", "GREEN", "BLUE", "PHOTON REGION", "JOIN KEY", "CONNECT", "DISCONNECT", "CONNECTION", "PLAYER ID", "PLAYERS", "ROLE" },
         new[] { "POST FX", "TONEMAP", "EXPOSURE", "AUTO EXPOSURE", "BRIGHTEN SPEED", "DARKEN SPEED", "BLOOM", "BLOOM STRENGTH", "BLOOM THRESHOLD", "BLOOM RADIUS", "DITHER", "POSTERIZATION" },
         new[] { "MINOR FLICKER", "MINOR INTERVAL", "MINOR CHANCE", "MINOR DURATION", "RANDOM EVENTS", "EVENT INTERVAL", "EVENT LENGTH", "EVENT SPEED MIN", "EVENT SPEED MAX", "EVENT OFF CHANCE", "CHASE FLICKER", "CHASE FOG", "CHASE FOG MAX", "FOG RISE", "FOG FALL", "CHASE RED", "CHASE RED CHANCE", "BLACKOUT CHANCE" },
-        new[] { "RESUME", "ONLINE", "SETTINGS", "DEVELOPER", "HELP", "LEAVE ROOM", "MAIN MENU", "QUIT GAME" },
+        new[] { "RESUME", "ONLINE", "SETTINGS", "DEVELOPER", "HELP", "LEAVE ROOM", "QUIT GAME" },
         new[] { "FPS COUNTER", "OBJECT BRACKETS", "PLAYER NAMES", "DEBUG INFO", "MONSTER VECTORS" },
         new[] { "RENDER MODE", "RESOLUTION", "FPS LIMIT", "VSYNC" },
         new[] { "FPS COUNTER", "OBJECT BRACKETS", "PLAYER NAMES" }
@@ -324,6 +324,7 @@ internal sealed partial class DebugMenu
         else if(Selected>=ScrollRow+VisibleRows) ScrollRow=Selected-VisibleRows+1;
     }
     const int VisibleRows=11;
+    const int PauseRowTop=52, PauseRowPitch=22, SettingsRowTop=40;
     static int CategoryY(int index) => 48+index*20;
     int CategoryAt(int y)
     {
@@ -376,9 +377,10 @@ internal sealed partial class DebugMenu
             return;
         }
         if(View==MenuView.Help) { Back();return; }
-        int row=View==MenuView.Pause?(y-55)/20:ScrollRow+(y-43)/15;
-        if ((View==MenuView.Pause && (y<55||y>=215)) ||
-            (View==MenuView.Settings && (y<43||y>=43+VisibleRows*15)) ||
+        int row=View==MenuView.Pause?(y-(PauseRowTop-3))/PauseRowPitch:
+            ScrollRow+(y-(SettingsRowTop-3))/RowPitch;
+        if ((View==MenuView.Pause && (y<PauseRowTop-3||y>=PauseRowTop-3+Labels[9].Length*PauseRowPitch)) ||
+            (View==MenuView.Settings && (y<SettingsRowTop-3||y>=SettingsRowTop-3+VisibleRows*RowPitch)) ||
             row<0 || row>=Labels[Page].Length || x<15 || x>=305) return;
         Selected = row;
         if(View==MenuView.Pause) { Adjust(row,1);return; }
@@ -414,10 +416,12 @@ internal sealed partial class DebugMenu
             int hovered=-1;
             if(y>=2 && y<14 && x>=270 && x<307) hovered=109;
             else if(y>=2 && y<14 && x>=307) hovered=110;
-            else if(x>=15 && x<305 && y>=(View==MenuView.Pause?55:43) &&
-                    y<(View==MenuView.Pause?215:43+VisibleRows*15))
+            else if(x>=15 && x<305 && y>=(View==MenuView.Pause?PauseRowTop-3:SettingsRowTop-3) &&
+                    y<(View==MenuView.Pause?PauseRowTop-3+Labels[9].Length*PauseRowPitch:
+                        SettingsRowTop-3+VisibleRows*RowPitch))
             {
-                int row=View==MenuView.Pause?(y-55)/20:ScrollRow+(y-43)/15;
+                int row=View==MenuView.Pause?(y-(PauseRowTop-3))/PauseRowPitch:
+                    ScrollRow+(y-(SettingsRowTop-3))/RowPitch;
                 if(row>=0 && row<Labels[Page].Length) hovered=row;
             }
             if(hovered!=hoveredItem)
@@ -454,7 +458,7 @@ internal sealed partial class DebugMenu
         if(y>=178 && y<192) return 3;
         return -1;
     }
-    int RowPitch => 15;
+    int RowPitch => 16;
 
     static (int Page,int Row) MappedSetting(int page,int row) => page switch
     {
@@ -646,7 +650,6 @@ internal sealed partial class DebugMenu
             else if(row==4) OpenHelp();
             else if(row==5 && NetworkConnected) SessionAction?.Invoke(1);
             else if(row==6) SessionAction?.Invoke(2);
-            else if(row==7) SessionAction?.Invoke(3);
             else return;
         }
         else if(Page == 7)
@@ -729,7 +732,7 @@ internal sealed partial class DebugMenu
         if(Page == 9) return row switch
         {
             0 => "PLAY",1=>"OPEN",2=>"OPEN",3=>"OPEN",4=>"OPEN",
-            5 => NetworkConnected ? "LEAVE" : "OFFLINE",6=>"OPEN",7=>"EXIT",
+            5 => NetworkConnected ? "LEAVE" : "OFFLINE",6=>"EXIT",
             _ => ""
         };
         if(Page == 8) return row switch

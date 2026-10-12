@@ -20,10 +20,9 @@ internal sealed partial class DebugMenu
         }
     }
 
-    static void DrawSelection(Graphics g,Brush focus,Brush accent,int y,int left=14,int width=292)
+    static void DrawSelection(Graphics g,Brush accent,int y,int left=14)
     {
-        g.FillRectangle(focus,left,y-3,width,13);
-        g.FillRectangle(accent,left,y-3,2,13);
+        g.FillRectangle(accent,left,y-2,2,11);
     }
 
     static void DrawDivider(Graphics g,Brush divider,int y,int left=14,int width=292)
@@ -57,13 +56,12 @@ internal sealed partial class DebugMenu
         g.CompositingMode = CompositingMode.SourceOver;
         g.SmoothingMode = SmoothingMode.None;
         g.Clear(Color.Transparent);
-        using var white = new SolidBrush(Color.FromArgb(237, 246, 247));
-        using var paleBlue = new SolidBrush(Color.FromArgb(170, 211, 231));
-        using var green = new SolidBrush(Color.FromArgb(84, 224, 160));
-        using var unfilled = new SolidBrush(Color.FromArgb(130, 160, 171));
-        using var focus = new SolidBrush(Color.FromArgb(135, 8, 23, 20));
-        using var divider = new SolidBrush(Color.FromArgb(125, 142, 184, 187));
-        using var toggleOutline = new SolidBrush(Color.FromArgb(195, 170, 211, 231));
+        using var white = new SolidBrush(Color.FromArgb(210, 210, 210));
+        using var paleBlue = new SolidBrush(Color.FromArgb(175, 175, 175));
+        using var green = new SolidBrush(Color.White);
+        using var unfilled = new SolidBrush(Color.FromArgb(105, 105, 105));
+        using var divider = new SolidBrush(Color.FromArgb(96, 96, 96));
+        using var toggleOutline = new SolidBrush(Color.FromArgb(190, 190, 190));
         if(Open && TitleScreen)
         {
             PixelText(g,TitlePage==0?"BEANROOMS MENU":"BEANROOMS ONLINE",paleBlue,12,4);
@@ -76,7 +74,7 @@ internal sealed partial class DebugMenu
                 {
                     string label=options[row];
                     Brush ink=row==TitleSelected?green:white;
-                    if(row==TitleSelected) DrawSelection(g,focus,green,72+row*24,14);
+                    if(row==TitleSelected) DrawSelection(g,green,72+row*24,14);
                     PixelText(g,row==TitleSelected?">":" ",ink,21,72+row*24);
                     PixelText(g,label,ink,44,72+row*24);
                     DrawDivider(g,divider,84+row*24,20,280);
@@ -85,9 +83,9 @@ internal sealed partial class DebugMenu
             }
             else
             {
-                if(TitleSelected==0) DrawSelection(g,focus,green,70,14);
-                if(TitleSelected==1) DrawSelection(g,focus,green,125,14);
-                if(TitleSelected==2) DrawSelection(g,focus,green,160,14);
+                if(TitleSelected==0) DrawSelection(g,green,70,14);
+                if(TitleSelected==1) DrawSelection(g,green,125,14);
+                if(TitleSelected==2) DrawSelection(g,green,160,14);
                 PixelText(g,TitleSelected==0?">":" ",TitleSelected==0?green:white,21,70);
                 PixelText(g,"PHOTON ROOM",TitleSelected==0?green:white,44,70);
                 string masked=JoinKey.Length==0?"ENTER KEY":new string('*',Math.Min(JoinKey.Length,20));
@@ -110,11 +108,11 @@ internal sealed partial class DebugMenu
                 {
                     bool locked=row==5&&!NetworkConnected;
                     Brush ink=locked?unfilled:row==Selected?green:white;
-                    int y=59+row*20;
-                    if(row==Selected) DrawSelection(g,focus,green,y,18,284);
+                    int y=PauseRowTop+row*PauseRowPitch;
+                    if(row==Selected) DrawSelection(g,green,y,18);
                     PixelText(g,row==Selected?">":" ",ink,26,y);
                     PixelText(g,Labels[9][row],ink,50,y);
-                    if(row<Labels[9].Length-1) DrawDivider(g,divider,y+12,25,270);
+                    if(row<Labels[9].Length-1) DrawDivider(g,divider,y+14,25,270);
                 }
                 PixelText(g,"TAB RESUME  ENTER SELECT",paleBlue,13,225);
             }
@@ -128,7 +126,7 @@ internal sealed partial class DebugMenu
                     int y=CategoryY(index);
                     Brush ink=Tabs[index].Page==2&&!MovementControlsWritable?unfilled:
                         index==CategorySelected?green:white;
-                    if(index==CategorySelected) DrawSelection(g,focus,green,y,18,284);
+                    if(index==CategorySelected) DrawSelection(g,green,y,18);
                     PixelText(g,index==CategorySelected?">":" ",ink,25,y);
                     PixelText(g,Tabs[index].Name,ink,50,y);
                     PixelText(g,">",ink,301,y);
@@ -169,13 +167,13 @@ internal sealed partial class DebugMenu
                 {
                     int row=ScrollRow+slot;
                     if(row>=Labels[Page].Length) break;
-                    int y=43+slot*RowPitch;
+                    int y=SettingsRowTop+slot*RowPitch;
                     bool locked=Page==5&&!MonsterControlsWritable ||
                         Page==8&&!FlickerControlsWritable ||
                         Page==2&&!MovementControlsWritable ||
                         Page==6&&row==8&&!NetworkConnected;
                     Brush ink=locked?unfilled:row==Selected?green:white;
-                    if(row==Selected) DrawSelection(g,focus,green,y,12,296);
+                    if(row==Selected) DrawSelection(g,green,y,12);
                     PixelText(g,row==Selected?">":" ",ink,18,y);
                     PixelText(g,Labels[Page][row],ink,44,y);
                     if(IsSlider(row))
@@ -197,7 +195,7 @@ internal sealed partial class DebugMenu
                         if(action) value=value+" >";
                         PixelText(g,value,ink,316-value.Length*6,y);
                     }
-                    if(slot<VisibleRows-1) DrawDivider(g,divider,y+11,18,284);
+                    if(slot<VisibleRows-1) DrawDivider(g,divider,y+12,18,284);
                 }
                 if(ScrollRow+VisibleRows<Labels[Page].Length) PixelText(g,"V",paleBlue,306,210);
                 PixelText(g,"ESC BACK  Q/E PAGES",paleBlue,13,225);
