@@ -6,6 +6,7 @@ namespace Beanrooms;
 internal sealed partial class DebugMenu
 {
     internal enum MenuView { Pause, Categories, Settings, Help }
+    enum ParentWindowKind { None, Pause, Categories, Help }
     internal MenuView View = MenuView.Pause;
     MenuView settingsReturn=MenuView.Categories;
     internal int CategorySelected, ScrollRow;
@@ -74,9 +75,11 @@ internal sealed partial class DebugMenu
     };
     int dragging = -1;
     int hoveredItem = -1;
-    internal int WindowX=30, WindowY=20;
+    internal int WindowX=45, WindowY=40;
     bool movingWindow;
     int windowGrabX, windowGrabY;
+    ParentWindowKind parentWindow;
+    int parentWindowX, parentWindowY;
     static readonly int[] SampleChoices = { 16, 32, 64, 128, 256 };
     bool developerCategories;
     static readonly (string Name,int Page)[] PlayerTabs =
@@ -141,26 +144,46 @@ internal sealed partial class DebugMenu
         if(TitleScreen) { if(TitlePage==1) ShowTitle();return; }
         if(Open && SettingsFromTitle) { ShowTitle();return; }
         Open=!Open;TitleScreen=false;SettingsFromTitle=false;
-        if(Open) { View=MenuView.Pause;Page=9;Selected=0; }
+        if(Open) { View=MenuView.Pause;Page=9;Selected=0;parentWindow=ParentWindowKind.None; }
         dragging=-1;hoveredItem=-1;Dirty=true;InteractionSound?.Invoke();
     }
     internal void Back()
     {
         FinishEditing();
         if(TitleScreen) { if(TitlePage==1) ShowTitle();return; }
-        if(View==MenuView.Settings) { View=settingsReturn;Dirty=true;return; }
+        if(View==MenuView.Settings)
+        {
+            View=settingsReturn;
+            parentWindow=settingsReturn==MenuView.Categories?ParentWindowKind.Pause:ParentWindowKind.None;
+            WindowX=Math.Max(0,WindowX-10);WindowY=Math.Max(0,WindowY-8);
+            Dirty=true;return;
+        }
         if(View is MenuView.Categories or MenuView.Help)
-        { if(SettingsFromTitle) ShowTitle(); else { View=MenuView.Pause;Page=9;Selected=0;Dirty=true; } return; }
+        { if(SettingsFromTitle) ShowTitle(); else { View=MenuView.Pause;Page=9;Selected=0;parentWindow=ParentWindowKind.None;Dirty=true; } return; }
         Toggle();
     }
+    void PushParent(ParentWindowKind kind)
+    {
+        parentWindow=kind;parentWindowX=WindowX;parentWindowY=WindowY;
+        WindowX=Math.Clamp(WindowX+10,0,320-MenuWidth);
+        WindowY=Math.Clamp(WindowY+8,0,240-MenuHeight);
+    }
     internal void OpenCategories(bool developer=false)
-    { FinishEditing();TitleScreen=false;developerCategories=developer;View=MenuView.Categories;CategorySelected=0;Dirty=true;InteractionSound?.Invoke(); }
+    {
+        FinishEditing();
+        if(!TitleScreen && !SettingsFromTitle && View==MenuView.Pause) PushParent(ParentWindowKind.Pause);
+        TitleScreen=false;developerCategories=developer;View=MenuView.Categories;CategorySelected=0;Dirty=true;InteractionSound?.Invoke();
+    }
     internal void OpenHelp()
-    { FinishEditing();TitleScreen=false;View=MenuView.Help;Dirty=true;InteractionSound?.Invoke(); }
+    {
+        FinishEditing();
+        if(!TitleScreen && View==MenuView.Pause) PushParent(ParentWindowKind.Pause);
+        TitleScreen=false;View=MenuView.Help;Dirty=true;InteractionSound?.Invoke();
+    }
     internal void ShowTitle()
     {
         if(TitleScreen && TitlePage==1) CancelJoinAction?.Invoke();
-        FinishEditing(); Open=true;TitleScreen=true;SettingsFromTitle=false;
+        FinishEditing(); Open=true;TitleScreen=true;SettingsFromTitle=false;parentWindow=ParentWindowKind.None;
         TitlePage=0;TitleSelected=0;hoveredItem=-1;Dirty=true;
     }
     internal void LeaveTitle()
@@ -180,6 +203,7 @@ internal sealed partial class DebugMenu
         if(page==2 && !MovementControlsWritable) return;
         if(page!=9 && View!=MenuView.Settings)
             settingsReturn=View==MenuView.Pause?MenuView.Pause:MenuView.Categories;
+        if(page!=9 && View==MenuView.Categories) PushParent(ParentWindowKind.Categories);
         FinishEditing(); Page=Math.Clamp(page,0,12); Selected=0;ScrollRow=0;
         View=Page==9?MenuView.Pause:MenuView.Settings;
         dragging=-1;hoveredItem=-1;Dirty=true;InteractionSound?.Invoke();
@@ -328,14 +352,14 @@ internal sealed partial class DebugMenu
         if(Selected<ScrollRow) ScrollRow=Selected;
         else if(Selected>=ScrollRow+VisibleRows) ScrollRow=Selected-VisibleRows+1;
     }
-    const int VisibleRows=10;
-    const int MenuWidth=260, MenuHeight=180;
+    const int VisibleRows=9;
+    const int MenuWidth=230, MenuHeight=160;
     int MenuLeft => WindowX;
     int MenuRight => WindowX+MenuWidth;
     int PauseRowTop => WindowY+38;
     const int PauseRowPitch=17;
-    int CategoryRowTop => WindowY+38;
-    const int CategoryRowPitch=17;
+    int CategoryRowTop => WindowY+35;
+    const int CategoryRowPitch=15;
     int SettingsRowTop => WindowY+31;
     const int SettingsRowPitch=13;
     int TitleRowTop => WindowY+60;
@@ -350,10 +374,10 @@ internal sealed partial class DebugMenu
     int PauseAt(int x,int y)
     {
         int localX=x-WindowX,localY=y-WindowY;
-        if(localX<28 || localX>=208) return -1;
+        if(localX<28 || localX>=194) return -1;
         if(localY>=46 && localY<62) return 0;
-        if(localY>=68 && localY<84) return localX<122?1:localX<208?2:-1;
-        if(localY>=90 && localY<106) return localX<122?3:localX<208?4:-1;
+        if(localY>=68 && localY<84) return localX<106?1:localX<194?2:-1;
+        if(localY>=90 && localY<106) return localX<106?3:localX<194?4:-1;
         if(localY>=118 && localY<134) return 5;
         if(localY>=140 && localY<156) return 6;
         return -1;
@@ -390,8 +414,8 @@ internal sealed partial class DebugMenu
     {
         int headerTop=WindowY+3;
         int headerBottom=WindowY+18;
-        int resetLeft=WindowX+198;
-        int closeLeft=WindowX+240;
+        int resetLeft=WindowX+162;
+        int closeLeft=WindowX+210;
         if(y>=headerTop && y<headerBottom && x>=closeLeft)
         {
             if(!TitleScreen) Back();
@@ -424,13 +448,13 @@ internal sealed partial class DebugMenu
         if(row<0 || row>=Labels[Page].Length || x<MenuLeft || x>=MenuRight) return;
         Selected = row;
         if(View==MenuView.Pause) { Adjust(row,1);return; }
-        if (IsSlider(row) && x >= WindowX+138 && x <= WindowX+209)
+        if (IsSlider(row) && x >= WindowX+120 && x <= WindowX+178)
         {
             dragging = row;
             SetSliderFromX(row,x);
         }
-        else if(IsChoice(row) && x>=WindowX+252-(Value(row).Length+4)*6 &&
-                x<WindowX+252-(Value(row).Length+1)*6) Adjust(row,-1);
+        else if(IsChoice(row) && x>=WindowX+212-(Value(row).Length+4)*5 &&
+                x<WindowX+212-(Value(row).Length+1)*5) Adjust(row,-1);
         else Adjust(row,1);
         Dirty = true;
     }
@@ -460,8 +484,8 @@ internal sealed partial class DebugMenu
         if (dragging < 0)
         {
             int hovered=-1;
-            if(y>=WindowY+3 && y<WindowY+18 && x>=WindowX+198 && x<WindowX+240 && View==MenuView.Settings) hovered=109;
-            else if(y>=WindowY+3 && y<WindowY+18 && x>=WindowX+240) hovered=110;
+            if(y>=WindowY+3 && y<WindowY+18 && x>=WindowX+162 && x<WindowX+210 && View==MenuView.Settings) hovered=109;
+            else if(y>=WindowY+3 && y<WindowY+18 && x>=WindowX+210) hovered=110;
             else if(x>=MenuLeft && x<MenuRight)
             {
                 int row=View==MenuView.Pause?PauseAt(x,y):
@@ -496,7 +520,7 @@ internal sealed partial class DebugMenu
             return RowAt(y,TitleRowTop,TitleRowPitch,4);
         if(y>=WindowY+53 && y<WindowY+88) return 0;
         if(y>=WindowY+100 && y<WindowY+124)
-            return x<WindowX+130?1:2;
+            return x<WindowX+120?1:2;
         return -1;
     }
     int RowPitch => SettingsRowPitch;
@@ -538,7 +562,7 @@ internal sealed partial class DebugMenu
     }
     void SetSliderFromX(int row,int x)
     {
-        float target=Math.Clamp((x-(WindowX+138))/71f,0f,1f);
+        float target=Math.Clamp((x-(WindowX+120))/58f,0f,1f);
         float current=Fraction(row);
         int direction=target>current?1:-1;
         bool changed=false;
