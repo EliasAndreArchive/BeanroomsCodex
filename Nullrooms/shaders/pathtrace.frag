@@ -36,7 +36,6 @@ vec4 objectRotation(int index) { return texelFetch(objectMap,ivec2(1,index),0); 
 vec3 objectColor(int index) { return texelFetch(objectMap,ivec2(2,index),0).rgb; }
 bool objectEmissive(int index) { float code=texelFetch(objectMap,ivec2(2,index),0).a; return code>0.5 && code<1.5 || code>10.25 && code<10.75; }
 float objectCode(int index) { return texelFetch(objectMap,ivec2(2,index),0).a; }
-bool devicePowered(int index) { return fract(objectCode(index)) > 0.25; }
 uniform int remoteCount;
 uniform vec4 remoteData[4];
 uniform vec3 remoteColor[4];
@@ -112,30 +111,13 @@ Hit trace(vec3 ro, vec3 rd, float limit) {
     }
     for(int object=0;object<objectCount;object++) {
         vec4 data=objectData(object);
-        float radius=objectCode(object)<-1.5 ? data.w+0.05 : objectCode(object)<-0.5 ? 1.55 : data.w*1.733;
+        float radius=objectCode(object)<-0.5 ? 1.55 : data.w*1.733;
         vec3 toCenter=data.xyz-ro;
         float along=dot(toCenter,rd);
         if(along < -radius || along > h.t+radius || dot(toCenter-rd*along,toCenter-rd*along)>radius*radius) continue;
         vec4 inverseRotation=vec4(-objectRotation(object).xyz,objectRotation(object).w);
         vec3 localOrigin=rotateQ(inverseRotation,ro-data.xyz);
         vec3 localDirection=rotateQ(inverseRotation,rd);
-        if(objectCode(object)<-1.5) {
-            // Each black cable link is a narrow Bepu-driven rod along local Y.
-            vec3 safeDirection=vec3(
-                localDirection.x>=0.0?max(localDirection.x,0.000001):min(localDirection.x,-0.000001),
-                localDirection.y>=0.0?max(localDirection.y,0.000001):min(localDirection.y,-0.000001),
-                localDirection.z>=0.0?max(localDirection.z,0.000001):min(localDirection.z,-0.000001));
-            vec3 halfSize=vec3(0.0275,data.w,0.0275);
-            vec3 lo=min((-halfSize-localOrigin)/safeDirection,(halfSize-localOrigin)/safeDirection);
-            vec3 hi=max((-halfSize-localOrigin)/safeDirection,(halfSize-localOrigin)/safeDirection);
-            float entry=max(max(lo.x,lo.y),lo.z),leave=min(min(hi.x,hi.y),hi.z);
-            if(entry>0.001 && entry<leave && entry<h.t) {
-                vec3 n=lo.x>lo.y && lo.x>lo.z ? vec3(-sign(localDirection.x),0,0) :
-                       lo.y>lo.z ? vec3(0,-sign(localDirection.y),0) : vec3(0,0,-sign(localDirection.z));
-                h.t=entry;h.normal=rotateQ(objectRotation(object),n);h.baseColor=objectColor(object);h.material=4;
-            }
-            continue;
-        }
         if(objectCode(object)<-0.5) {
             // Five top boards on three lower runners make a square wooden pallet.
             vec3 safe=sign(localDirection)*max(abs(localDirection),vec3(0.000001));
@@ -153,87 +135,6 @@ Hit trace(vec3 ro, vec3 rd, float limit) {
                     vec3 n=loPart.x>loPart.y && loPart.x>loPart.z ? vec3(-sign(localDirection.x),0,0) :
                            loPart.y>loPart.z ? vec3(0,-sign(localDirection.y),0) : vec3(0,0,-sign(localDirection.z));
                     h.t=entryPart;h.normal=rotateQ(objectRotation(object),n);h.baseColor=wood;h.material=4;
-                }
-            }
-            continue;
-        }
-        int kind=int(floor(objectCode(object)-2.0+0.001));
-        if(kind>=2) {
-            vec3 safe=sign(localDirection)*max(abs(localDirection),vec3(0.000001));
-            for(int part=0;part<4;part++) {
-                vec3 center=vec3(0.0), halfSize=vec3(0.0);
-                vec3 color=vec3(0.36,0.40,0.43);
-                if(part==0) { halfSize=vec3(0.32,0.07,0.32);center.y=-0.25; }
-                else if(kind==2) {
-                    if(part==1) { halfSize=vec3(0.22,0.18,0.22);center.y=-0.03;color=objectColor(object); }
-                    if(part==2) { halfSize=vec3(0.16,0.045,0.16);center.y=0.19;color=devicePowered(object)?vec3(1.0,0.34,0.08):vec3(0.16,0.17,0.19); }
-                } else if(kind==3) {
-                    if(part==1) { halfSize=vec3(0.18,0.09,0.18);center.y=-0.11;color=devicePowered(object)?vec3(0.9,0.26,0.14):objectColor(object); }
-                } else if(kind==4) {
-                    if(part==1) { halfSize=vec3(0.035,0.20,0.035);center=vec3(devicePowered(object)?0.09:-0.09,-0.01,0.0);color=vec3(0.68); }
-                    if(part==2) { halfSize=vec3(0.08);center=vec3(devicePowered(object)?0.09:-0.09,0.19,0.0);color=objectColor(object); }
-                } else if(kind>=5 && kind<=7 || kind>=9 && kind<=13) {
-                    if(part==1) { halfSize=vec3(0.25,0.15,0.07);center=vec3(0.0,-0.04,-0.27);color=objectColor(object); }
-                    if(part==2) { halfSize=vec3(0.07,0.045,0.015);center=vec3(0.0,-0.04,-0.35);color=devicePowered(object)?vec3(0.27,0.95,0.56):vec3(0.37,0.12,0.10); }
-                    if(part==3) { halfSize=vec3(0.22,0.11,0.22);center.y=-0.10;color=vec3(0.14,0.17,0.21); }
-                } else if(kind==8) {
-                    if(part==1) { halfSize=vec3(0.06,0.17,0.06);center.y=-0.05; }
-                    if(part==2) { halfSize=vec3(0.16,0.12,0.16);center.y=0.18;color=devicePowered(object)?objectColor(object):vec3(0.35,0.32,0.25); }
-                } else if(kind==14) {
-                    if(part==1) { halfSize=vec3(0.22,0.20,0.22);center.y=0.0;color=vec3(0.21,0.23,0.27); }
-                    if(part==2) { halfSize=vec3(0.15,0.15,0.20);center=vec3(0.0,0.0,devicePowered(object)?0.42:0.38);color=devicePowered(object)?objectColor(object):vec3(0.45,0.47,0.50); }
-                    if(part==3) { halfSize=vec3(0.17,0.045,0.03);center=vec3(0.0,0.0,devicePowered(object)?0.82:0.40);color=vec3(0.75,0.55,0.2); }
-                } else if(kind==15) {
-                    if(part==1) { halfSize=vec3(0.29,0.045,0.29);center.y=-0.18;color=objectColor(object); }
-                    if(part==2) { halfSize=vec3(0.18,0.018,0.18);center.y=-0.12;color=devicePowered(object)?vec3(1.0,0.76,0.18):vec3(0.20); }
-                } else if(kind==16) {
-                    if(part==1) { halfSize=vec3(0.18,0.20,0.10);center.y=-0.02;color=vec3(0.14,0.18,0.20); }
-                    if(part==2) { halfSize=vec3(0.10,0.10,0.025);center=vec3(0.0,0.02,0.11);color=devicePowered(object)?objectColor(object):vec3(0.08,0.18,0.20); }
-                } else if(kind>=17 && kind<=19) {
-                    if(part==1) { halfSize=vec3(0.24,0.15,0.12);center=vec3(0.0,-0.06,-0.18);color=objectColor(object); }
-                    if(part==2) { halfSize=vec3(0.12,0.075,0.035);center=vec3(0.0,0.03,0.02);color=devicePowered(object)?objectColor(object)*1.3:vec3(0.12); }
-                    if(part==3) { halfSize=vec3(0.035,0.035,0.035);center=vec3(0.0,0.03,0.10);color=vec3(0.8,0.9,0.75); }
-                } else if(kind==20) {
-                    if(part==1) { halfSize=vec3(0.26,0.08,0.26);center.y=-0.16; }
-                    if(part==2) { halfSize=vec3(0.08,0.23,0.08);center.y=0.04;color=objectColor(object); }
-                    if(part==3) { halfSize=vec3(0.20,0.035,0.035);center.y=0.12;color=devicePowered(object)?vec3(1.0,0.62,0.18):vec3(0.24); }
-                } else if(kind==21) {
-                    if(part==1) { halfSize=vec3(0.27,0.27,0.08);center.y=-0.02;color=vec3(0.08); }
-                    if(part==2) { halfSize=vec3(0.08,0.08,0.12);center=vec3(0.0,-0.02,0.10);color=objectColor(object); }
-                } else if(kind==22) {
-                    if(part==1) { halfSize=vec3(0.20,0.20,0.08);center.y=-0.02;color=objectColor(object); }
-                    if(part==2) { halfSize=vec3(0.11,0.11,0.13);center=vec3(0.0,-0.02,0.10);color=vec3(0.16); }
-                    if(part==3) { halfSize=vec3(0.018,0.018,0.32);center=vec3(0.0,-0.02,0.38);color=vec3(0.52,0.35,0.18); }
-                } else if(kind==23) {
-                    if(part==1) { halfSize=vec3(0.32,0.08,0.25);center.y=-0.14;color=vec3(0.10,0.12,0.14); }
-                    if(part==2) { halfSize=vec3(0.26,0.035,0.18);center.y=-0.02;color=objectColor(object); }
-                    if(part==3) { halfSize=vec3(0.04,0.04,0.15);center=vec3(0.0,0.05,devicePowered(object)?0.05:-0.05);color=devicePowered(object)?vec3(0.35,0.95,0.55):vec3(0.12); }
-                } else if(kind==24 || kind==25) {
-                    if(part==1) { halfSize=vec3(0.28,0.21,0.06);center=vec3(0.0,0.01,-0.10);color=vec3(0.08,0.11,0.13); }
-                    if(part==2) { halfSize=vec3(0.22,0.14,0.012);center=vec3(0.0,0.03,-0.17);color=devicePowered(object)?objectColor(object)*1.4:objectColor(object)*0.25; }
-                    if(part==3 && kind==24) { halfSize=vec3(0.035,0.035,0.035);center=vec3(0.0,-0.14,-0.19);color=devicePowered(object)?vec3(0.8,1.0,0.65):vec3(0.15); }
-                } else if(kind==26) {
-                    // Compact battery with two raised terminals and a charge indicator.
-                    if(part==1) { halfSize=vec3(0.26,0.21,0.23);center.y=-0.02;color=objectColor(object); }
-                    if(part==2) { halfSize=vec3(0.055,0.045,0.055);center=vec3(-0.13,0.24,0.0);color=vec3(0.72,0.28,0.13); }
-                    if(part==3) { halfSize=vec3(0.055,0.045,0.055);center=vec3(0.13,0.24,0.0);color=vec3(0.65,0.67,0.70); }
-                } else if(kind==27) {
-                    // Generator: metal housing, dark vent, and a visible running switch.
-                    if(part==1) { halfSize=vec3(0.29,0.23,0.25);center.y=-0.01;color=objectColor(object); }
-                    if(part==2) { halfSize=vec3(0.22,0.11,0.018);center=vec3(0.0,-0.01,-0.27);color=vec3(0.055,0.065,0.065); }
-                    if(part==3) { halfSize=vec3(0.055,0.055,0.022);center=vec3(0.18,0.10,-0.29);color=devicePowered(object)?vec3(0.16,0.8,0.38):vec3(0.22,0.08,0.07); }
-                }
-                if(any(lessThanEqual(halfSize,vec3(0.0)))) continue;
-                vec3 nearPart=(-halfSize-(localOrigin-center))/safe;
-                vec3 farPart=(halfSize-(localOrigin-center))/safe;
-                vec3 loPart=min(nearPart,farPart),hiPart=max(nearPart,farPart);
-                float entryPart=max(max(loPart.x,loPart.y),loPart.z);
-                float leavePart=min(min(hiPart.x,hiPart.y),hiPart.z);
-                if(entryPart>0.001 && entryPart<leavePart && entryPart<h.t) {
-                    vec3 n=loPart.x>loPart.y && loPart.x>loPart.z ? vec3(-sign(localDirection.x),0,0) :
-                           loPart.y>loPart.z ? vec3(0,-sign(localDirection.y),0) : vec3(0,0,-sign(localDirection.z));
-                    h.t=entryPart;h.normal=rotateQ(objectRotation(object),n);h.baseColor=color;
-                    h.material=kind==8 && part==2 && devicePowered(object)?5:4;
                 }
             }
             continue;

@@ -18,7 +18,6 @@ internal sealed class PhotonNetClient : INetClient, IConnectionCallbacks, IMatch
     readonly Queue<CubeImpactEvent> pendingCubeImpacts=[];
     PlayerState[] players=[]; CubeState[] cubes=[]; MonsterState? monster;
     MonsterTuning? monsterTuning; FlickerTuning? flickerTuning;
-    SandboxDevice[] devices=[]; SandboxWire[] wires=[]; CableSegmentState[] cables=[]; bool sandboxEnabled;
     PhotonAuthority? authority;
     int id,hostId,protocolVersion;
     bool started,disposed;
@@ -34,14 +33,13 @@ internal sealed class PhotonNetClient : INetClient, IConnectionCallbacks, IMatch
     public string Status => status;
     public int Id => id;
     public int ProtocolVersion => protocolVersion;
-    public bool SupportsSandbox => protocolVersion>=NetProtocol.Version;
 
     public void Start()
     {
         if(started||disposed) return;
         started=true; status="CONNECTING";
         string appId=Environment.GetEnvironmentVariable("BEANROOMS_PHOTON_APP_ID")??DefaultAppId;
-        var settings=new AppSettings { AppIdRealtime=appId,AppVersion="beanrooms-2",FixedRegion="eu",
+        var settings=new AppSettings { AppIdRealtime=appId,AppVersion="beanrooms-3",FixedRegion="eu",
             Protocol=ConnectionProtocol.Udp,EnableProtocolFallback=true,NetworkLogging=LogLevel.Error,ClientLogging=LogLevel.Warning };
         if(!client.ConnectUsingSettings(settings)) status="PHOTON UNAVAILABLE";
     }
@@ -145,9 +143,6 @@ internal sealed class PhotonNetClient : INetClient, IConnectionCallbacks, IMatch
                 case "snapshot":
                     players=message.Players;cubes=message.Cubes;monster=message.Monster;monsterTuning=message.MonsterTuning;flickerTuning=message.FlickerTuning;
                     hostId=message.HostId;
-                    if(message.DevicesChanged||message.Devices.Length>0||message.Wires.Length>0) { devices=message.Devices;wires=message.Wires; }
-                    cables=message.Cables;
-                    sandboxEnabled=message.SandboxEnabled;
                     foreach(CubeImpactEvent impact in message.CubeImpacts) pendingCubeImpacts.Enqueue(impact);
                     while(pendingCubeImpacts.Count>128) pendingCubeImpacts.Dequeue();
                     break;
@@ -160,8 +155,8 @@ internal sealed class PhotonNetClient : INetClient, IConnectionCallbacks, IMatch
     public NetMessage? ConsumeFlicker() { lock(stateLock) { var result=pendingFlicker;pendingFlicker=null;return result; } }
     public NetMessage? ConsumePickupResult() { lock(stateLock) { var result=pendingPickupResult;pendingPickupResult=null;return result; } }
     public CubeImpactEvent[] ConsumeCubeImpacts() { lock(stateLock) { var result=pendingCubeImpacts.ToArray();pendingCubeImpacts.Clear();return result; } }
-    public (PlayerState[] Players,CubeState[] Cubes,MonsterState? Monster,MonsterTuning? MonsterTuning,FlickerTuning? FlickerTuning,int HostId,SandboxDevice[] Devices,SandboxWire[] Wires,CableSegmentState[] Cables,bool SandboxEnabled) Snapshot()
-    { lock(stateLock) return (players,cubes,monster,monsterTuning,flickerTuning,hostId,devices,wires,cables,sandboxEnabled); }
+    public (PlayerState[] Players,CubeState[] Cubes,MonsterState? Monster,MonsterTuning? MonsterTuning,FlickerTuning? FlickerTuning,int HostId) Snapshot()
+    { lock(stateLock) return (players,cubes,monster,monsterTuning,flickerTuning,hostId); }
 
     public void Dispose()
     {

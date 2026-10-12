@@ -12,7 +12,6 @@ namespace Beanrooms;
 internal sealed class RigidCube
 {
     internal int Id;
-    internal int SandboxDeviceId;
     internal Vector3 Position, Velocity, AngularVelocity;
     internal Vector3 Color = new(0.82f, 0.69f, 0.22f);
     internal Quaternion Rotation = Quaternion.Identity;
@@ -120,16 +119,6 @@ internal sealed class PhysicsBodies : IDisposable
         internal bool Active;
     }
     readonly Dictionary<int,Grab> grabs = new();
-    readonly List<ConstraintHandle> welds = new();
-    readonly HashSet<(int First,int Second)> weldedPairs = new();
-    sealed class CableLink
-    {
-        internal required BodyHandle[] Segments;
-        internal required float HalfLength;
-    }
-    readonly List<CableLink> cables = new();
-    internal static int CableSegmentCount(float distance) => Math.Clamp((int)MathF.Ceiling(distance/0.8f),3,18);
-    float previewReach;
     internal RigidCube? Held => grabs.TryGetValue(0,out Grab? grab) ? grab.Cube : null;
     internal int HolderOf(RigidCube cube) => grabs.FirstOrDefault(pair=>pair.Value.Cube==cube).Key;
     internal bool HeldBy(int holderId) => grabs.ContainsKey(holderId);
@@ -140,14 +129,6 @@ internal sealed class PhysicsBodies : IDisposable
         float desired=Math.Clamp(grab.LastHoldDistance+grab.DistanceOffset+delta,0.35f,6f);
         grab.DistanceOffset=desired-grab.LastHoldDistance;
         return true;
-    }
-    internal void ApplyThruster(Vector3 position,float yaw,float dt,int sourceDeviceId=0)
-    {
-        RigidCube? cube=Bodies.Where(body=>!body.HasHoldTarget && body.SandboxDeviceId!=sourceDeviceId)
-            .OrderBy(body=>Vector3.DistanceSquared(body.Position,position)).FirstOrDefault();
-        if(cube==null || Vector3.DistanceSquared(cube.Position,position)>1.5f*1.5f) return;
-        BodyReference reference=simulation.Bodies[cube.Handle];
-        reference.Velocity.Linear+=new Vector3(MathF.Sin(yaw),0f,MathF.Cos(yaw))*10f*dt;
     }
     internal float PickupRange = 5f, HoldDistance = 2.25f, Frequency = 8.5f, Damping = 1.35f, TargetSmoothing = 18f, SlideResistance = 4.5f;
     internal float RotateYaw=0f,RotatePitch=0f;
@@ -175,10 +156,6 @@ internal sealed class PhysicsBodies : IDisposable
             new SolveDescription(8, 2, 128), null, null);
         environmentReady = false;
         grabs.Clear();
-        welds.Clear();
-        weldedPairs.Clear();
-        cables.Clear();
-        previewReach=0f;
         accumulator = 0;
     }
 
@@ -231,71 +208,6 @@ internal sealed class PhysicsBodies : IDisposable
             localExtents.X*MathF.Abs(m.M13) + localExtents.Y*MathF.Abs(m.M23) + localExtents.Z*MathF.Abs(m.M33));
     }
 
-    // A powered piston shoves the nearest free body directly in front of its face
-    // along the device's 3D forward axis, Minecraft-style (with the base excluded).
-    internal void ApplyPiston(Vector3 position,Quaternion rotation,float dt,int sourceDeviceId=0)
-    {
-        Vector3 forward=Vector3.Transform(Vector3.UnitZ,rotation);
-        if(forward.LengthSquared()<0.5f) forward=Vector3.UnitZ;
-        forward=Vector3.Normalize(forward);
-        Vector3 face=position+forward*0.5f;
-        RigidCube? cube=null;
-        float nearestAlong=float.MaxValue;
-        foreach(RigidCube body in Bodies)
-        {
-            if(body.HasHoldTarget || body.SandboxDeviceId==sourceDeviceId) continue;
-            Vector3 delta=body.Position-face;
-            float along=Vector3.Dot(delta,forward);
-            if(along<0.08f || along>1.6f || along>=nearestAlong) continue;
-            Vector3 radial=delta-forward*along;
-            if(radial.LengthSquared()>0.6f*0.6f) continue;
-            cube=body;nearestAlong=along;
-        }
-        if(cube==null) return;
-        simulation.Bodies[cube.Handle].Velocity.Linear+=forward*11f*dt;
-    }
-    internal void ApplyMechanism(SandboxDevice device,float dt)
-    {
-        RigidCube? source=Bodies.FirstOrDefault(body=>body.SandboxDeviceId==device.Id);
-        Vector3 forward=Vector3.Transform(Vector3.UnitZ,device.Rotation);
-        if(forward.LengthSquared()<.5f) forward=Vector3.UnitZ;
-        forward=Vector3.Normalize(forward);
-        if(device.Kind==SandboxKind.Hinge && source!=null)
-        { simulation.Bodies[source.Handle].Velocity.Angular+=Vector3.UnitY*5f*dt;return; }
-        if(device.Kind==SandboxKind.Wheel && source!=null)
-        { simulation.Bodies[source.Handle].Velocity.Linear+=forward*8f*dt;return; }
-        if(device.Kind==SandboxKind.Rope)
-        {
-            RigidCube? target=Bodies.Where(body=>body!=source&&!body.HasHoldTarget)
-                .OrderBy(body=>Vector3.DistanceSquared(body.Position,device.Position)).FirstOrDefault();
-            if(target!=null)
-            {
-                Vector3 pull=device.Position-target.Position;
-                if(pull.LengthSquared()<36f&&pull.LengthSquared()>.04f)
-                    simulation.Bodies[target.Handle].Velocity.Linear+=Vector3.Normalize(pull)*7f*dt;
-            }
-            return;
-        }
-        if(device.Kind==SandboxKind.Conveyor)
-            foreach(RigidCube body in Bodies)
-            {
-                if(body==source||body.HasHoldTarget) continue;
-                Vector3 delta=body.Position-device.Position;
-                if(MathF.Abs(delta.X)<.8f&&MathF.Abs(delta.Z)<.8f&&delta.Y>.05f&&delta.Y<.85f)
-                    simulation.Bodies[body.Handle].Velocity.Linear+=forward*5f*dt;
-            }
-    }
-
-    internal bool DevicePressed(SandboxDevice device)
-    {
-        foreach(RigidCube body in Bodies)
-        {
-            if(body.SandboxDeviceId==device.Id) continue;
-            Vector3 delta=body.Position-device.Position;
-            if(delta.X*delta.X+delta.Z*delta.Z<.48f*.48f && MathF.Abs(delta.Y)<.55f) return true;
-        }
-        return false;
-    }
     internal static float ContactSlipSpeed(Vector3 velocity,Vector3 angularVelocity,Quaternion rotation,float halfSize)
         => ContactSlipSpeed(velocity,angularVelocity,rotation,new Vector3(halfSize));
 
@@ -398,179 +310,6 @@ internal sealed class PhysicsBodies : IDisposable
             LocalHalfExtents=new Vector3(half,halfHeight,half),Plank=true,
             Rotation=rotation,Material=PhysicsMaterial.Wood,Color=new Vector3(.43f,.24f,.10f),Handle=handle });
         return true;
-    }
-
-    internal bool SpawnSandboxDevice(SandboxDevice device,IReadOnlyList<RectangleF> walls,Vector3 player)
-    {
-        EnsureEnvironment(walls);
-        const float half=0.35f;
-        Vector3 position=device.Position;
-        if(SpawnBlocked(position,half,walls,player)) return false;
-        Quaternion rotation=device.Rotation;
-        if(rotation.LengthSquared()<0.001f) rotation=Quaternion.CreateFromAxisAngle(Vector3.UnitY,device.Yaw);
-        var shape=new Box(half*2f,half*2f,half*2f);
-        TypedIndex shapeIndex=simulation.Shapes.Add(in shape);
-        BodyInertia inertia=shape.ComputeInertia(0.8f);
-        BodyHandle handle=simulation.Bodies.Add(BodyDescription.CreateDynamic(
-            new RigidPose(position,rotation),new BodyVelocity(),inertia,
-            new CollidableDescription(shapeIndex,0f,3f,ContinuousDetection.Continuous()),
-            new BodyActivityDescription(0.0001f,60)));
-        var body=new RigidCube { Id=nextBodyId++,SandboxDeviceId=device.Id,Position=position,
-            HalfSize=half,Material=PhysicsMaterial.Metal,Color=new Vector3(.42f,.48f,.52f),Handle=handle };
-        Bodies.Add(body);device.BodyId=body.Id;
-        return true;
-    }
-
-    internal void SyncSandboxDevices(IReadOnlyList<SandboxDevice> devices)
-    {
-        foreach(SandboxDevice device in devices)
-        {
-            RigidCube? body=Bodies.FirstOrDefault(candidate=>candidate.SandboxDeviceId==device.Id);
-            if(body==null) continue;
-            device.BodyId=body.Id;device.X=body.Position.X;device.Y=body.Position.Y;device.Z=body.Position.Z;
-            device.Qx=body.Rotation.X;device.Qy=body.Rotation.Y;device.Qz=body.Rotation.Z;device.Qw=body.Rotation.W;
-            device.Yaw=MathF.Atan2(2f*(body.Rotation.W*body.Rotation.Y+body.Rotation.X*body.Rotation.Z),
-                1f-2f*(body.Rotation.Y*body.Rotation.Y+body.Rotation.Z*body.Rotation.Z));
-        }
-    }
-
-    internal bool TryWeld(int firstId,int secondId)
-    {
-        if(firstId==secondId) return false;
-        (int First,int Second) pair=firstId<secondId?(firstId,secondId):(secondId,firstId);
-        if(!weldedPairs.Add(pair)) return false;
-        RigidCube? first=Bodies.FirstOrDefault(body=>body.Id==firstId);
-        RigidCube? second=Bodies.FirstOrDefault(body=>body.Id==secondId);
-        if(first==null||second==null||first.HasHoldTarget||second.HasHoldTarget)
-        { weldedPairs.Remove(pair);return false; }
-        // Measure reach from each body's true rotated shape, so two wide pallets
-        // can be welded from their opposite boards instead of being limited by a cube-only centre radius.
-        Vector3 reach=Extents(first)+Extents(second)+new Vector3(.35f);
-        Vector3 separation=Vector3.Abs(first.Position-second.Position);
-        if(separation.X>reach.X||separation.Y>reach.Y||separation.Z>reach.Z)
-        { weldedPairs.Remove(pair);return false; }
-        Quaternion inverse=Quaternion.Inverse(first.Rotation);
-        var weld=new Weld
-        {
-            LocalOffset=Vector3.Transform(second.Position-first.Position,inverse),
-            LocalOrientation=Quaternion.Normalize(inverse*second.Rotation),
-            SpringSettings=new SpringSettings(40f,2.2f)
-        };
-        welds.Add(simulation.Solver.Add(first.Handle,second.Handle,weld));
-        return true;
-    }
-
-    internal static Quaternion CableRotation(Vector3 direction)
-    {
-        direction=Vector3.Normalize(direction);
-        float dot=Vector3.Dot(Vector3.UnitY,direction);
-        if(dot<-.9999f) return Quaternion.CreateFromAxisAngle(Vector3.UnitX,MathF.PI);
-        Quaternion result=new(Vector3.Cross(Vector3.UnitY,direction),1f+dot);
-        return Quaternion.Normalize(result);
-    }
-
-    internal bool AttachCable(SandboxWire wire,SandboxDevice from,SandboxDevice to)
-    {
-        RigidCube? first=Bodies.FirstOrDefault(body=>body.SandboxDeviceId==from.Id);
-        RigidCube? last=Bodies.FirstOrDefault(body=>body.SandboxDeviceId==to.Id);
-        if(first==null||last==null||first.Handle==last.Handle) return false;
-        BodyReference a=simulation.Bodies[first.Handle],b=simulation.Bodies[last.Handle];
-        Vector3 start=a.Pose.Position+Vector3.Transform(Vector3.UnitY*.22f,a.Pose.Orientation);
-        Vector3 end=b.Pose.Position+Vector3.Transform(Vector3.UnitY*.22f,b.Pose.Orientation);
-        Vector3 delta=end-start;
-        float distance=delta.Length();
-        if(distance<.05f||distance>20f) return false;
-        int count=wire.Segments>0?wire.Segments:CableSegmentCount(distance);
-        float span=distance/count;
-        float length=span*1.08f;
-        float half=length*.5f;
-        Quaternion rotation=CableRotation(delta);
-        var shape=new Box(.055f,length,.055f);
-        TypedIndex shapeIndex=simulation.Shapes.Add(in shape);
-        BodyInertia inertia=shape.ComputeInertia(.035f);
-        var handles=new BodyHandle[count];
-        var spring=new SpringSettings(16f,1.6f);
-        BodyHandle previous=first.Handle;
-        for(int index=0;index<count;index++)
-        {
-            Vector3 center=Vector3.Lerp(start,end,(index+.5f)/count);
-            handles[index]=simulation.Bodies.Add(BodyDescription.CreateDynamic(
-                new RigidPose(center,rotation),new BodyVelocity(),inertia,
-                new CollidableDescription(shapeIndex,0f,1f,ContinuousDetection.Continuous()),
-                new BodyActivityDescription(.0001f,60)));
-            Vector3 localA=index==0
-                ?Vector3.Transform(start-a.Pose.Position,Quaternion.Inverse(a.Pose.Orientation))
-                :new Vector3(0f,half,0f);
-            simulation.Solver.Add(previous,handles[index],new BallSocket
-            {
-                LocalOffsetA=localA,LocalOffsetB=new Vector3(0f,-half,0f),SpringSettings=spring
-            });
-            previous=handles[index];
-        }
-        Vector3 localB=Vector3.Transform(end-b.Pose.Position,Quaternion.Inverse(b.Pose.Orientation));
-        simulation.Solver.Add(previous,last.Handle,new BallSocket
-        {
-            LocalOffsetA=new Vector3(0f,half,0f),LocalOffsetB=localB,SpringSettings=spring
-        });
-        cables.Add(new CableLink { Segments=handles,HalfLength=half });
-        return true;
-    }
-
-    internal CableSegmentState[] CableSegments()
-    {
-        var states=new List<CableSegmentState>();
-        foreach(CableLink cable in cables)
-            foreach(BodyHandle handle in cable.Segments)
-            {
-                RigidPose pose=simulation.Bodies[handle].Pose;
-                Vector3 axis=Vector3.Transform(Vector3.UnitY*cable.HalfLength,pose.Orientation);
-                Vector3 a=pose.Position-axis,b=pose.Position+axis;
-                states.Add(new CableSegmentState { Ax=a.X,Ay=a.Y,Az=a.Z,Bx=b.X,By=b.Y,Bz=b.Z });
-            }
-        return states.ToArray();
-    }
-
-    // A separate PhysicsBodies instance is used for the local placement preview,
-    // so its cable cannot pull an authoritative device before the second click.
-    internal void BeginCablePreview(Vector3 start,Vector3 target,IReadOnlyList<RectangleF> walls)
-    {
-        Clear();
-        EnsureEnvironment(walls);
-        previewReach=MathF.Max(1.5f,Vector3.Distance(start,target)*1.12f);
-        AddPreviewAnchor(1,start);
-        AddPreviewAnchor(2,target);
-        var wire=new SandboxWire { From=1,To=2,Segments=CableSegmentCount(previewReach) };
-        var from=new SandboxDevice { Id=1,X=start.X,Y=start.Y,Z=start.Z };
-        var to=new SandboxDevice { Id=2,X=target.X,Y=target.Y,Z=target.Z };
-        AttachCable(wire,from,to);
-    }
-
-    void AddPreviewAnchor(int id,Vector3 position)
-    {
-        var shape=new Box(.06f,.06f,.06f);
-        TypedIndex shapeIndex=simulation.Shapes.Add(in shape);
-        BodyInertia inertia=shape.ComputeInertia(1000f);
-        BodyHandle handle=simulation.Bodies.Add(BodyDescription.CreateDynamic(
-            new RigidPose(position,Quaternion.Identity),new BodyVelocity(),inertia,
-            new CollidableDescription(shapeIndex,0f,0f),new BodyActivityDescription(.0001f,60)));
-        Bodies.Add(new RigidCube { Id=-id,SandboxDeviceId=id,Position=position,HalfSize=.03f,Handle=handle });
-    }
-
-    internal void StepCablePreview(float dt,Vector3 start,Vector3 target,IReadOnlyList<RectangleF> walls)
-    {
-        if(Bodies.Count<2 || cables.Count==0) BeginCablePreview(start,target,walls);
-        else if(Vector3.Distance(start,target)>previewReach*1.12f) BeginCablePreview(start,target,walls);
-        if(Bodies.Count<2) return;
-        BodyReference a=simulation.Bodies[Bodies[0].Handle],b=simulation.Bodies[Bodies[1].Handle];
-        a.Pose.Position=start;b.Pose.Position=target;
-        a.Velocity.Linear=Vector3.Zero;b.Velocity.Linear=Vector3.Zero;
-        a.Velocity.Angular=Vector3.Zero;b.Velocity.Angular=Vector3.Zero;
-        accumulator=Math.Min(accumulator+Math.Clamp(dt,0f,.05f),.1f);
-        while(accumulator>=Step)
-        {
-            simulation.Timestep(Step,null);
-            accumulator-=Step;
-        }
     }
 
     internal static float RayBox(Vector3 origin, Vector3 direction, Vector3 center, Vector3 extents)

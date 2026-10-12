@@ -6,7 +6,7 @@ internal static class NetProtocol
 {
     // Bump when a server changes a feature whose absence would otherwise look like
     // a valid, but ignored, client command.
-    internal const int Version=4;
+    internal const int Version=5;
 }
 
 internal sealed class NetMessage
@@ -51,27 +51,6 @@ internal sealed class NetMessage
     public MonsterTuning? MonsterTuning { get; set; }
     public FlickerTuning? FlickerTuning { get; set; }
     public int HostId { get; set; }
-    public bool SandboxEnabled { get; set; }
-    public SandboxDevice[] Devices { get; set; } = [];
-    public SandboxWire[] Wires { get; set; } = [];
-    public CableSegmentState[] Cables { get; set; } = [];
-    public bool DevicesChanged { get; set; }
-    public int FromId { get; set; }
-    public int ToId { get; set; }
-}
-
-internal sealed class CableSegmentState
-{
-    public float Ax { get; set; }
-    public float Ay { get; set; }
-    public float Az { get; set; }
-    public float Bx { get; set; }
-    public float By { get; set; }
-    public float Bz { get; set; }
-    [System.Text.Json.Serialization.JsonIgnore]
-    public System.Numerics.Vector3 A => new(Ax,Ay,Az);
-    [System.Text.Json.Serialization.JsonIgnore]
-    public System.Numerics.Vector3 B => new(Bx,By,Bz);
 }
 
 internal sealed class FlickerTuning
