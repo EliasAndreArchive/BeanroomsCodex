@@ -339,8 +339,8 @@ internal sealed partial class GameWindow
         Bind(3,exposureCurrent==0?exposureA:exposureB);Uniform1(displayProgram,"exposureTexture",3);
         Uniform1(displayProgram,"ditheringEnabled",menu.Dithering?1:0);
         Uniform1(displayProgram,"paletteReduction",menu.PaletteReduction?1:0);
-        Uniform1(displayProgram,"temperature",menu.Temperature);
-        Uniform1(displayProgram,"paletteSteps",menu.PaletteSteps);
+        Uniform1(displayProgram,"temperature",0);
+        Uniform1(displayProgram,"paletteSteps",16);
         (float transitionDark,float transitionFlash)=spawnTransition.Sample(watch.Elapsed.TotalSeconds);
         Uniform1f(displayProgram,"transitionDark",transitionDark);
         Uniform1f(displayProgram,"transitionFlash",transitionFlash);
@@ -350,8 +350,8 @@ internal sealed partial class GameWindow
         Uniform1f(displayProgram,"bloomStrength",menu.BloomStrength);
         Uniform1(displayProgram,"tonemapMode",menu.TonemapMode);
         Uniform1f(displayProgram,"exposure",menu.Exposure);
-        Uniform1f(displayProgram,"saturation",menu.Saturation);
-        Uniform1f(displayProgram,"contrast",menu.Contrast);
+        Uniform1f(displayProgram,"saturation",1f);
+        Uniform1f(displayProgram,"contrast",1f);
         Gl.Uniform3f(Gl.GetUniformLocation(displayProgram,"colorMix"),menu.RedMix,menu.GreenMix,menu.BlueMix);
         Uniform2(displayProgram,"windowSize",FramebufferSize.Width,FramebufferSize.Height);
         Gl.DrawArrays(0x0004,0,3);

@@ -15,9 +15,9 @@ internal sealed partial class DebugMenu
     internal int TitlePage, TitleSelected;
     internal int RenderMode = 2, ProbeQuality = 2, ProbeBounces = 4, HybridDirectSamples = 4;
     internal string RenderModeName => RenderMode == 1 ? "Realtime GI" : "Path traced fixed";
-    internal int Temperature, PaletteSteps = 16, Samples = 32, Bounces = 2, ResolutionIndex, FpsLimit;
+    internal int Samples = 32, Bounces = 2, ResolutionIndex, FpsLimit;
     internal int TonemapMode = 2;
-    internal float Exposure = 2f, Saturation = 1f, Contrast = 1f;
+    internal float Exposure = 2f;
     internal float BrightenSpeed = 1.25f, DarkenSpeed = 2.2f, BloomStrength = 0.1f, BloomThreshold = 0.85f, BloomRadius = 1.9f;
     internal float RedMix = 1f, GreenMix = 1f, BlueMix = 1f;
     internal float BounceStrength = 1.75f, AO = 0.9f, LightIntensity = 1f, LightDensity = 0.65f, FogDensity = 0.008f;
@@ -77,12 +77,12 @@ internal sealed partial class DebugMenu
     bool developerCategories;
     static readonly (string Name,int Page)[] PlayerTabs =
     {
-        ("DISPLAY",11), ("PICTURE",12), ("CAMERA",3),
-        ("HUD",13), ("PROFILE + ONLINE",6)
+        ("DISPLAY",11), ("IMAGE",7), ("CAMERA",3),
+        ("HUD",12), ("PROFILE + ONLINE",6)
     };
     static readonly (string Name,int Page)[] DeveloperTabs =
     {
-        ("RENDER TUNING",1), ("COLOR MIX",0), ("POST FX",7),
+        ("RENDER TUNING",1), ("COLOR MIX",0),
         ("MOVEMENT",2), ("PHYSICS",4), ("MONSTER",5),
         ("FLICKER",8), ("DEBUG HUD",10)
     };
@@ -116,19 +116,18 @@ internal sealed partial class DebugMenu
     };
     static readonly string[][] Labels =
     {
-        new[] { "DITHER", "PALETTE REDUCE", "PALETTE COLORS", "SATURATION", "TEMPERATURE", "CONTRAST", "RED MIX", "GREEN MIX", "BLUE MIX" },
+        new[] { "RED MIX", "GREEN MIX", "BLUE MIX" },
         new[] { "RENDER MODE", "PATH SAMPLES", "PATH BOUNCES", "BOUNCE LIGHT", "AO STRENGTH", "LIGHT INTENSITY", "LIGHT DENSITY", "RESOLUTION", "FIXTURES", "FPS LIMIT", "VSYNC", "VOLUMETRICS", "FOG DENSITY", "FOG STEPS", "PROBE GRID", "PROBE BOUNCES", "DIRECT SAMPLES" },
         new[] { "WALK SPEED", "SPRINT X", "CROUCH X", "ACCELERATION", "DECELERATION", "STANCE SMOOTH", "SPRINT SMOOTH", "CROUCH HEIGHT", "STEP LENGTH" },
         new[] { "MOUSE SENS", "IDLE SHAKE", "WALK SHAKE", "SPRINT SHAKE", "CROUCH SHAKE", "HEAD BOB", "SWAY AMOUNT", "STRAFE ROLL", "TURN ROLL", "MOVE PITCH", "LOOK SMOOTH" },
         new[] { "PICKUP RANGE", "HOLD DIST", "SPRING FREQ", "SPRING DAMP", "HOLD SMOOTH", "SLIDE RESIST", "GRID SNAP", "SNAP STEP", "CUBE COUNT" },
         new[] { "MONSTER", "ROAM SPEED", "SEARCH SPEED", "CHASE SPEED", "CHASE TURN", "SEARCH TURN", "ROAM TURN", "SIGHT RANGE", "SIGHT ANGLE", "SEARCH RADIUS", "ROAM RADIUS" },
         new[] { "PLAYER NAME", "BEAN COLOR", "RED", "GREEN", "BLUE", "PHOTON REGION", "JOIN KEY", "CONNECT", "DISCONNECT", "CONNECTION", "PLAYER ID", "PLAYERS", "ROLE" },
-        new[] { "POST FX", "TONEMAP", "EXPOSURE", "AUTO EXPOSURE", "BRIGHTEN SPEED", "DARKEN SPEED", "BLOOM", "BLOOM STRENGTH", "BLOOM THRESHOLD", "BLOOM RADIUS" },
+        new[] { "POST FX", "TONEMAP", "EXPOSURE", "AUTO EXPOSURE", "BRIGHTEN SPEED", "DARKEN SPEED", "BLOOM", "BLOOM STRENGTH", "BLOOM THRESHOLD", "BLOOM RADIUS", "DITHER", "POSTERIZATION" },
         new[] { "MINOR FLICKER", "MINOR INTERVAL", "MINOR CHANCE", "MINOR DURATION", "RANDOM EVENTS", "EVENT INTERVAL", "EVENT LENGTH", "EVENT SPEED MIN", "EVENT SPEED MAX", "EVENT OFF CHANCE", "CHASE FLICKER", "CHASE FOG", "CHASE FOG MAX", "FOG RISE", "FOG FALL", "CHASE RED", "CHASE RED CHANCE", "BLACKOUT CHANCE" },
         new[] { "RESUME", "ONLINE", "SETTINGS", "DEVELOPER", "HELP", "LEAVE ROOM", "MAIN MENU", "QUIT GAME" },
         new[] { "FPS COUNTER", "OBJECT BRACKETS", "PLAYER NAMES", "DEBUG INFO", "MONSTER VECTORS" },
         new[] { "RENDER MODE", "RESOLUTION", "FPS LIMIT", "VSYNC" },
-        new[] { "DITHER", "PALETTE REDUCE", "PALETTE COLORS", "SATURATION", "TEMPERATURE", "CONTRAST" },
         new[] { "FPS COUNTER", "OBJECT BRACKETS", "PLAYER NAMES" }
     };
 
@@ -176,7 +175,7 @@ internal sealed partial class DebugMenu
         if(page==2 && !MovementControlsWritable) return;
         if(page!=9 && View!=MenuView.Settings)
             settingsReturn=View==MenuView.Pause?MenuView.Pause:MenuView.Categories;
-        FinishEditing(); Page=Math.Clamp(page,0,13); Selected=0;ScrollRow=0;
+        FinishEditing(); Page=Math.Clamp(page,0,12); Selected=0;ScrollRow=0;
         View=Page==9?MenuView.Pause:MenuView.Settings;
         dragging=-1;hoveredItem=-1;Dirty=true;InteractionSound?.Invoke();
     }
@@ -202,11 +201,6 @@ internal sealed partial class DebugMenu
                 Vsync=defaults.Vsync;
                 break;
             case 12:
-                Dithering=defaults.Dithering;PaletteReduction=defaults.PaletteReduction;
-                PaletteSteps=defaults.PaletteSteps;Saturation=defaults.Saturation;
-                Temperature=defaults.Temperature;Contrast=defaults.Contrast;
-                break;
-            case 13:
                 ShowFps=defaults.ShowFps;ShowObjectFrames=defaults.ShowObjectFrames;
                 ShowPlayerTags=defaults.ShowPlayerTags;
                 break;
@@ -254,6 +248,7 @@ internal sealed partial class DebugMenu
                 BrightenSpeed=defaults.BrightenSpeed;DarkenSpeed=defaults.DarkenSpeed;
                 Bloom=defaults.Bloom;BloomStrength=defaults.BloomStrength;
                 BloomThreshold=defaults.BloomThreshold;BloomRadius=defaults.BloomRadius;
+                Dithering=defaults.Dithering;PaletteReduction=defaults.PaletteReduction;
                 break;
             case 8:
                 if(FlickerControlsWritable) FlickerSettings.CopyFrom(defaults.FlickerSettings);
@@ -464,8 +459,7 @@ internal sealed partial class DebugMenu
     static (int Page,int Row) MappedSetting(int page,int row) => page switch
     {
         11 => (1,new[] { 0,7,9,10 }[row]),
-        12 => (0,row),
-        13 => (10,row),
+        12 => (10,row),
         _ => (page,row)
     };
     bool IsSlider(int row)
@@ -475,7 +469,7 @@ internal sealed partial class DebugMenu
     }
     static bool IsSliderCore(int page,int row) => page switch
     {
-        0 => row is 2 or 3 or 4 or 5 or 6 or 7 or 8,
+        0 => row is 0 or 1 or 2,
         1 => row is 1 or 2 or 3 or 4 or 5 or 6 or 7 or 9 or 12 or 13 or 14 or 15 or 16,
         4 => row is 0 or 1 or 2 or 3 or 4 or 5,
         5 => row > 0,
@@ -538,15 +532,9 @@ internal sealed partial class DebugMenu
         {
             switch (row)
             {
-                case 0: Dithering = !Dithering; break;
-                case 1: PaletteReduction = !PaletteReduction; break;
-                case 2: PaletteSteps = Math.Clamp(PaletteSteps + direction, 2, 32); break;
-                case 3: Saturation = Math.Clamp(Saturation + direction * 0.01f, 0f, 2f); break;
-                case 4: Temperature = Math.Clamp(Temperature + direction, -100, 100); break;
-                case 5: Contrast = Math.Clamp(Contrast + direction * 0.01f, 0.5f, 1.5f); break;
-                case 6: RedMix = Math.Clamp(RedMix + direction * 0.01f, 0.5f, 1.5f); break;
-                case 7: GreenMix = Math.Clamp(GreenMix + direction * 0.01f, 0.5f, 1.5f); break;
-                case 8: BlueMix = Math.Clamp(BlueMix + direction * 0.01f, 0.5f, 1.5f); break;
+                case 0: RedMix = Math.Clamp(RedMix + direction * 0.01f, 0.5f, 1.5f); break;
+                case 1: GreenMix = Math.Clamp(GreenMix + direction * 0.01f, 0.5f, 1.5f); break;
+                case 2: BlueMix = Math.Clamp(BlueMix + direction * 0.01f, 0.5f, 1.5f); break;
             }
         }
         else if (Page == 1)
@@ -675,6 +663,8 @@ internal sealed partial class DebugMenu
                 case 7: BloomStrength=Math.Clamp(BloomStrength+direction*0.01f,0f,2f);break;
                 case 8: BloomThreshold=Math.Clamp(BloomThreshold+direction*0.01f,0.25f,4f);break;
                 case 9: BloomRadius=Math.Clamp(BloomRadius+direction*0.01f,0.5f,4f);break;
+                case 10: Dithering=!Dithering;break;
+                case 11: PaletteReduction=!PaletteReduction;break;
             }
         }
         else if(Page == 8)
@@ -771,7 +761,8 @@ internal sealed partial class DebugMenu
             2 => $"{Exposure:0.00}",3 => AutoExposure?"ON":"OFF",
             4 => $"{BrightenSpeed:0.00}",5 => $"{DarkenSpeed:0.00}",
             6 => Bloom?"ON":"OFF",7 => $"{BloomStrength:0.00}",
-            8 => $"{BloomThreshold:0.00}",9 => $"{BloomRadius:0.00}",_ => ""
+            8 => $"{BloomThreshold:0.00}",9 => $"{BloomRadius:0.00}",
+            10 => Dithering?"ON":"OFF",11 => PaletteReduction?"ON":"OFF",_ => ""
         };
         if(Page == 6) return row switch
         {
@@ -812,15 +803,9 @@ internal sealed partial class DebugMenu
         };
         if (Page == 0) return row switch
         {
-            0 => Dithering ? "ON" : "OFF",
-            1 => PaletteReduction ? "ON" : "OFF",
-            2 => $"{PaletteSteps}^3",
-            3 => $"{Saturation:0.00}",
-            4 => $"{Temperature:+#;-#;0}",
-            5 => $"{Contrast:0.00}",
-            6 => $"{RedMix:0.00}",
-            7 => $"{GreenMix:0.00}",
-            8 => $"{BlueMix:0.00}",
+            0 => $"{RedMix:0.00}",
+            1 => $"{GreenMix:0.00}",
+            2 => $"{BlueMix:0.00}",
             _ => ""
         };
         if (Page == 2) return row switch
@@ -930,13 +915,9 @@ internal sealed partial class DebugMenu
         };
         if (Page == 0) return row switch
         {
-            2 => (PaletteSteps - 2) / 30f,
-            3 => Saturation / 2f,
-            4 => (Temperature + 100) / 200f,
-            5 => Contrast - 0.5f,
-            6 => RedMix - 0.5f,
-            7 => GreenMix - 0.5f,
-            8 => BlueMix - 0.5f,
+            0 => RedMix - 0.5f,
+            1 => GreenMix - 0.5f,
+            2 => BlueMix - 0.5f,
             _ => 0f
         };
         if (Page == 2) return row switch
