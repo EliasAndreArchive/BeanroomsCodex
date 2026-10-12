@@ -8,20 +8,20 @@ static void Check(bool condition,string message)
 }
 var menu=new DebugMenu();
 menu.ShowTitle();
-menu.MouseDown(30,14);
+menu.MouseDown(40,26);
 menu.MouseMove(320,240);
 menu.MouseUp();
-Check(menu.WindowX==40 && menu.WindowY==40,"Menu window did not stay inside the 320x240 grid.");
-menu.MouseDown(60,124);
+Check(menu.WindowX==60 && menu.WindowY==60,"Menu window did not stay inside the 320x240 grid.");
+menu.MouseDown(100,146);
 Check(menu.TitleScreen && menu.TitlePage==1,"Moved title window lost its button hit areas.");
-menu.WindowX=20;menu.WindowY=8;
+menu.WindowX=30;menu.WindowY=20;
 menu.ShowTitle();
 int titleChoice=-1;
 menu.TitleAction=choice=>titleChoice=choice;
-menu.MouseDown(80,68);
+menu.MouseDown(90,82);
 Check(titleChoice==0,"Solo play did not activate from the title menu.");
 menu.ShowTitle();
-menu.MouseDown(80,92);
+menu.MouseDown(90,102);
 Check(menu.TitleScreen && menu.TitlePage==1,"Join screen did not open from the title menu.");
 bool joinCancelled=false;
 menu.CancelJoinAction=()=>joinCancelled=true;

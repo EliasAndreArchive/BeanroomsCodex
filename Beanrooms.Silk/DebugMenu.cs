@@ -74,7 +74,7 @@ internal sealed partial class DebugMenu
     };
     int dragging = -1;
     int hoveredItem = -1;
-    internal int WindowX=20, WindowY=8;
+    internal int WindowX=30, WindowY=20;
     bool movingWindow;
     int windowGrabX, windowGrabY;
     static readonly int[] SampleChoices = { 16, 32, 64, 128, 256 };
@@ -328,18 +328,18 @@ internal sealed partial class DebugMenu
         if(Selected<ScrollRow) ScrollRow=Selected;
         else if(Selected>=ScrollRow+VisibleRows) ScrollRow=Selected-VisibleRows+1;
     }
-    const int VisibleRows=9;
-    const int MenuWidth=280, MenuHeight=200;
+    const int VisibleRows=10;
+    const int MenuWidth=260, MenuHeight=180;
     int MenuLeft => WindowX;
     int MenuRight => WindowX+MenuWidth;
-    int PauseRowTop => WindowY+42;
-    const int PauseRowPitch=20;
-    int CategoryRowTop => WindowY+42;
-    const int CategoryRowPitch=20;
-    int SettingsRowTop => WindowY+34;
-    const int SettingsRowPitch=15;
+    int PauseRowTop => WindowY+38;
+    const int PauseRowPitch=17;
+    int CategoryRowTop => WindowY+38;
+    const int CategoryRowPitch=17;
+    int SettingsRowTop => WindowY+31;
+    const int SettingsRowPitch=13;
     int TitleRowTop => WindowY+60;
-    const int TitleRowPitch=24;
+    const int TitleRowPitch=20;
     static int RowAt(int y,int first,int pitch,int count)
     {
         int top=first-3;
@@ -347,6 +347,17 @@ internal sealed partial class DebugMenu
     }
     int CategoryY(int index) => CategoryRowTop+index*CategoryRowPitch;
     int CategoryAt(int y) => RowAt(y,CategoryRowTop,CategoryRowPitch,Tabs.Length);
+    int PauseAt(int x,int y)
+    {
+        int localX=x-WindowX,localY=y-WindowY;
+        if(localX<28 || localX>=208) return -1;
+        if(localY>=46 && localY<62) return 0;
+        if(localY>=68 && localY<84) return localX<122?1:localX<208?2:-1;
+        if(localY>=90 && localY<106) return localX<122?3:localX<208?4:-1;
+        if(localY>=118 && localY<134) return 5;
+        if(localY>=140 && localY<156) return 6;
+        return -1;
+    }
     internal void AdjustSelected(int direction)
     {
         if(TitleScreen) ActivateTitleSelection();
@@ -379,8 +390,8 @@ internal sealed partial class DebugMenu
     {
         int headerTop=WindowY+3;
         int headerBottom=WindowY+18;
-        int resetLeft=WindowX+215;
-        int closeLeft=WindowX+259;
+        int resetLeft=WindowX+198;
+        int closeLeft=WindowX+240;
         if(y>=headerTop && y<headerBottom && x>=closeLeft)
         {
             if(!TitleScreen) Back();
@@ -407,7 +418,7 @@ internal sealed partial class DebugMenu
             return;
         }
         if(View==MenuView.Help) { Back();return; }
-        int row=View==MenuView.Pause?RowAt(y,PauseRowTop,PauseRowPitch,Labels[9].Length):
+        int row=View==MenuView.Pause?PauseAt(x,y):
             RowAt(y,SettingsRowTop,SettingsRowPitch,VisibleRows);
         if(View==MenuView.Settings && row>=0) row+=ScrollRow;
         if(row<0 || row>=Labels[Page].Length || x<MenuLeft || x>=MenuRight) return;
@@ -449,11 +460,11 @@ internal sealed partial class DebugMenu
         if (dragging < 0)
         {
             int hovered=-1;
-            if(y>=WindowY+3 && y<WindowY+18 && x>=WindowX+215 && x<WindowX+259 && View==MenuView.Settings) hovered=109;
-            else if(y>=WindowY+3 && y<WindowY+18 && x>=WindowX+259) hovered=110;
+            if(y>=WindowY+3 && y<WindowY+18 && x>=WindowX+198 && x<WindowX+240 && View==MenuView.Settings) hovered=109;
+            else if(y>=WindowY+3 && y<WindowY+18 && x>=WindowX+240) hovered=110;
             else if(x>=MenuLeft && x<MenuRight)
             {
-                int row=View==MenuView.Pause?RowAt(y,PauseRowTop,PauseRowPitch,Labels[9].Length):
+                int row=View==MenuView.Pause?PauseAt(x,y):
                     RowAt(y,SettingsRowTop,SettingsRowPitch,VisibleRows);
                 if(View==MenuView.Settings && row>=0) row+=ScrollRow;
                 if(row>=0 && row<Labels[Page].Length) hovered=row;
@@ -484,8 +495,8 @@ internal sealed partial class DebugMenu
         if(TitlePage==0)
             return RowAt(y,TitleRowTop,TitleRowPitch,4);
         if(y>=WindowY+53 && y<WindowY+88) return 0;
-        if(y>=WindowY+100 && y<WindowY+122) return 1;
-        if(y>=WindowY+138 && y<WindowY+160) return 2;
+        if(y>=WindowY+100 && y<WindowY+124)
+            return x<WindowX+130?1:2;
         return -1;
     }
     int RowPitch => SettingsRowPitch;

@@ -17,9 +17,24 @@ internal sealed partial class DebugMenu
         using var disabled=new SolidBrush(Color.FromArgb(110,110,110));
 
         int left=WindowX, top=WindowY;
-        const int width=280, height=200;
+        const int width=260, height=180;
         int X(int x) => left+x-20;
         int Y(int y) => top+y-8;
+
+        void SmallText(string text,Brush brush,int x,int y)
+        {
+            foreach(char c in text.ToUpperInvariant())
+            {
+                if(Glyphs.TryGetValue(c,out var rows))
+                    for(int yy=0;yy<6;yy++) for(int xx=0;xx<4;xx++)
+                    {
+                        int sourceY=yy switch { 0=>0, 1=>1, 2=>3, 3=>4, 4=>5, _=>6 };
+                        int sourceX=xx switch { 0=>0, 1=>1, 2=>3, _=>4 };
+                        if((rows[sourceY]&(1<<(4-sourceX)))!=0) g.FillRectangle(brush,x+xx,y+yy,1,1);
+                    }
+                x+=5;
+            }
+        }
 
         void Bevel(int x,int y,int w,int h,bool raised=true)
         {
@@ -34,14 +49,14 @@ internal sealed partial class DebugMenu
         {
             Bevel(left,top,width,height);
             g.FillRectangle(blue,left+3,top+3,width-6,15);
-            DrawPixelText(g,title,whiteText,left+8,top+7);
-            if(reset) Button("RESET",X(235),Y(12),42,13,false);
-            if(back) Button("X",X(279),Y(12),14,13,false);
+            SmallText(title,whiteText,left+8,top+7);
+            if(reset) Button("RESET",X(218),Y(12),36,12,false);
+            if(back) Button("X",X(260),Y(12),14,12,false);
         }
         void Button(string text,int x,int y,int w,int h,bool selected)
         {
             Bevel(x,y,w,h,!selected);
-            DrawPixelText(g,text,black,x+(w-text.Length*6)/2,y+(h-7)/2);
+            SmallText(text,black,x+(w-text.Length*5)/2,y+(h-6)/2);
             if(selected)
                 for(int px=x+4;px<x+w-4;px+=2) g.FillRectangle(black,px,y+4,1,1);
         }
@@ -49,42 +64,46 @@ internal sealed partial class DebugMenu
         {
             if(selected) g.FillRectangle(blue,X(43),y-2,234,12);
             Brush ink=selected?whiteText:locked?disabled:black;
-            DrawPixelText(g,(selected?"> ":"  ")+label,ink,X(48),y);
+            SmallText((selected?"> ":"  ")+label,ink,X(48),y);
             if(value.Length>0)
             {
-                if(button) Button(value,X(234),y-3,39,13,selected);
-                else DrawPixelText(g,value,ink,X(272)-value.Length*6,y);
+                if(button)
+                {
+                    int buttonWidth=Math.Clamp(value.Length*5+12,39,94);
+                    Button(value,X(272)-buttonWidth,y-3,buttonWidth,13,selected);
+                }
+                else SmallText(value,ink,X(272)-value.Length*5,y);
             }
         }
-        void Footer(string text) => DrawPixelText(g,text,black,X(39),Y(193));
+        void Footer(string text) => SmallText(text,black,X(39),Y(169));
 
         if(TitleScreen)
         {
             if(TitlePage==0)
             {
                 Window("BEANROOMS");
-                DrawPixelText(g,"SELECT MODE",black,X(52),Y(43));
+                SmallText("SELECT MODE",black,X(52),Y(43));
                 string[] choices=["PLAY SOLO","JOIN ONLINE","SETTINGS","EXIT GAME"];
                 for(int row=0;row<choices.Length;row++)
                 {
                     int y=TitleRowTop+row*TitleRowPitch;
-                    Button(choices[row],X(52),y-5,216,18,row==TitleSelected);
+                    Button(choices[row],X(52),y-4,196,16,row==TitleSelected);
                 }
                 Footer("ARROWS / ENTER");
             }
             else
             {
                 Window("BEANROOMS - ONLINE");
-                DrawPixelText(g,"ROOM NAME",black,X(52),Y(43));
+                SmallText("ROOM NAME",black,X(52),Y(43));
                 bool fieldSelected=TitleSelected==0;
                 Bevel(X(52),Y(58),216,28,!fieldSelected);
                 if(fieldSelected) g.FillRectangle(blue,X(54),Y(60),212,24);
                 string room=JoinKey.Length==0?"ENTER ROOM NAME":JoinKey.ToUpperInvariant();
                 if(room.Length>30) room=room[..30];
-                DrawPixelText(g,room+(EditingJoinKey?"_":""),fieldSelected?whiteText:black,X(58),Y(68));
-                Button("CONNECT",X(52),Y(108),102,18,TitleSelected==1);
-                Button("BACK",X(166),Y(108),102,18,TitleSelected==2);
-                DrawPixelText(g,"STATUS: "+(NetworkConnected?"ONLINE":NetworkStatus),black,X(52),Y(151));
+                SmallText(room+(EditingJoinKey?"_":""),fieldSelected?whiteText:black,X(58),Y(68));
+                Button("CONNECT",X(52),Y(108),92,16,TitleSelected==1);
+                Button("BACK",X(156),Y(108),92,16,TitleSelected==2);
+                SmallText("STATUS: "+(NetworkConnected?"ONLINE":NetworkStatus),black,X(52),Y(140));
                 Footer("ENTER EDIT / CONNECT");
             }
             return;
@@ -93,12 +112,14 @@ internal sealed partial class DebugMenu
         if(View==MenuView.Pause)
         {
             Window("BEANROOMS - PAUSE");
-            DrawPixelText(g,NetworkConnected?$"ONLINE  {NetworkPlayers} PLAYERS":"SOLO SESSION",black,X(48),Y(35));
-            for(int row=0;row<Labels[9].Length;row++)
-            {
-                int y=PauseRowTop+row*PauseRowPitch;
-                Row(Labels[9][row],Value(row),y,row==Selected,button:true);
-            }
+            SmallText(NetworkConnected?$"ONLINE SESSION / {NetworkPlayers} PLAYERS":"SOLO SESSION",black,X(48),Y(35));
+            Button("RESUME",X(48),Y(46),180,16,Selected==0);
+            Button("PROFILE",X(48),Y(68),86,16,Selected==1);
+            Button("SETTINGS",X(142),Y(68),86,16,Selected==2);
+            Button("DEVELOPER",X(48),Y(90),86,16,Selected==3);
+            Button("CONTROLS",X(142),Y(90),86,16,Selected==4);
+            Button("LEAVE SESSION",X(48),Y(118),180,16,Selected==5);
+            Button("QUIT GAME",X(48),Y(140),180,16,Selected==6);
             Footer("TAB RESUME     ENTER SELECT");
             return;
         }
@@ -110,10 +131,11 @@ internal sealed partial class DebugMenu
             {
                 int y=CategoryY(row);
                 bool locked=Tabs[row].Page==2&&!MovementControlsWritable;
-                Row(Tabs[row].Name,"OPEN",y,row==CategorySelected,locked,true);
+                Button(Tabs[row].Name,X(48),y-4,180,14,row==CategorySelected);
                 if((Tabs[row].Page==5&&!MonsterControlsWritable) ||
                    (Tabs[row].Page==8&&!FlickerControlsWritable))
-                    DrawPixelText(g,"HOST",disabled,X(201),y);
+                    SmallText("HOST",disabled,X(204),y);
+                else if(locked) SmallText("SOLO",disabled,X(204),y);
             }
             Footer("ARROWS / ENTER     ESC BACK");
             return;
@@ -129,14 +151,14 @@ internal sealed partial class DebugMenu
                 "TAB PAUSE  ESC RELEASE", "F11 FULLSCREEN",
                 "Q E CHANGE MENU PAGE", "ARROWS ADJUST VALUES"
             ];
-            for(int row=0;row<help.Length;row++) DrawPixelText(g,help[row],black,X(48),Y(44)+row*19);
+            for(int row=0;row<help.Length;row++) SmallText(help[row],black,X(48),Y(42)+row*15);
             Footer("ESC BACK");
             return;
         }
 
         string title=Tabs.First(tab=>tab.Page==Page).Name;
         Window(title,reset:true,back:true);
-        if(ScrollRow>0) DrawPixelText(g,"^",black,X(272),Y(31));
+        if(ScrollRow>0) SmallText("^",black,X(272),Y(31));
         for(int slot=0;slot<VisibleRows;slot++)
         {
             int row=ScrollRow+slot;
@@ -154,10 +176,10 @@ internal sealed partial class DebugMenu
                 Bevel(X(158),y+1,72,8,false);
                 int thumb=X(160)+(int)MathF.Round(Math.Clamp(Fraction(row),0f,1f)*66f);
                 Bevel(thumb,y,5,10,true);
-                DrawPixelText(g,value,selected?whiteText:locked?disabled:black,X(272)-value.Length*6,y);
+                SmallText(value,selected?whiteText:locked?disabled:black,X(272)-value.Length*5,y);
             }
         }
-        if(ScrollRow+VisibleRows<Labels[Page].Length) DrawPixelText(g,"V",black,X(272),Y(179));
+        if(ScrollRow+VisibleRows<Labels[Page].Length) SmallText("V",black,X(272),Y(157));
         Footer("Q/E PAGE     ESC BACK");
     }
 }
