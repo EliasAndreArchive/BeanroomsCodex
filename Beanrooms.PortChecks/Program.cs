@@ -6,9 +6,27 @@ static void Check(bool condition,string message)
 {
     if(!condition) throw new Exception(message);
 }
-
 var menu=new DebugMenu();
 menu.ShowTitle();
+menu.MouseDown(30,14);
+menu.MouseMove(320,240);
+menu.MouseUp();
+Check(menu.WindowX==40 && menu.WindowY==40,"Menu window did not stay inside the 320x240 grid.");
+menu.MouseDown(60,124);
+Check(menu.TitleScreen && menu.TitlePage==1,"Moved title window lost its button hit areas.");
+menu.WindowX=20;menu.WindowY=8;
+menu.ShowTitle();
+int titleChoice=-1;
+menu.TitleAction=choice=>titleChoice=choice;
+menu.MouseDown(80,68);
+Check(titleChoice==0,"Solo play did not activate from the title menu.");
+menu.ShowTitle();
+menu.MouseDown(80,92);
+Check(menu.TitleScreen && menu.TitlePage==1,"Join screen did not open from the title menu.");
+bool joinCancelled=false;
+menu.CancelJoinAction=()=>joinCancelled=true;
+menu.Back();
+Check(joinCancelled && menu.TitlePage==0,"Backing out of online join did not cancel it.");
 menu.ShowSettingsFromTitle();
 menu.AdjustSelected(1);
 Check(menu.Page==11,"Title settings did not open player display controls.");
@@ -45,6 +63,8 @@ Check(!menu.MonsterSettings.Enabled,"Developer monster reset failed.");
 menu.SetPage(9);
 int sessionChoice=-1;
 menu.SessionAction=choice=>sessionChoice=choice;
+menu.MouseDown(90,150);
+Check(sessionChoice==1,"Leave session did not route from the pause menu.");
 menu.Selected=6;
 menu.AdjustSelected(1);
 Check(sessionChoice==2,"Pause menu exit did not route to quit game.");

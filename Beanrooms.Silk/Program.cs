@@ -18,6 +18,8 @@ internal static class Program
 
 }
 
+internal enum GameSessionPhase { MainMenu, JoiningRoom, PlayingSolo, PlayingOnline }
+
 internal sealed partial class GameWindow : SilkForm
 {
     const int Grid = 48;
@@ -59,6 +61,8 @@ internal sealed partial class GameWindow : SilkForm
     bool cubeVisualNetworkMode;
     INetClient network;
     bool networkStarted;
+    GameSessionPhase sessionPhase=GameSessionPhase.MainMenu;
+    bool HasPlayer => sessionPhase is GameSessionPhase.PlayingSolo or GameSessionPhase.PlayingOnline;
     readonly bool launchFullscreen;
     MonsterBrain? localMonster;
     MonsterState? visibleMonster;
@@ -97,10 +101,10 @@ internal sealed partial class GameWindow : SilkForm
         flicker=new LightFlicker(0,menu.FlickerSettings);
         network = new SoloNetClient();
         menu.ConnectAction=ConnectOnline;
-        menu.DisconnectAction=DisconnectNetwork;
+        menu.CancelJoinAction=CancelJoin;
         menu.TitleAction=choice=>
         {
-            if(choice==0) { DisconnectNetwork();Regenerate();menu.LeaveTitle();CloseSettings(); }
+            if(choice==0) StartSoloSession();
             else if(choice==3) Close();
         };
         menu.SessionAction=choice=>
@@ -108,7 +112,7 @@ internal sealed partial class GameWindow : SilkForm
             switch(choice)
             {
                 case 0: menu.Toggle();if(!menu.Open) CloseSettings();break;
-                case 1: if(networkStarted) DisconnectNetwork();break;
+                case 1: LeaveSession();break;
                 case 2: Close();break;
             }
         };
@@ -178,6 +182,7 @@ internal sealed partial class GameWindow : SilkForm
                 if(!menu.Open) CloseSettings();
                 return;
             }
+            if(!HasPlayer) return;
             wantsCapture=true; CaptureMouse();
             if(e.Button==MouseButtons.Right) rotatingHeld=true;
             if(e.Button!=MouseButtons.Left || !active) return;
@@ -196,8 +201,8 @@ internal sealed partial class GameWindow : SilkForm
             }
         };
         MouseMove += (_, e) => { if(menu.Open && TryMenuPoint(e.Location,out Point point)) menu.MouseMove(point.X,point.Y); };
-        MouseWheel += (_, e) => { if(e.Delta==0) return; if(menu.Open) { menu.MouseWheel(e.Delta); return; } int step=Math.Sign(e.Delta); if(network.Connected) { if(networkHolding || networkCubes.Any(cube=>cube.HolderId==network.Id && network.Id!=0)) network.Send(new NetMessage { Type="grab_scroll",Action=step }); } else physics.NudgeGrabDistance(0,step*0.2f); };
-        MouseUp += (_, e) => { menu.MouseUp(); if(e.Button==MouseButtons.Right) rotatingHeld=false; if(e.Button==MouseButtons.Left) { if(network.Connected) network.Send(new NetMessage { Type="release" }); else physics.Release(); networkHolding=false;networkHeldId=0;grabYaw=grabPitch=0f; } };
+        MouseWheel += (_, e) => { if(e.Delta==0) return; if(menu.Open) { menu.MouseWheel(e.Delta); return; } if(!HasPlayer) return; int step=Math.Sign(e.Delta); if(network.Connected) { if(networkHolding || networkCubes.Any(cube=>cube.HolderId==network.Id && network.Id!=0)) network.Send(new NetMessage { Type="grab_scroll",Action=step }); } else physics.NudgeGrabDistance(0,step*0.2f); };
+        MouseUp += (_, e) => { menu.MouseUp(); if(!HasPlayer) return; if(e.Button==MouseButtons.Right) rotatingHeld=false; if(e.Button==MouseButtons.Left) { if(network.Connected) network.Send(new NetMessage { Type="release" }); else physics.Release(); networkHolding=false;networkHeldId=0;grabYaw=grabPitch=0f; } };
         Activated += (_, _) => { if(ready && wantsCapture) BeginInvoke(new Action(CaptureMouse)); };
         Deactivate += (_, _) => { networkHolding=false;rotatingHeld=false; network.Send(new NetMessage { Type="release" }); physics.Release(); SuspendMouse(); };
         FormClosed += (_, _) => { audio?.Dispose(); network.Dispose(); physics.Dispose(); ReleaseMouse(); };
@@ -293,10 +298,11 @@ internal sealed partial class GameWindow : SilkForm
             CreateExposureTargets();
             audio=new GameAudio();
             GenerateWorld();
-            BeginSpawn(false);
-            if(networkStarted) network.Start();
+            localMonster=null;
+            visibleMonster=null;
             ready=true;
-            if(!networkStarted) { menu.ShowTitle(); wantsCapture=false; }
+            menu.ShowTitle();
+            wantsCapture=false;
             if(launchFullscreen) ToggleFullscreen();
             else if(!menu.Open) BeginInvoke(new Action(CaptureMouse));
         }
@@ -422,6 +428,36 @@ internal sealed partial class GameWindow : SilkForm
         BeginSpawn(false);
     }
 
+    void StartSoloSession()
+    {
+        DisconnectNetwork();
+        sessionPhase=GameSessionPhase.PlayingSolo;
+        Regenerate();
+        menu.LeaveTitle();
+        CloseSettings();
+    }
+
+    void LeaveSession()
+    {
+        if(network.Connected) network.Send(new NetMessage { Type="release" });
+        physics.Release();
+        physics.Clear();
+        DisconnectNetwork();
+        sessionPhase=GameSessionPhase.MainMenu;
+        localMonster=null;
+        visibleMonster=null;
+        networkCubes=[];
+        remotePositions.Clear();remoteYaws.Clear();remoteColors.Clear();remoteNames.Clear();
+        remoteFootsteps.Clear();
+        motion.Reset();
+        crouchToggle=false;rotatingHeld=false;networkHolding=false;networkHeldId=0;
+        chaseLocked=false;chaseBlend=0f;mouseYawDelta=0f;
+        menu.BodyCount=0;
+        menu.ShowTitle();
+        wantsCapture=false;
+        SuspendMouse();
+    }
+
     void BeginSpawn(bool monsterHit)
     {
         double now=watch.Elapsed.TotalSeconds;
@@ -463,11 +499,12 @@ internal sealed partial class GameWindow : SilkForm
     }
     void CloseSettings()
     {
-        wantsCapture=true;
-        BeginInvoke(new Action(CaptureMouse));
+        wantsCapture=HasPlayer;
+        if(wantsCapture) BeginInvoke(new Action(CaptureMouse));
     }
     void ConnectOnline()
     {
+        if(HasPlayer) return;
         menu.FinishEditing();
         if(string.IsNullOrWhiteSpace(menu.JoinKey))
         {
@@ -477,9 +514,16 @@ internal sealed partial class GameWindow : SilkForm
         DisconnectNetwork();
         network=new PhotonNetClient(menu.JoinKey);
         networkStarted=true;
+        sessionPhase=GameSessionPhase.JoiningRoom;
         menu.NetworkStatus="CONNECTING";
         menu.Dirty=true;
         network.Start();
+    }
+    void CancelJoin()
+    {
+        if(sessionPhase!=GameSessionPhase.JoiningRoom) return;
+        DisconnectNetwork();
+        sessionPhase=GameSessionPhase.MainMenu;
     }
     void DisconnectNetwork()
     {
@@ -593,6 +637,11 @@ internal sealed partial class GameWindow : SilkForm
     void UpdateGame(float dt)
     {
         network.Service(dt);
+        if(sessionPhase==GameSessionPhase.PlayingOnline && !network.Connected)
+        {
+            LeaveSession();
+            return;
+        }
         bool movementWritable=!network.Connected;
         if(menu.MovementControlsWritable!=movementWritable)
         {
@@ -604,8 +653,6 @@ internal sealed partial class GameWindow : SilkForm
         string connectionStatus=network.Status;
         if(networkStarted && menu.NetworkStatus!=connectionStatus)
         { menu.NetworkStatus=connectionStatus;menu.Dirty=true; }
-        if(menu.TitleScreen && menu.TitlePage==1 && network.Connected)
-        { menu.LeaveTitle();CloseSettings(); }
         NetMessage? lightEvent=network.ConsumeFlicker();
         if(lightEvent!=null) flicker.Trigger(watch.Elapsed.TotalSeconds,lightEvent.BlackoutAfter);
         NetMessage? world=network.ConsumeWorld();
@@ -628,7 +675,14 @@ internal sealed partial class GameWindow : SilkForm
             respawnId=world.RespawnId;
             nextNetworkSend=0;
             BeginSpawn(false);
+            if(sessionPhase==GameSessionPhase.JoiningRoom)
+            {
+                sessionPhase=GameSessionPhase.PlayingOnline;
+                menu.LeaveTitle();
+                CloseSettings();
+            }
         }
+        if(!HasPlayer) { mouseYawDelta=0f;return; }
         NetMessage? respawn=network.ConsumeRespawn();
         if(respawn!=null)
         {

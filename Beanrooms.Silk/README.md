@@ -24,7 +24,7 @@ The game starts fullscreen with a low resolution 4:3 image. **F11** toggles full
 | Tab | Pause menu |
 | F11 | Fullscreen |
 
-The pause menu has separate **Settings** and **Developer** entries. Settings contains display, image (post effects, dither, and posterization), camera, HUD, and profile/online controls. Developer contains detailed rendering, color mixing, movement and physics tuning, monster behavior, flicker, and diagnostic overlays. Posterization uses a fixed 16-step palette. Monster and flicker controls are host-only in Photon rooms. Movement tuning remains disabled online.
+The title screen is a non-player state: choose solo or join an online room before movement and interaction are enabled. Leaving either kind of session returns to that title screen and clears the active player. The pause menu has separate **Settings** and **Developer** entries. Settings contains display, image (post effects, dither, and posterization), camera, HUD, and player profile. Developer contains detailed rendering, color mixing, movement and physics tuning, monster behavior, flicker, and diagnostic overlays. Posterization uses a fixed 16-step palette. Monster and flicker controls are host-only in Photon rooms. Movement tuning remains disabled online.
 
 Choose **JOIN ONLINE** on the title screen, enter the same Photon room name as the other players, then connect. `BEANROOMS_PHOTON_APP_ID` can override the included Photon App ID. The room master simulates online cubes and monster behavior; guests display its snapshots.
 

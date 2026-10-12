@@ -53,10 +53,11 @@ internal sealed partial class DebugMenu
     internal RectangleF[] ObjectFrames = [];
     internal string MonsterTargetText = "TARGET NONE";
     internal int BodyCount;
-    internal Action? ConnectAction, DisconnectAction;
+    internal Action? ConnectAction;
     internal Action<int>? TitleAction;
     internal Action<int>? SessionAction;
     internal Action? InteractionSound, HoverSound;
+    internal Action? CancelJoinAction;
     internal float PickupRange=5f, HoldDistance=2.25f, SpringFrequency=8.5f, SpringDamping=1.35f, PidSmoothing=18f, SlideResistance=4.5f;
     internal bool SnapHold;
     internal float SnapStep=.25f;
@@ -73,12 +74,15 @@ internal sealed partial class DebugMenu
     };
     int dragging = -1;
     int hoveredItem = -1;
+    internal int WindowX=20, WindowY=8;
+    bool movingWindow;
+    int windowGrabX, windowGrabY;
     static readonly int[] SampleChoices = { 16, 32, 64, 128, 256 };
     bool developerCategories;
     static readonly (string Name,int Page)[] PlayerTabs =
     {
         ("DISPLAY",11), ("IMAGE",7), ("CAMERA",3),
-        ("HUD",12), ("PROFILE + ONLINE",6)
+        ("HUD",12), ("PROFILE",6)
     };
     static readonly (string Name,int Page)[] DeveloperTabs =
     {
@@ -122,10 +126,10 @@ internal sealed partial class DebugMenu
         new[] { "MOUSE SENS", "IDLE SHAKE", "WALK SHAKE", "SPRINT SHAKE", "CROUCH SHAKE", "HEAD BOB", "SWAY AMOUNT", "STRAFE ROLL", "TURN ROLL", "MOVE PITCH", "LOOK SMOOTH" },
         new[] { "PICKUP RANGE", "HOLD DIST", "SPRING FREQ", "SPRING DAMP", "HOLD SMOOTH", "SLIDE RESIST", "GRID SNAP", "SNAP STEP", "CUBE COUNT" },
         new[] { "MONSTER", "ROAM SPEED", "SEARCH SPEED", "CHASE SPEED", "CHASE TURN", "SEARCH TURN", "ROAM TURN", "SIGHT RANGE", "SIGHT ANGLE", "SEARCH RADIUS", "ROAM RADIUS" },
-        new[] { "PLAYER NAME", "BEAN COLOR", "RED", "GREEN", "BLUE", "PHOTON REGION", "JOIN KEY", "CONNECT", "DISCONNECT", "CONNECTION", "PLAYER ID", "PLAYERS", "ROLE" },
+        new[] { "PLAYER NAME", "BEAN COLOR", "RED", "GREEN", "BLUE" },
         new[] { "POST FX", "TONEMAP", "EXPOSURE", "AUTO EXPOSURE", "BRIGHTEN SPEED", "DARKEN SPEED", "BLOOM", "BLOOM STRENGTH", "BLOOM THRESHOLD", "BLOOM RADIUS", "DITHER", "POSTERIZATION" },
         new[] { "MINOR FLICKER", "MINOR INTERVAL", "MINOR CHANCE", "MINOR DURATION", "RANDOM EVENTS", "EVENT INTERVAL", "EVENT LENGTH", "EVENT SPEED MIN", "EVENT SPEED MAX", "EVENT OFF CHANCE", "CHASE FLICKER", "CHASE FOG", "CHASE FOG MAX", "FOG RISE", "FOG FALL", "CHASE RED", "CHASE RED CHANCE", "BLACKOUT CHANCE" },
-        new[] { "RESUME", "ONLINE", "SETTINGS", "DEVELOPER", "HELP", "LEAVE ROOM", "QUIT GAME" },
+        new[] { "RESUME", "PROFILE", "SETTINGS", "DEVELOPER", "HELP", "LEAVE SESSION", "QUIT GAME" },
         new[] { "FPS COUNTER", "OBJECT BRACKETS", "PLAYER NAMES", "DEBUG INFO", "MONSTER VECTORS" },
         new[] { "RENDER MODE", "RESOLUTION", "FPS LIMIT", "VSYNC" },
         new[] { "FPS COUNTER", "OBJECT BRACKETS", "PLAYER NAMES" }
@@ -155,6 +159,7 @@ internal sealed partial class DebugMenu
     { FinishEditing();TitleScreen=false;View=MenuView.Help;Dirty=true;InteractionSound?.Invoke(); }
     internal void ShowTitle()
     {
+        if(TitleScreen && TitlePage==1) CancelJoinAction?.Invoke();
         FinishEditing(); Open=true;TitleScreen=true;SettingsFromTitle=false;
         TitlePage=0;TitleSelected=0;hoveredItem=-1;Dirty=true;
     }
@@ -323,14 +328,25 @@ internal sealed partial class DebugMenu
         if(Selected<ScrollRow) ScrollRow=Selected;
         else if(Selected>=ScrollRow+VisibleRows) ScrollRow=Selected-VisibleRows+1;
     }
-    const int VisibleRows=11;
-    const int PauseRowTop=52, PauseRowPitch=22, SettingsRowTop=40;
-    static int CategoryY(int index) => 48+index*20;
-    int CategoryAt(int y)
+    const int VisibleRows=9;
+    const int MenuWidth=280, MenuHeight=200;
+    int MenuLeft => WindowX;
+    int MenuRight => WindowX+MenuWidth;
+    int PauseRowTop => WindowY+42;
+    const int PauseRowPitch=20;
+    int CategoryRowTop => WindowY+42;
+    const int CategoryRowPitch=20;
+    int SettingsRowTop => WindowY+34;
+    const int SettingsRowPitch=15;
+    int TitleRowTop => WindowY+60;
+    const int TitleRowPitch=24;
+    static int RowAt(int y,int first,int pitch,int count)
     {
-        for(int i=0;i<Tabs.Length;i++) if(y>=CategoryY(i)-2 && y<CategoryY(i)+12) return i;
-        return -1;
+        int top=first-3;
+        return y>=top && y<top+count*pitch ? (y-top)/pitch : -1;
     }
+    int CategoryY(int index) => CategoryRowTop+index*CategoryRowPitch;
+    int CategoryAt(int y) => RowAt(y,CategoryRowTop,CategoryRowPitch,Tabs.Length);
     internal void AdjustSelected(int direction)
     {
         if(TitleScreen) ActivateTitleSelection();
@@ -361,41 +377,60 @@ internal sealed partial class DebugMenu
 
     internal void MouseDown(int x, int y)
     {
+        int headerTop=WindowY+3;
+        int headerBottom=WindowY+18;
+        int resetLeft=WindowX+215;
+        int closeLeft=WindowX+259;
+        if(y>=headerTop && y<headerBottom && x>=closeLeft)
+        {
+            if(!TitleScreen) Back();
+            return;
+        }
+        if(y>=headerTop && y<headerBottom && x>=resetLeft && View==MenuView.Settings && !TitleScreen)
+        { ResetDefaults();InteractionSound?.Invoke();return; }
+        if(y>=headerTop && y<headerBottom && x>=MenuLeft+3 && x<MenuRight-3)
+        {
+            movingWindow=true;windowGrabX=x-WindowX;windowGrabY=y-WindowY;
+            Dirty=true;return;
+        }
         if(TitleScreen)
         {
             int titleRow=TitleRowAt(x,y);
             if(titleRow>=0) { TitleSelected=titleRow;ActivateTitleSelection(); }
             return;
         }
-        if(y>=2 && y<14 && x>=270)
-        { if(x>=307) Back(); else if(View==MenuView.Settings) { ResetDefaults();InteractionSound?.Invoke(); } return; }
         if(View==MenuView.Categories)
         {
             int category=CategoryAt(y);
-            if(x>=20 && x<305 && y>=44 && category>=0 && category<Tabs.Length)
+            if(x>=MenuLeft && x<MenuRight && category>=0)
             { CategorySelected=category;SetPage(Tabs[category].Page); }
             return;
         }
         if(View==MenuView.Help) { Back();return; }
-        int row=View==MenuView.Pause?(y-(PauseRowTop-3))/PauseRowPitch:
-            ScrollRow+(y-(SettingsRowTop-3))/RowPitch;
-        if ((View==MenuView.Pause && (y<PauseRowTop-3||y>=PauseRowTop-3+Labels[9].Length*PauseRowPitch)) ||
-            (View==MenuView.Settings && (y<SettingsRowTop-3||y>=SettingsRowTop-3+VisibleRows*RowPitch)) ||
-            row<0 || row>=Labels[Page].Length || x<15 || x>=305) return;
+        int row=View==MenuView.Pause?RowAt(y,PauseRowTop,PauseRowPitch,Labels[9].Length):
+            RowAt(y,SettingsRowTop,SettingsRowPitch,VisibleRows);
+        if(View==MenuView.Settings && row>=0) row+=ScrollRow;
+        if(row<0 || row>=Labels[Page].Length || x<MenuLeft || x>=MenuRight) return;
         Selected = row;
         if(View==MenuView.Pause) { Adjust(row,1);return; }
-        if (IsSlider(row) && x >= 155 && x <= 254)
+        if (IsSlider(row) && x >= WindowX+138 && x <= WindowX+209)
         {
             dragging = row;
             SetSliderFromX(row,x);
         }
-        else if(IsChoice(row) && x>=316-(Value(row).Length+4)*6 &&
-                x<316-(Value(row).Length+1)*6) Adjust(row,-1);
+        else if(IsChoice(row) && x>=WindowX+252-(Value(row).Length+4)*6 &&
+                x<WindowX+252-(Value(row).Length+1)*6) Adjust(row,-1);
         else Adjust(row,1);
         Dirty = true;
     }
     internal void MouseMove(int x,int y)
     {
+        if(movingWindow)
+        {
+            WindowX=Math.Clamp(x-windowGrabX,0,320-MenuWidth);
+            WindowY=Math.Clamp(y-windowGrabY,0,240-MenuHeight);
+            Dirty=true;return;
+        }
         if(TitleScreen)
         {
             int row=TitleRowAt(x,y);
@@ -406,7 +441,7 @@ internal sealed partial class DebugMenu
         if(View==MenuView.Categories)
         {
             int row=CategoryAt(y);
-            if(y>=44 && x>=20 && x<305 && row>=0 && row<Tabs.Length && CategorySelected!=row)
+            if(x>=MenuLeft && x<MenuRight && row>=0 && CategorySelected!=row)
             { CategorySelected=row;Dirty=true;HoverSound?.Invoke(); }
             return;
         }
@@ -414,14 +449,13 @@ internal sealed partial class DebugMenu
         if (dragging < 0)
         {
             int hovered=-1;
-            if(y>=2 && y<14 && x>=270 && x<307) hovered=109;
-            else if(y>=2 && y<14 && x>=307) hovered=110;
-            else if(x>=15 && x<305 && y>=(View==MenuView.Pause?PauseRowTop-3:SettingsRowTop-3) &&
-                    y<(View==MenuView.Pause?PauseRowTop-3+Labels[9].Length*PauseRowPitch:
-                        SettingsRowTop-3+VisibleRows*RowPitch))
+            if(y>=WindowY+3 && y<WindowY+18 && x>=WindowX+215 && x<WindowX+259 && View==MenuView.Settings) hovered=109;
+            else if(y>=WindowY+3 && y<WindowY+18 && x>=WindowX+259) hovered=110;
+            else if(x>=MenuLeft && x<MenuRight)
             {
-                int row=View==MenuView.Pause?(y-(PauseRowTop-3))/PauseRowPitch:
-                    ScrollRow+(y-(SettingsRowTop-3))/RowPitch;
+                int row=View==MenuView.Pause?RowAt(y,PauseRowTop,PauseRowPitch,Labels[9].Length):
+                    RowAt(y,SettingsRowTop,SettingsRowPitch,VisibleRows);
+                if(View==MenuView.Settings && row>=0) row+=ScrollRow;
                 if(row>=0 && row<Labels[Page].Length) hovered=row;
             }
             if(hovered!=hoveredItem)
@@ -438,7 +472,7 @@ internal sealed partial class DebugMenu
         }
         SetSliderFromX(dragging,x);
     }
-    internal void MouseUp() => dragging = -1;
+    internal void MouseUp() { dragging=-1;movingWindow=false; }
     internal void MouseWheel(int delta)
     {
         if(View==MenuView.Settings)
@@ -446,19 +480,15 @@ internal sealed partial class DebugMenu
     }
     int TitleRowAt(int x,int y)
     {
-        if(x<15 || x>=305) return -1;
+        if(x<MenuLeft || x>=MenuRight) return -1;
         if(TitlePage==0)
-        {
-            int row=(y-69)/24;
-            return row>=0 && row<4 && y<69+row*24+16 ? row : -1;
-        }
-        if(y>=68 && y<97) return 0;
-        if(y>=108 && y<137) return 1;
-        if(y>=155 && y<169) return 2;
-        if(y>=178 && y<192) return 3;
+            return RowAt(y,TitleRowTop,TitleRowPitch,4);
+        if(y>=WindowY+53 && y<WindowY+88) return 0;
+        if(y>=WindowY+100 && y<WindowY+122) return 1;
+        if(y>=WindowY+138 && y<WindowY+160) return 2;
         return -1;
     }
-    int RowPitch => 16;
+    int RowPitch => SettingsRowPitch;
 
     static (int Page,int Row) MappedSetting(int page,int row) => page switch
     {
@@ -497,7 +527,7 @@ internal sealed partial class DebugMenu
     }
     void SetSliderFromX(int row,int x)
     {
-        float target=Math.Clamp((x-155)/99f,0f,1f);
+        float target=Math.Clamp((x-(WindowX+138))/71f,0f,1f);
         float current=Fraction(row);
         int direction=target>current?1:-1;
         bool changed=false;
@@ -635,10 +665,6 @@ internal sealed partial class DebugMenu
                 case 2: PlayerRed=Math.Clamp(PlayerRed+direction*0.01f,0.05f,1f);PlayerColorIndex=-1;break;
                 case 3: PlayerGreen=Math.Clamp(PlayerGreen+direction*0.01f,0.05f,1f);PlayerColorIndex=-1;break;
                 case 4: PlayerBlue=Math.Clamp(PlayerBlue+direction*0.01f,0.05f,1f);PlayerColorIndex=-1;break;
-                case 5: break;
-                case 6: FinishEditing();EditingJoinKey=true;JoinKey="";break;
-                case 7: FinishEditing();ConnectAction?.Invoke();break;
-                case 8: FinishEditing();DisconnectAction?.Invoke();break;
             }
         }
         else if(Page == 9)
@@ -648,7 +674,7 @@ internal sealed partial class DebugMenu
             else if(row==2) OpenCategories();
             else if(row==3) OpenCategories(developer:true);
             else if(row==4) OpenHelp();
-            else if(row==5 && NetworkConnected) SessionAction?.Invoke(1);
+            else if(row==5) SessionAction?.Invoke(1);
             else if(row==6) SessionAction?.Invoke(2);
             else return;
         }
@@ -732,7 +758,7 @@ internal sealed partial class DebugMenu
         if(Page == 9) return row switch
         {
             0 => "PLAY",1=>"OPEN",2=>"OPEN",3=>"OPEN",4=>"OPEN",
-            5 => NetworkConnected ? "LEAVE" : "OFFLINE",6=>"EXIT",
+            5 => "MENU",6=>"EXIT",
             _ => ""
         };
         if(Page == 8) return row switch
@@ -772,13 +798,6 @@ internal sealed partial class DebugMenu
             0 => EditingName ? PlayerName+"_" : PlayerName,
             1 => PlayerColorIndex<0 ? "CUSTOM" : CubeColors[PlayerColorIndex].Name,
             2 => $"{PlayerRed:0.00}",3 => $"{PlayerGreen:0.00}",4 => $"{PlayerBlue:0.00}",
-            5 => "EU",
-            6 => JoinKey.Length==0 ? (EditingJoinKey?"-":"ENTER KEY") : new string('*',Math.Min(JoinKey.Length,16))+(EditingJoinKey?"-":""),
-            7 => "JOIN", 8 => "LEAVE",
-            9 => NetworkConnected ? "ONLINE" : NetworkStatus,
-            10 => NetworkConnected ? NetworkId.ToString() : "-",
-            11 => NetworkConnected ? NetworkPlayers.ToString() : "1",
-            12 => NetworkConnected ? (NetworkId==NetworkHost ? "HOST" : "GUEST") : "SOLO",
             _ => ""
         };
         if(Page == 5) return row switch
