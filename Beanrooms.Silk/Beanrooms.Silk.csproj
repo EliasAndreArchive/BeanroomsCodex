@@ -38,10 +38,9 @@
     </AssemblyAttribute>
     <Compile Include="../Nullrooms/CameraOrientation.cs" Link="CameraOrientation.cs" />
     <Compile Include="../Nullrooms/LightFlicker.cs" Link="LightFlicker.cs" />
-    <Compile Include="../Nullrooms/LocalNetClient.cs" Link="LocalNetClient.cs" />
+    <Compile Include="../Nullrooms/NetworkClient.cs" Link="NetworkClient.cs" />
     <Compile Include="../Nullrooms/MonsterBrain.cs" Link="MonsterBrain.cs" />
     <Compile Include="../Nullrooms/NetProtocol.cs" Link="NetProtocol.cs" />
-    <Compile Include="../Nullrooms/SandboxWorld.cs" Link="SandboxWorld.cs" />
     <Compile Include="../Nullrooms/PhysicsBodies.cs" Link="PhysicsBodies.cs" />
     <Compile Include="../Nullrooms/PlayerMotion.cs" Link="PlayerMotion.cs" />
     <Compile Include="../Nullrooms/SpawnTransition.cs" Link="SpawnTransition.cs" />

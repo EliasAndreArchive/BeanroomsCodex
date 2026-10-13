@@ -3,108 +3,22 @@ using System.Numerics;
 
 namespace Beanrooms;
 
-internal sealed class DebugMenu
+internal sealed partial class DebugMenu
 {
+    internal enum MenuView { Pause, Categories, Settings, Help }
+    enum ParentWindowKind { None, Pause, Categories, Help }
+    internal MenuView View = MenuView.Pause;
+    MenuView settingsReturn=MenuView.Categories;
+    internal int CategorySelected, ScrollRow;
     internal bool Open, TitleScreen, SettingsFromTitle, Dithering = true, PaletteReduction = true, PostEnabled = true, AutoExposure, Bloom = true, Lights = true, Vsync = true, Dirty = true, Volumetrics = true;
-    internal bool SandboxPage, PonderPage, SandboxEnabled, SandboxHost=true, SandboxSupported=true, WireTool, WeldTool;
-    internal int PonderStep;
-    internal string ToolStatus="";
-    internal int SandboxCategory, SandboxSelected, SandboxScroll;
-    internal Action<SandboxKind>? SandboxSpawn;
-    internal Action? SandboxToggle;
-    static readonly SandboxKind[][] SandboxItems =
-    [
-        [SandboxKind.Cube,SandboxKind.GlowCube],
-        [SandboxKind.Thruster,SandboxKind.Lamp,SandboxKind.Piston,SandboxKind.PressurePlate,SandboxKind.ProximitySensor,
-         SandboxKind.Hinge,SandboxKind.Wheel,SandboxKind.Rope,SandboxKind.Conveyor,SandboxKind.SensorLight,SandboxKind.DisplayPanel],
-        [SandboxKind.Button,SandboxKind.Lever,SandboxKind.And,SandboxKind.Or,SandboxKind.Not,
-         SandboxKind.Xor,SandboxKind.Nand,SandboxKind.Xnor,SandboxKind.Toggle,SandboxKind.Timer,
-         SandboxKind.Delay,SandboxKind.Counter,SandboxKind.Randomizer]
-    ];
-    internal const int SandboxRows=7, SandboxPitch=14, SandboxTop=54;
-    internal SandboxKind SelectedSandboxItem => SandboxItems[SandboxCategory][SandboxSelected];
-    internal int SandboxItemCount => SandboxItems[SandboxCategory].Length;
-    internal int SandboxMaxScroll => Math.Max(0,SandboxItemCount-SandboxRows);
-    static readonly string[] SandboxCategories=["OBJECTS","DEVICES","LOGIC"];
-    static string SandboxName(SandboxKind kind) => kind switch
-    {
-        SandboxKind.GlowCube=>"GLOW CUBE",SandboxKind.And=>"AND GATE",
-        SandboxKind.Or=>"OR GATE",SandboxKind.Not=>"NOT GATE",SandboxKind.Xor=>"XOR GATE",
-        SandboxKind.Nand=>"NAND GATE",SandboxKind.Xnor=>"XNOR GATE",SandboxKind.Toggle=>"TOGGLE FLIP",
-        SandboxKind.Timer=>"TIMER CLOCK",SandboxKind.PressurePlate=>"PRESSURE PLATE",
-        SandboxKind.ProximitySensor=>"PROXIMITY SENSOR",SandboxKind.Randomizer=>"RANDOM PULSE",
-        SandboxKind.SensorLight=>"SENSOR LIGHT",SandboxKind.DisplayPanel=>"DISPLAY PANEL",
-        _=>kind.ToString().ToUpperInvariant()
-    };
-    static string SandboxDetail(SandboxKind kind) => kind switch
-    {
-        SandboxKind.Cube=>"PHYSICS BOX",SandboxKind.GlowCube=>"LIGHT BOX",
-        SandboxKind.Thruster=>"POWER PUSHES CUBE",SandboxKind.Button=>"PULSE OUTPUT",
-        SandboxKind.Lever=>"TOGGLE OUTPUT",SandboxKind.And=>"ALL INPUTS ON",
-        SandboxKind.Or=>"ANY INPUT ON",SandboxKind.Not=>"INVERT INPUT",
-        SandboxKind.Xor=>"ODD PARITY",SandboxKind.Nand=>"NOT ALL INPUTS",
-        SandboxKind.Xnor=>"EVEN PARITY",SandboxKind.Toggle=>"LATCHES ON RISING EDGE",
-        SandboxKind.Timer=>"BLINKS TWICE A SECOND",
-        SandboxKind.Piston=>"PUSHES BLOCKS AHEAD",
-        SandboxKind.PressurePlate=>"CUBE MAKES OUTPUT",SandboxKind.ProximitySensor=>"PLAYER MAKES OUTPUT",
-        SandboxKind.Delay=>"WAITS BEFORE OUTPUT",SandboxKind.Counter=>"EVERY THIRD PULSE",
-        SandboxKind.Randomizer=>"RANDOM OUTPUT EACH SEC",
-        SandboxKind.Hinge=>"POWERED ROTARY MOUNT",SandboxKind.Wheel=>"POWERED DRIVE WHEEL",
-        SandboxKind.Rope=>"POWERED WINCH PULL",SandboxKind.Conveyor=>"MOVES BLOCKS ON TOP",
-        SandboxKind.SensorLight=>"PLAYER DETECTED LIGHT",SandboxKind.DisplayPanel=>"SHOWS WIRE STATE",
-        _=>"POWERED LIGHT"
-    };
-    internal void SelectSandbox(int step)
-    {
-        int selected=Math.Clamp(SandboxSelected+step,0,SandboxItemCount-1);
-        if(selected==SandboxSelected) return;
-        SandboxSelected=selected;
-        EnsureSandboxVisible();
-        Dirty=true;InteractionSound?.Invoke();
-    }
-    void EnsureSandboxVisible()
-    {
-        if(SandboxSelected<SandboxScroll) SandboxScroll=SandboxSelected;
-        else if(SandboxSelected>=SandboxScroll+SandboxRows) SandboxScroll=SandboxSelected-SandboxRows+1;
-        SandboxScroll=Math.Clamp(SandboxScroll,0,SandboxMaxScroll);
-    }
-    internal void ScrollSandbox(int direction)
-    {
-        if(direction==0) return;
-        int scroll=Math.Clamp(SandboxScroll+direction,0,SandboxMaxScroll);
-        if(scroll==SandboxScroll) return;
-        SandboxScroll=scroll;
-        if(SandboxSelected<SandboxScroll) SandboxSelected=SandboxScroll;
-        else if(SandboxSelected>=SandboxScroll+SandboxRows) SandboxSelected=SandboxScroll+SandboxRows-1;
-        Dirty=true;InteractionSound?.Invoke();
-    }
-    internal void CycleSandboxCategory(int step)
-    {
-        int category=Math.Clamp(SandboxCategory+step,0,SandboxItems.Length-1);
-        if(category!=SandboxCategory) { SandboxCategory=category;SandboxSelected=0;SandboxScroll=0;Dirty=true;InteractionSound?.Invoke(); }
-    }
-    internal void TogglePonder()
-    {
-        FinishEditing();
-        if(Open&&PonderPage) { Open=false;PonderPage=false; }
-        else { Open=true;PonderPage=true;SandboxPage=false;TitleScreen=false; }
-        Dirty=true;InteractionSound?.Invoke();
-    }
-    internal void MovePonder(int direction)
-    { PonderStep=(PonderStep+direction+4)%4;Dirty=true;InteractionSound?.Invoke(); }
-    internal void ToggleSandbox()
-    {
-        FinishEditing();
-        if(Open && SandboxPage) { Open=false;SandboxPage=false; }
-        else { Open=true;SandboxPage=true;TitleScreen=false; }
-        SandboxCategory=0;SandboxSelected=0;SandboxScroll=0;Dirty=true;InteractionSound?.Invoke();
-    }
+    internal string ObjectPrompt="";
+    internal bool ShowFps;
     internal int TitlePage, TitleSelected;
     internal int RenderMode = 2, ProbeQuality = 2, ProbeBounces = 4, HybridDirectSamples = 4;
     internal string RenderModeName => RenderMode == 1 ? "Realtime GI" : "Path traced fixed";
-    internal int Temperature, PaletteSteps = 16, Samples = 32, Bounces = 2, ResolutionIndex, FpsLimit;
+    internal int Samples = 32, Bounces = 2, ResolutionIndex, FpsLimit;
     internal int TonemapMode = 2;
-    internal float Exposure = 2f, Saturation = 1f, Contrast = 1f;
+    internal float Exposure = 2f;
     internal float BrightenSpeed = 1.25f, DarkenSpeed = 2.2f, BloomStrength = 0.1f, BloomThreshold = 0.85f, BloomRadius = 1.9f;
     internal float RedMix = 1f, GreenMix = 1f, BlueMix = 1f;
     internal float BounceStrength = 1.75f, AO = 0.9f, LightIntensity = 1f, LightDensity = 0.65f, FogDensity = 0.008f;
@@ -121,6 +35,7 @@ internal sealed class DebugMenu
     internal bool MonsterDebug;
     internal bool ShowDebugOverlay;
     internal bool ShowObjectFrames = true;
+    internal bool ShowPlayerTags = true;
     internal bool MonsterControlsWritable = true;
     internal bool FlickerControlsWritable = true;
     internal bool MovementControlsWritable = true;
@@ -129,27 +44,24 @@ internal sealed class DebugMenu
     internal string PlayerName = "BEAN";
     internal float PlayerRed = 0.78f, PlayerGreen = 0.76f, PlayerBlue = 0.70f;
     internal int PlayerColorIndex = -1;
-    internal bool EditingName, EditingServer, EditingJoinKey, NetworkConnected, NetworkRemote;
-    internal bool EditingText => EditingName || EditingServer || EditingJoinKey;
-    internal string ServerAddress = "beanrooms-game.onrender.com", JoinKey = "", NetworkStatus = "OFFLINE";
+    internal bool EditingName, EditingJoinKey, NetworkConnected;
+    internal bool EditingText => EditingName || EditingJoinKey;
+    internal string JoinKey = "", NetworkStatus = "OFFLINE";
     internal int NetworkId, NetworkHost, NetworkPlayers;
     internal (PointF A,PointF B,Color Ink)[] MonsterSegments = [];
     internal (PointF At,string Label,Color Ink)[] MonsterPoints = [];
     internal (PointF At,string Label,Color Ink)[] PlayerTags = [];
-    internal (PointF A,PointF B,Color Ink)[] SandboxWires = [];
     internal RectangleF[] ObjectFrames = [];
     internal string MonsterTargetText = "TARGET NONE";
     internal int BodyCount;
-    internal Action<int>? ObjectAction;
-    internal Action? ConnectAction, DisconnectAction;
+    internal Action? ConnectAction;
     internal Action<int>? TitleAction;
     internal Action<int>? SessionAction;
     internal Action? InteractionSound, HoverSound;
+    internal Action? CancelJoinAction;
     internal float PickupRange=5f, HoldDistance=2.25f, SpringFrequency=8.5f, SpringDamping=1.35f, PidSmoothing=18f, SlideResistance=4.5f;
     internal bool SnapHold;
     internal float SnapStep=.25f;
-    internal int CubeColorIndex = 6, CubeMaterialIndex=1;
-    static readonly PhysicsMaterial[] CubeMaterials=[PhysicsMaterial.Concrete,PhysicsMaterial.Wood,PhysicsMaterial.Metal,PhysicsMaterial.Plastic];
     static readonly (string Name, Vector3 Color)[] CubeColors =
     {
         ("AMBER", new Vector3(0.82f,0.69f,0.22f)),
@@ -161,21 +73,27 @@ internal sealed class DebugMenu
         ("WHITE", new Vector3(0.92f,0.92f,0.92f)),
         ("ORANGE", new Vector3(1f,0.36f,0.08f))
     };
-    internal Vector3 CubeColor => CubeColors[CubeColorIndex].Color;
-    internal PhysicsMaterial CubeMaterial => CubeMaterials[CubeMaterialIndex];
-    internal void CycleCubeColor(int direction)
-    { CubeColorIndex=(CubeColorIndex+direction+CubeColors.Length)%CubeColors.Length;Dirty=true;InteractionSound?.Invoke(); }
-    internal void CycleCubeMaterial(int direction)
-    { CubeMaterialIndex=(CubeMaterialIndex+direction+CubeMaterials.Length)%CubeMaterials.Length;Dirty=true;InteractionSound?.Invoke(); }
     int dragging = -1;
     int hoveredItem = -1;
+    internal int WindowX=45, WindowY=40;
+    bool movingWindow;
+    int windowGrabX, windowGrabY;
+    ParentWindowKind parentWindow;
+    int parentWindowX, parentWindowY;
     static readonly int[] SampleChoices = { 16, 32, 64, 128, 256 };
-    static readonly (string Name,int Page)[] Tabs =
+    bool developerCategories;
+    static readonly (string Name,int Page)[] PlayerTabs =
     {
-        ("SESSION",9), ("IMAGE",0), ("POST FX",7), ("LIGHTS",1),
-        ("FLICKER",8), ("CAMERA",3), ("MOVEMENT",2), ("PHYSICS",4),
-        ("MONSTER",5), ("NETWORK",6)
+        ("DISPLAY",11), ("IMAGE",7), ("CAMERA",3),
+        ("HUD",12), ("PROFILE",6)
     };
+    static readonly (string Name,int Page)[] DeveloperTabs =
+    {
+        ("RENDER TUNING",1), ("COLOR MIX",0),
+        ("MOVEMENT",2), ("PHYSICS",4), ("MONSTER",5),
+        ("FLICKER",8), ("DEBUG HUD",10)
+    };
+    (string Name,int Page)[] Tabs => developerCategories ? DeveloperTabs : PlayerTabs;
     static readonly Dictionary<char,int[]> Glyphs = new()
     {
         ['A']=[14,17,17,31,17,17,17], ['B']=[30,17,17,30,17,17,30],
@@ -205,31 +123,67 @@ internal sealed class DebugMenu
     };
     static readonly string[][] Labels =
     {
-        new[] { "DITHER", "PALETTE REDUCE", "PALETTE COLORS", "SATURATION", "TEMPERATURE", "CONTRAST", "RED MIX", "GREEN MIX", "BLUE MIX" },
+        new[] { "RED MIX", "GREEN MIX", "BLUE MIX" },
         new[] { "RENDER MODE", "PATH SAMPLES", "PATH BOUNCES", "BOUNCE LIGHT", "AO STRENGTH", "LIGHT INTENSITY", "LIGHT DENSITY", "RESOLUTION", "FIXTURES", "FPS LIMIT", "VSYNC", "VOLUMETRICS", "FOG DENSITY", "FOG STEPS", "PROBE GRID", "PROBE BOUNCES", "DIRECT SAMPLES" },
         new[] { "WALK SPEED", "SPRINT X", "CROUCH X", "ACCELERATION", "DECELERATION", "STANCE SMOOTH", "SPRINT SMOOTH", "CROUCH HEIGHT", "STEP LENGTH" },
         new[] { "MOUSE SENS", "IDLE SHAKE", "WALK SHAKE", "SPRINT SHAKE", "CROUCH SHAKE", "HEAD BOB", "SWAY AMOUNT", "STRAFE ROLL", "TURN ROLL", "MOVE PITCH", "LOOK SMOOTH" },
-        new[] { "PICKUP RANGE", "HOLD DIST", "SPRING FREQ", "SPRING DAMP", "HOLD SMOOTH", "SLIDE RESIST", "GRID SNAP", "SNAP STEP", "CUBE COUNT", "DEBUG UI", "OBJECT FRAMES" },
+        new[] { "PICKUP RANGE", "HOLD DIST", "SPRING FREQ", "SPRING DAMP", "HOLD SMOOTH", "SLIDE RESIST", "GRID SNAP", "SNAP STEP", "CUBE COUNT" },
         new[] { "MONSTER", "ROAM SPEED", "SEARCH SPEED", "CHASE SPEED", "CHASE TURN", "SEARCH TURN", "ROAM TURN", "SIGHT RANGE", "SIGHT ANGLE", "SEARCH RADIUS", "ROAM RADIUS" },
-        new[] { "PLAYER NAME", "BEAN COLOR", "RED", "GREEN", "BLUE", "PHOTON REGION", "JOIN KEY", "CONNECT", "DISCONNECT", "CONNECTION", "PLAYER ID", "PLAYERS", "ROLE" },
-        new[] { "POST FX", "TONEMAP", "EXPOSURE", "AUTO EXPOSURE", "BRIGHTEN SPEED", "DARKEN SPEED", "BLOOM", "BLOOM STRENGTH", "BLOOM THRESHOLD", "BLOOM RADIUS" },
+        new[] { "PLAYER NAME", "BEAN COLOR", "RED", "GREEN", "BLUE" },
+        new[] { "POST FX", "TONEMAP", "EXPOSURE", "AUTO EXPOSURE", "BRIGHTEN SPEED", "DARKEN SPEED", "BLOOM", "BLOOM STRENGTH", "BLOOM THRESHOLD", "BLOOM RADIUS", "DITHER", "POSTERIZATION" },
         new[] { "MINOR FLICKER", "MINOR INTERVAL", "MINOR CHANCE", "MINOR DURATION", "RANDOM EVENTS", "EVENT INTERVAL", "EVENT LENGTH", "EVENT SPEED MIN", "EVENT SPEED MAX", "EVENT OFF CHANCE", "CHASE FLICKER", "CHASE FOG", "CHASE FOG MAX", "FOG RISE", "FOG FALL", "CHASE RED", "CHASE RED CHANCE", "BLACKOUT CHANCE" },
-        new[] { "RESUME", "LEAVE MULTIPLAYER", "MAIN MENU", "QUIT GAME", "CONNECTION", "PLAYERS", "ROLE", "SANDBOX MODE" }
+        new[] { "RESUME", "PROFILE", "SETTINGS", "DEVELOPER", "HELP", "LEAVE SESSION", "QUIT GAME" },
+        new[] { "FPS COUNTER", "OBJECT BRACKETS", "PLAYER NAMES", "DEBUG INFO", "MONSTER VECTORS" },
+        new[] { "RENDER MODE", "RESOLUTION", "FPS LIMIT", "VSYNC" },
+        new[] { "FPS COUNTER", "OBJECT BRACKETS", "PLAYER NAMES" }
     };
 
     internal void Toggle()
     {
-        if(PonderPage) { TogglePonder();return; }
-        if(SandboxPage) { ToggleSandbox();return; }
         FinishEditing();
-        if(Open && SettingsFromTitle && !TitleScreen) ShowTitle();
-        else if(Open && TitleScreen && TitlePage==1) ShowTitle();
-        else { Open=!Open;TitleScreen=false;SettingsFromTitle=false; }
+        if(TitleScreen) { if(TitlePage==1) ShowTitle();return; }
+        if(Open && SettingsFromTitle) { ShowTitle();return; }
+        Open=!Open;TitleScreen=false;SettingsFromTitle=false;
+        if(Open) { View=MenuView.Pause;Page=9;Selected=0;parentWindow=ParentWindowKind.None; }
         dragging=-1;hoveredItem=-1;Dirty=true;InteractionSound?.Invoke();
+    }
+    internal void Back()
+    {
+        FinishEditing();
+        if(TitleScreen) { if(TitlePage==1) ShowTitle();return; }
+        if(View==MenuView.Settings)
+        {
+            View=settingsReturn;
+            parentWindow=settingsReturn==MenuView.Categories?ParentWindowKind.Pause:ParentWindowKind.None;
+            WindowX=Math.Max(0,WindowX-10);WindowY=Math.Max(0,WindowY-8);
+            Dirty=true;return;
+        }
+        if(View is MenuView.Categories or MenuView.Help)
+        { if(SettingsFromTitle) ShowTitle(); else { View=MenuView.Pause;Page=9;Selected=0;parentWindow=ParentWindowKind.None;Dirty=true; } return; }
+        Toggle();
+    }
+    void PushParent(ParentWindowKind kind)
+    {
+        parentWindow=kind;parentWindowX=WindowX;parentWindowY=WindowY;
+        WindowX=Math.Clamp(WindowX+10,0,320-MenuWidth);
+        WindowY=Math.Clamp(WindowY+8,0,240-MenuHeight);
+    }
+    internal void OpenCategories(bool developer=false)
+    {
+        FinishEditing();
+        if(!TitleScreen && !SettingsFromTitle && View==MenuView.Pause) PushParent(ParentWindowKind.Pause);
+        TitleScreen=false;developerCategories=developer;View=MenuView.Categories;CategorySelected=0;Dirty=true;InteractionSound?.Invoke();
+    }
+    internal void OpenHelp()
+    {
+        FinishEditing();
+        if(!TitleScreen && View==MenuView.Pause) PushParent(ParentWindowKind.Pause);
+        TitleScreen=false;View=MenuView.Help;Dirty=true;InteractionSound?.Invoke();
     }
     internal void ShowTitle()
     {
-        FinishEditing(); Open=true;TitleScreen=true;SettingsFromTitle=false;
+        if(TitleScreen && TitlePage==1) CancelJoinAction?.Invoke();
+        FinishEditing(); Open=true;TitleScreen=true;SettingsFromTitle=false;parentWindow=ParentWindowKind.None;
         TitlePage=0;TitleSelected=0;hoveredItem=-1;Dirty=true;
     }
     internal void LeaveTitle()
@@ -242,16 +196,21 @@ internal sealed class DebugMenu
     }
     internal void ShowSettingsFromTitle()
     {
-        FinishEditing();TitleScreen=false;SettingsFromTitle=true;SetPage(0);
+        FinishEditing();TitleScreen=false;SettingsFromTitle=true;OpenCategories();
     }
     internal void SetPage(int page)
     {
         if(page==2 && !MovementControlsWritable) return;
-        FinishEditing(); Page=Math.Clamp(page,0,9); Selected=0;
+        if(page!=9 && View!=MenuView.Settings)
+            settingsReturn=View==MenuView.Pause?MenuView.Pause:MenuView.Categories;
+        if(page!=9 && View==MenuView.Categories) PushParent(ParentWindowKind.Categories);
+        FinishEditing(); Page=Math.Clamp(page,0,12); Selected=0;ScrollRow=0;
+        View=Page==9?MenuView.Pause:MenuView.Settings;
         dragging=-1;hoveredItem=-1;Dirty=true;InteractionSound?.Invoke();
     }
     internal void CyclePage(int step)
     {
+        if(View!=MenuView.Settings) return;
         int index=Array.FindIndex(Tabs,tab=>tab.Page==Page);
         for(int offset=1;offset<=Tabs.Length;offset++)
         {
@@ -261,48 +220,73 @@ internal sealed class DebugMenu
     }
     internal void ResetDefaults()
     {
-        var defaults = new DebugMenu();
-        Dithering=defaults.Dithering; PaletteReduction=defaults.PaletteReduction;
-        Temperature=defaults.Temperature; PaletteSteps=defaults.PaletteSteps;
-        Saturation=defaults.Saturation; Contrast=defaults.Contrast;
-        RedMix=defaults.RedMix; GreenMix=defaults.GreenMix; BlueMix=defaults.BlueMix;
-        PostEnabled=defaults.PostEnabled; TonemapMode=defaults.TonemapMode;
-        Exposure=defaults.Exposure; AutoExposure=defaults.AutoExposure;
-        BrightenSpeed=defaults.BrightenSpeed; DarkenSpeed=defaults.DarkenSpeed;
-        Bloom=defaults.Bloom; BloomStrength=defaults.BloomStrength;
-        BloomThreshold=defaults.BloomThreshold; BloomRadius=defaults.BloomRadius;
-        RenderMode=defaults.RenderMode; ProbeQuality=defaults.ProbeQuality;
-        ProbeBounces=defaults.ProbeBounces; HybridDirectSamples=defaults.HybridDirectSamples;
-        Samples=defaults.Samples; Bounces=defaults.Bounces;
-        BounceStrength=defaults.BounceStrength; AO=defaults.AO;
-        LightIntensity=defaults.LightIntensity; LightDensity=defaults.LightDensity;
-        Lights=defaults.Lights; Volumetrics=defaults.Volumetrics;
-        FogDensity=defaults.FogDensity; FogSteps=defaults.FogSteps;
-        ResolutionIndex=defaults.ResolutionIndex; FpsLimit=defaults.FpsLimit; Vsync=defaults.Vsync;
-        if(MovementControlsWritable)
+        var defaults=new DebugMenu();
+        switch(Page)
         {
-            ResetMovementDefaults();
+            case 11:
+                RenderMode=defaults.RenderMode;
+                ResolutionIndex=defaults.ResolutionIndex;
+                FpsLimit=defaults.FpsLimit;
+                Vsync=defaults.Vsync;
+                break;
+            case 12:
+                ShowFps=defaults.ShowFps;ShowObjectFrames=defaults.ShowObjectFrames;
+                ShowPlayerTags=defaults.ShowPlayerTags;
+                break;
+            case 3:
+                MouseSensitivity=defaults.MouseSensitivity;
+                IdleShake=defaults.IdleShake;WalkShake=defaults.WalkShake;
+                SprintShake=defaults.SprintShake;CrouchShake=defaults.CrouchShake;
+                HeadBob=defaults.HeadBob;SwayAmount=defaults.SwayAmount;
+                StrafeRoll=defaults.StrafeRoll;TurnRoll=defaults.TurnRoll;
+                MovePitch=defaults.MovePitch;SwaySmooth=defaults.SwaySmooth;
+                CameraSmooth=defaults.CameraSmooth;
+                break;
+            case 6:
+                PlayerName=defaults.PlayerName;PlayerRed=defaults.PlayerRed;
+                PlayerGreen=defaults.PlayerGreen;PlayerBlue=defaults.PlayerBlue;
+                PlayerColorIndex=defaults.PlayerColorIndex;
+                break;
+            case 0:
+                RedMix=defaults.RedMix;GreenMix=defaults.GreenMix;BlueMix=defaults.BlueMix;
+                break;
+            case 1:
+                Samples=defaults.Samples;Bounces=defaults.Bounces;
+                ProbeQuality=defaults.ProbeQuality;ProbeBounces=defaults.ProbeBounces;
+                HybridDirectSamples=defaults.HybridDirectSamples;
+                BounceStrength=defaults.BounceStrength;AO=defaults.AO;
+                LightIntensity=defaults.LightIntensity;LightDensity=defaults.LightDensity;
+                Lights=defaults.Lights;Volumetrics=defaults.Volumetrics;
+                FogDensity=defaults.FogDensity;FogSteps=defaults.FogSteps;
+                break;
+            case 2:
+                if(MovementControlsWritable) ResetMovementDefaults();
+                break;
+            case 4:
+                PickupRange=defaults.PickupRange;HoldDistance=defaults.HoldDistance;
+                SpringFrequency=defaults.SpringFrequency;SpringDamping=defaults.SpringDamping;
+                PidSmoothing=defaults.PidSmoothing;SlideResistance=defaults.SlideResistance;
+                SnapHold=defaults.SnapHold;SnapStep=defaults.SnapStep;
+                break;
+            case 5:
+                if(MonsterControlsWritable) MonsterSettings.CopyFrom(defaults.MonsterSettings);
+                break;
+            case 7:
+                PostEnabled=defaults.PostEnabled;TonemapMode=defaults.TonemapMode;
+                Exposure=defaults.Exposure;AutoExposure=defaults.AutoExposure;
+                BrightenSpeed=defaults.BrightenSpeed;DarkenSpeed=defaults.DarkenSpeed;
+                Bloom=defaults.Bloom;BloomStrength=defaults.BloomStrength;
+                BloomThreshold=defaults.BloomThreshold;BloomRadius=defaults.BloomRadius;
+                Dithering=defaults.Dithering;PaletteReduction=defaults.PaletteReduction;
+                break;
+            case 8:
+                if(FlickerControlsWritable) FlickerSettings.CopyFrom(defaults.FlickerSettings);
+                break;
+            case 10:
+                ShowDebugOverlay=defaults.ShowDebugOverlay;MonsterDebug=defaults.MonsterDebug;
+                break;
         }
-        MouseSensitivity=defaults.MouseSensitivity;
-        IdleShake=defaults.IdleShake; WalkShake=defaults.WalkShake;
-        SprintShake=defaults.SprintShake; CrouchShake=defaults.CrouchShake;
-        HeadBob=defaults.HeadBob; SwayAmount=defaults.SwayAmount;
-        StrafeRoll=defaults.StrafeRoll; TurnRoll=defaults.TurnRoll;
-        MovePitch=defaults.MovePitch; SwaySmooth=defaults.SwaySmooth;
-        CameraSmooth=defaults.CameraSmooth;
-        PickupRange=defaults.PickupRange; HoldDistance=defaults.HoldDistance;
-        SpringFrequency=defaults.SpringFrequency; SpringDamping=defaults.SpringDamping;
-        PidSmoothing=defaults.PidSmoothing; SlideResistance=defaults.SlideResistance;
-        SnapHold=defaults.SnapHold;SnapStep=defaults.SnapStep;
-        CubeColorIndex=defaults.CubeColorIndex;CubeMaterialIndex=defaults.CubeMaterialIndex;
-        ShowDebugOverlay=defaults.ShowDebugOverlay; ShowObjectFrames=defaults.ShowObjectFrames;
-        MonsterDebug=defaults.MonsterDebug;
-        if(MonsterControlsWritable) MonsterSettings.CopyFrom(defaults.MonsterSettings);
-        if(FlickerControlsWritable) FlickerSettings.CopyFrom(defaults.FlickerSettings);
-        PlayerName=defaults.PlayerName; PlayerRed=defaults.PlayerRed;
-        PlayerGreen=defaults.PlayerGreen; PlayerBlue=defaults.PlayerBlue;
-        PlayerColorIndex=defaults.PlayerColorIndex; FinishEditing();
-        dragging=-1; Dirty=true;
+        FinishEditing();dragging=-1;Dirty=true;
     }
     internal void ResetMovementDefaults()
     {
@@ -322,15 +306,14 @@ internal sealed class DebugMenu
     internal void FinishEditing()
     {
         if(EditingName) FinishName();
-        EditingServer=false; EditingJoinKey=false;
-        ServerAddress=ServerAddress.Trim(); JoinKey=JoinKey.Trim();
+        EditingJoinKey=false;
+        JoinKey=JoinKey.Trim();
         Dirty=true;
     }
     internal void EditConnectionCharacter(char c)
     {
         if(c<32 || c>126) return;
-        if(EditingServer && ServerAddress.Length<100) ServerAddress+=c;
-        else if(EditingJoinKey && JoinKey.Length<128) JoinKey+=c;
+        if(EditingJoinKey && JoinKey.Length<128) JoinKey+=c;
         else return;
         Dirty=true;
     }
@@ -340,14 +323,12 @@ internal sealed class DebugMenu
     }
     internal void BackspaceConnection()
     {
-        if(EditingServer && ServerAddress.Length>0) ServerAddress=ServerAddress[..^1];
-        else if(EditingJoinKey && JoinKey.Length>0) JoinKey=JoinKey[..^1];
+        if(EditingJoinKey && JoinKey.Length>0) JoinKey=JoinKey[..^1];
         Dirty=true;
     }
     internal void ClearConnectionField()
     {
-        if(EditingServer) ServerAddress="";
-        else if(EditingJoinKey) JoinKey="";
+        if(EditingJoinKey) JoinKey="";
         Dirty=true;
     }
     internal void Select(int step)
@@ -358,12 +339,54 @@ internal sealed class DebugMenu
             if(next!=TitleSelected) InteractionSound?.Invoke();
             TitleSelected=next;Dirty=true;return;
         }
+        if(View==MenuView.Categories)
+        { CategorySelected=Math.Clamp(CategorySelected+step,0,Tabs.Length-1);Dirty=true;InteractionSound?.Invoke();return; }
+        if(View==MenuView.Help) return;
         int selected=Math.Clamp(Selected + step, 0, Labels[Page].Length - 1);
         if(selected!=Selected) InteractionSound?.Invoke(); Selected=selected; Dirty=true;
+        EnsureVisible();
+    }
+    void EnsureVisible()
+    {
+        if(View!=MenuView.Settings) return;
+        if(Selected<ScrollRow) ScrollRow=Selected;
+        else if(Selected>=ScrollRow+VisibleRows) ScrollRow=Selected-VisibleRows+1;
+    }
+    const int VisibleRows=9;
+    const int MenuWidth=230, MenuHeight=160;
+    int MenuLeft => WindowX;
+    int MenuRight => WindowX+MenuWidth;
+    int PauseRowTop => WindowY+38;
+    const int PauseRowPitch=17;
+    int CategoryRowTop => WindowY+35;
+    const int CategoryRowPitch=15;
+    int SettingsRowTop => WindowY+31;
+    const int SettingsRowPitch=13;
+    int TitleRowTop => WindowY+60;
+    const int TitleRowPitch=20;
+    static int RowAt(int y,int first,int pitch,int count)
+    {
+        int top=first-3;
+        return y>=top && y<top+count*pitch ? (y-top)/pitch : -1;
+    }
+    int CategoryY(int index) => CategoryRowTop+index*CategoryRowPitch;
+    int CategoryAt(int y) => RowAt(y,CategoryRowTop,CategoryRowPitch,Tabs.Length);
+    int PauseAt(int x,int y)
+    {
+        int localX=x-WindowX,localY=y-WindowY;
+        if(localX<28 || localX>=194) return -1;
+        if(localY>=46 && localY<62) return 0;
+        if(localY>=68 && localY<84) return localX<106?1:localX<194?2:-1;
+        if(localY>=90 && localY<106) return localX<106?3:localX<194?4:-1;
+        if(localY>=118 && localY<134) return 5;
+        if(localY>=140 && localY<156) return 6;
+        return -1;
     }
     internal void AdjustSelected(int direction)
     {
         if(TitleScreen) ActivateTitleSelection();
+        else if(View==MenuView.Categories) SetPage(Tabs[CategorySelected].Page);
+        else if(View==MenuView.Help) Back();
         else Adjust(Selected,direction);
     }
     void ActivateTitleSelection()
@@ -389,32 +412,21 @@ internal sealed class DebugMenu
 
     internal void MouseDown(int x, int y)
     {
-        if(SandboxPage)
+        int headerTop=WindowY+3;
+        int headerBottom=WindowY+18;
+        int resetLeft=WindowX+162;
+        int closeLeft=WindowX+210;
+        if(y>=headerTop && y<headerBottom && x>=closeLeft)
         {
-            if(y<14 && x>=307) { ToggleSandbox();return; }
-            if(y>=148 && y<164) { CycleCubeColor(x<155?-1:1);return; }
-            if(y>=168 && y<184) { CycleCubeMaterial(x<155?-1:1);return; }
-            if(y>=186 && y<202) { ObjectAction?.Invoke(2);Dirty=true;InteractionSound?.Invoke();return; }
-            if(y>=17 && y<29 && x>=12)
-            {
-                int category=(x-12)/75;
-                if(category>=0 && category<SandboxItems.Length && (x-12)%75<70)
-                { SandboxCategory=category;SandboxSelected=0;Dirty=true;InteractionSound?.Invoke();return; }
-            }
-            if(x>=15 && x<305 && y>=SandboxTop && y<SandboxTop+SandboxRows*SandboxPitch)
-            {
-                int slot=(y-SandboxTop)/SandboxPitch;
-                int itemRow=SandboxScroll+slot;
-                if(slot>=0 && slot<SandboxRows && itemRow>=0 && itemRow<SandboxItemCount)
-                {
-                    SandboxSelected=itemRow;
-                    SandboxKind kind=SandboxItems[SandboxCategory][SandboxSelected];
-                    if(SandboxEnabled || kind==SandboxKind.Cube) SandboxSpawn?.Invoke(kind);
-                    Dirty=true;InteractionSound?.Invoke();
-                }
-                return;
-            }
+            if(!TitleScreen) Back();
             return;
+        }
+        if(y>=headerTop && y<headerBottom && x>=resetLeft && View==MenuView.Settings && !TitleScreen)
+        { ResetDefaults();InteractionSound?.Invoke();return; }
+        if(y>=headerTop && y<headerBottom && x>=MenuLeft+3 && x<MenuRight-3)
+        {
+            movingWindow=true;windowGrabX=x-WindowX;windowGrabY=y-WindowY;
+            Dirty=true;return;
         }
         if(TitleScreen)
         {
@@ -422,33 +434,38 @@ internal sealed class DebugMenu
             if(titleRow>=0) { TitleSelected=titleRow;ActivateTitleSelection(); }
             return;
         }
-        if (y>=2 && y<14)
+        if(View==MenuView.Categories)
         {
-            if(x>=307) { Toggle(); return; }
-            if(x>=270 && x<307) { ResetDefaults(); InteractionSound?.Invoke(); return; }
-        }
-        int tab=TabAt(x,y);
-        if(tab>=0)
-        {
-            SetPage(Tabs[tab].Page);
+            int category=CategoryAt(y);
+            if(x>=MenuLeft && x<MenuRight && category>=0)
+            { CategorySelected=category;SetPage(Tabs[category].Page); }
             return;
         }
-        int row = (y - 54) / RowPitch;
-        if (y < 54 || row < 0 || row >= Labels[Page].Length || x < 15 || x >= 305) return;
+        if(View==MenuView.Help) { Back();return; }
+        int row=View==MenuView.Pause?PauseAt(x,y):
+            RowAt(y,SettingsRowTop,SettingsRowPitch,VisibleRows);
+        if(View==MenuView.Settings && row>=0) row+=ScrollRow;
+        if(row<0 || row>=Labels[Page].Length || x<MenuLeft || x>=MenuRight) return;
         Selected = row;
-        if (IsSlider(row) && x >= 155 && x <= 254)
+        if(View==MenuView.Pause) { Adjust(row,1);return; }
+        if (IsSlider(row) && x >= WindowX+120 && x <= WindowX+178)
         {
             dragging = row;
             SetSliderFromX(row,x);
         }
-        else if(IsChoice(row) && x>=316-(Value(row).Length+4)*6 &&
-                x<316-(Value(row).Length+1)*6) Adjust(row,-1);
+        else if(IsChoice(row) && x>=WindowX+212-(Value(row).Length+4)*5 &&
+                x<WindowX+212-(Value(row).Length+1)*5) Adjust(row,-1);
         else Adjust(row,1);
         Dirty = true;
     }
     internal void MouseMove(int x,int y)
     {
-        if(SandboxPage) return;
+        if(movingWindow)
+        {
+            WindowX=Math.Clamp(x-windowGrabX,0,320-MenuWidth);
+            WindowY=Math.Clamp(y-windowGrabY,0,240-MenuHeight);
+            Dirty=true;return;
+        }
         if(TitleScreen)
         {
             int row=TitleRowAt(x,y);
@@ -456,15 +473,24 @@ internal sealed class DebugMenu
             { TitleSelected=row;Dirty=true;HoverSound?.Invoke(); }
             return;
         }
+        if(View==MenuView.Categories)
+        {
+            int row=CategoryAt(y);
+            if(x>=MenuLeft && x<MenuRight && row>=0 && CategorySelected!=row)
+            { CategorySelected=row;Dirty=true;HoverSound?.Invoke(); }
+            return;
+        }
+        if(View==MenuView.Help) return;
         if (dragging < 0)
         {
             int hovered=-1;
-            if(y>=2 && y<14 && x>=270 && x<307) hovered=109;
-            else if(y>=2 && y<14 && x>=307) hovered=110;
-            else if(TabAt(x,y) is int tab && tab>=0) hovered=100+tab;
-            else if(x>=15 && x<305 && y>=54)
+            if(y>=WindowY+3 && y<WindowY+18 && x>=WindowX+162 && x<WindowX+210 && View==MenuView.Settings) hovered=109;
+            else if(y>=WindowY+3 && y<WindowY+18 && x>=WindowX+210) hovered=110;
+            else if(x>=MenuLeft && x<MenuRight)
             {
-                int row=(y-54)/RowPitch;
+                int row=View==MenuView.Pause?PauseAt(x,y):
+                    RowAt(y,SettingsRowTop,SettingsRowPitch,VisibleRows);
+                if(View==MenuView.Settings && row>=0) row+=ScrollRow;
                 if(row>=0 && row<Labels[Page].Length) hovered=row;
             }
             if(hovered!=hoveredItem)
@@ -481,40 +507,38 @@ internal sealed class DebugMenu
         }
         SetSliderFromX(dragging,x);
     }
-    internal void MouseUp() => dragging = -1;
+    internal void MouseUp() { dragging=-1;movingWindow=false; }
     internal void MouseWheel(int delta)
     {
-        if(SandboxPage) { ScrollSandbox(-Math.Sign(delta));return; }
+        if(View==MenuView.Settings)
+        { ScrollRow=Math.Clamp(ScrollRow-Math.Sign(delta),0,Math.Max(0,Labels[Page].Length-VisibleRows));Dirty=true; }
     }
     int TitleRowAt(int x,int y)
     {
-        if(x<15 || x>=305) return -1;
+        if(x<MenuLeft || x>=MenuRight) return -1;
         if(TitlePage==0)
-        {
-            int row=(y-69)/24;
-            return row>=0 && row<4 && y<69+row*24+16 ? row : -1;
-        }
-        if(y>=68 && y<97) return 0;
-        if(y>=108 && y<137) return 1;
-        if(y>=155 && y<169) return 2;
-        if(y>=178 && y<192) return 3;
+            return RowAt(y,TitleRowTop,TitleRowPitch,4);
+        if(y>=WindowY+53 && y<WindowY+88) return 0;
+        if(y>=WindowY+100 && y<WindowY+124)
+            return x<WindowX+120?1:2;
         return -1;
     }
-    int RowPitch => Page is 1 or 8 ? 10 : Page is 4 or 6 ? 12 : 14;
+    int RowPitch => SettingsRowPitch;
 
-    static int TabAt(int x,int y)
+    static (int Page,int Row) MappedSetting(int page,int row) => page switch
     {
-        if(x<12 || x>=312 || y<17 || y>=51) return -1;
-        int column=(x-12)/75;
-        int row=(y-17)/12;
-        if((x-12)%75>=70 || (y-17)%12>=10) return -1;
-        int index=row*4+column;
-        return index<Tabs.Length?index:-1;
+        11 => (1,new[] { 0,7,9,10 }[row]),
+        12 => (10,row),
+        _ => (page,row)
+    };
+    bool IsSlider(int row)
+    {
+        var (page,mappedRow)=MappedSetting(Page,row);
+        return IsSliderCore(page,mappedRow);
     }
-
-    bool IsSlider(int row) => Page switch
+    static bool IsSliderCore(int page,int row) => page switch
     {
-        0 => row is 2 or 3 or 4 or 5 or 6 or 7 or 8,
+        0 => row is 0 or 1 or 2,
         1 => row is 1 or 2 or 3 or 4 or 5 or 6 or 7 or 9 or 12 or 13 or 14 or 15 or 16,
         4 => row is 0 or 1 or 2 or 3 or 4 or 5,
         5 => row > 0,
@@ -522,18 +546,23 @@ internal sealed class DebugMenu
         7 => row is 2 or 4 or 5 or 7 or 8 or 9,
         8 => row is 1 or 2 or 3 or 5 or 6 or 7 or 8 or 9 or 12 or 13 or 14 or 16 or 17,
         9 => false,
+        10 => false,
         _ => true
     };
-    bool IsChoice(int row) => Page switch
+    bool IsChoice(int row)
     {
-        1 => row==0,
-        6 => row==1,
-        7 => row==1,
-        _ => false
-    };
+        var (page,mappedRow)=MappedSetting(Page,row);
+        return page switch
+        {
+            1 => mappedRow==0,
+            6 => mappedRow==1,
+            7 => mappedRow==1,
+            _ => false
+        };
+    }
     void SetSliderFromX(int row,int x)
     {
-        float target=Math.Clamp((x-155)/99f,0f,1f);
+        float target=Math.Clamp((x-(WindowX+120))/58f,0f,1f);
         float current=Fraction(row);
         int direction=target>current?1:-1;
         bool changed=false;
@@ -556,6 +585,15 @@ internal sealed class DebugMenu
     }
     void Adjust(int row, int direction,bool playSound=true)
     {
+        if(Page>=11)
+        {
+            var (page,mappedRow)=MappedSetting(Page,row);
+            int original=Page;
+            Page=page;
+            try { Adjust(mappedRow,direction,playSound); }
+            finally { Page=original; }
+            return;
+        }
         if((Page == 5 && !MonsterControlsWritable) ||
            (Page == 8 && !FlickerControlsWritable) ||
            (Page == 2 && !MovementControlsWritable)) return;
@@ -563,15 +601,9 @@ internal sealed class DebugMenu
         {
             switch (row)
             {
-                case 0: Dithering = !Dithering; break;
-                case 1: PaletteReduction = !PaletteReduction; break;
-                case 2: PaletteSteps = Math.Clamp(PaletteSteps + direction, 2, 32); break;
-                case 3: Saturation = Math.Clamp(Saturation + direction * 0.01f, 0f, 2f); break;
-                case 4: Temperature = Math.Clamp(Temperature + direction, -100, 100); break;
-                case 5: Contrast = Math.Clamp(Contrast + direction * 0.01f, 0.5f, 1.5f); break;
-                case 6: RedMix = Math.Clamp(RedMix + direction * 0.01f, 0.5f, 1.5f); break;
-                case 7: GreenMix = Math.Clamp(GreenMix + direction * 0.01f, 0.5f, 1.5f); break;
-                case 8: BlueMix = Math.Clamp(BlueMix + direction * 0.01f, 0.5f, 1.5f); break;
+                case 0: RedMix = Math.Clamp(RedMix + direction * 0.01f, 0.5f, 1.5f); break;
+                case 1: GreenMix = Math.Clamp(GreenMix + direction * 0.01f, 0.5f, 1.5f); break;
+                case 2: BlueMix = Math.Clamp(BlueMix + direction * 0.01f, 0.5f, 1.5f); break;
             }
         }
         else if (Page == 1)
@@ -627,8 +659,17 @@ internal sealed class DebugMenu
                 case 5: SlideResistance=Math.Clamp(SlideResistance+direction*0.1f,0f,12f); break;
                 case 6: SnapHold=!SnapHold;break;
                 case 7: SnapStep=Math.Clamp(SnapStep+direction*.05f,.05f,1f);break;
-                case 9: ShowDebugOverlay=!ShowDebugOverlay; break;
-                case 10: ShowObjectFrames=!ShowObjectFrames; break;
+            }
+        }
+        else if(Page==10)
+        {
+            switch(row)
+            {
+                case 0: ShowFps=!ShowFps;break;
+                case 1: ShowObjectFrames=!ShowObjectFrames;break;
+                case 2: ShowPlayerTags=!ShowPlayerTags;break;
+                case 3: ShowDebugOverlay=!ShowDebugOverlay;break;
+                case 4: MonsterDebug=!MonsterDebug;break;
             }
         }
         else if(Page == 5)
@@ -659,18 +700,17 @@ internal sealed class DebugMenu
                 case 2: PlayerRed=Math.Clamp(PlayerRed+direction*0.01f,0.05f,1f);PlayerColorIndex=-1;break;
                 case 3: PlayerGreen=Math.Clamp(PlayerGreen+direction*0.01f,0.05f,1f);PlayerColorIndex=-1;break;
                 case 4: PlayerBlue=Math.Clamp(PlayerBlue+direction*0.01f,0.05f,1f);PlayerColorIndex=-1;break;
-                case 5: break;
-                case 6: FinishEditing();EditingJoinKey=true;JoinKey="";break;
-                case 7: FinishEditing();ConnectAction?.Invoke();break;
-                case 8: FinishEditing();DisconnectAction?.Invoke();break;
             }
         }
         else if(Page == 9)
         {
-            // The server validates the sender. Do not use a stale client-side host
-            // flag to prevent a host from issuing the request.
-            if(row==7 && (!NetworkConnected || SandboxSupported)) SandboxToggle?.Invoke();
-            else if(row<4) SessionAction?.Invoke(row);
+            if(row==0) SessionAction?.Invoke(0);
+            else if(row==1) SetPage(6);
+            else if(row==2) OpenCategories();
+            else if(row==3) OpenCategories(developer:true);
+            else if(row==4) OpenHelp();
+            else if(row==5) SessionAction?.Invoke(1);
+            else if(row==6) SessionAction?.Invoke(2);
             else return;
         }
         else if(Page == 7)
@@ -687,6 +727,8 @@ internal sealed class DebugMenu
                 case 7: BloomStrength=Math.Clamp(BloomStrength+direction*0.01f,0f,2f);break;
                 case 8: BloomThreshold=Math.Clamp(BloomThreshold+direction*0.01f,0.25f,4f);break;
                 case 9: BloomRadius=Math.Clamp(BloomRadius+direction*0.01f,0.5f,4f);break;
+                case 10: Dithering=!Dithering;break;
+                case 11: PaletteReduction=!PaletteReduction;break;
             }
         }
         else if(Page == 8)
@@ -736,14 +778,22 @@ internal sealed class DebugMenu
 
     string Value(int row)
     {
+        if(Page>=11)
+        {
+            var (page,mappedRow)=MappedSetting(Page,row);
+            int original=Page;Page=page;
+            try { return Value(mappedRow); }
+            finally { Page=original; }
+        }
+        if(Page==10) return (row switch
+        {
+            0=>ShowFps,1=>ShowObjectFrames,2=>ShowPlayerTags,
+            3=>ShowDebugOverlay,4=>MonsterDebug,_=>false
+        })?"ON":"OFF";
         if(Page == 9) return row switch
         {
-            0 => "PLAY", 1 => NetworkConnected || NetworkRemote ? "LEAVE" : "OFFLINE",
-            2 => "OPEN", 3 => "EXIT",
-            4 => NetworkConnected ? (NetworkRemote ? "ONLINE" : "LOCAL") : NetworkStatus,
-            5 => NetworkConnected ? NetworkPlayers.ToString() : "1",
-            6 => NetworkConnected ? (NetworkId==NetworkHost ? "HOST" : "GUEST") : "SOLO",
-            7 => NetworkConnected&&!SandboxSupported ? "SERVER UPDATE REQUIRED" : SandboxEnabled ? "ON" : "OFF",
+            0 => "PLAY",1=>"OPEN",2=>"OPEN",3=>"OPEN",4=>"OPEN",
+            5 => "MENU",6=>"EXIT",
             _ => ""
         };
         if(Page == 8) return row switch
@@ -775,20 +825,14 @@ internal sealed class DebugMenu
             2 => $"{Exposure:0.00}",3 => AutoExposure?"ON":"OFF",
             4 => $"{BrightenSpeed:0.00}",5 => $"{DarkenSpeed:0.00}",
             6 => Bloom?"ON":"OFF",7 => $"{BloomStrength:0.00}",
-            8 => $"{BloomThreshold:0.00}",9 => $"{BloomRadius:0.00}",_ => ""
+            8 => $"{BloomThreshold:0.00}",9 => $"{BloomRadius:0.00}",
+            10 => Dithering?"ON":"OFF",11 => PaletteReduction?"ON":"OFF",_ => ""
         };
         if(Page == 6) return row switch
         {
             0 => EditingName ? PlayerName+"_" : PlayerName,
             1 => PlayerColorIndex<0 ? "CUSTOM" : CubeColors[PlayerColorIndex].Name,
             2 => $"{PlayerRed:0.00}",3 => $"{PlayerGreen:0.00}",4 => $"{PlayerBlue:0.00}",
-            5 => "EU",
-            6 => JoinKey.Length==0 ? (EditingJoinKey?"-":"ENTER KEY") : new string('*',Math.Min(JoinKey.Length,16))+(EditingJoinKey?"-":""),
-            7 => "JOIN", 8 => "LEAVE",
-            9 => NetworkConnected ? (NetworkRemote ? "ONLINE" : "LOCAL") : NetworkStatus,
-            10 => NetworkConnected ? NetworkId.ToString() : "-",
-            11 => NetworkConnected ? NetworkPlayers.ToString() : "1",
-            12 => NetworkConnected ? (NetworkId==NetworkHost ? "HOST" : "GUEST") : "SOLO",
             _ => ""
         };
         if(Page == 5) return row switch
@@ -812,19 +856,13 @@ internal sealed class DebugMenu
             2 => $"{SpringFrequency:0.0}",3 => $"{SpringDamping:0.00}",
             4 => $"{PidSmoothing:0.0}",5 => $"{SlideResistance:0.0}",
             6 => SnapHold?"ON":"OFF",7 => $"{SnapStep:0.00}",8 => $"{BodyCount}",
-            9 => ShowDebugOverlay ? "ON" : "OFF",10 => ShowObjectFrames ? "ON" : "OFF",_ => ""
+            _ => ""
         };
         if (Page == 0) return row switch
         {
-            0 => Dithering ? "ON" : "OFF",
-            1 => PaletteReduction ? "ON" : "OFF",
-            2 => $"{PaletteSteps}^3",
-            3 => $"{Saturation:0.00}",
-            4 => $"{Temperature:+#;-#;0}",
-            5 => $"{Contrast:0.00}",
-            6 => $"{RedMix:0.00}",
-            7 => $"{GreenMix:0.00}",
-            8 => $"{BlueMix:0.00}",
+            0 => $"{RedMix:0.00}",
+            1 => $"{GreenMix:0.00}",
+            2 => $"{BlueMix:0.00}",
             _ => ""
         };
         if (Page == 2) return row switch
@@ -879,6 +917,13 @@ internal sealed class DebugMenu
     }
     float Fraction(int row)
     {
+        if(Page>=11)
+        {
+            var (page,mappedRow)=MappedSetting(Page,row);
+            int original=Page;Page=page;
+            try { return Fraction(mappedRow); }
+            finally { Page=original; }
+        }
         if(Page == 8) return row switch
         {
             1 => (FlickerSettings.MinorInterval-8f)/112f,
@@ -927,13 +972,9 @@ internal sealed class DebugMenu
         };
         if (Page == 0) return row switch
         {
-            2 => (PaletteSteps - 2) / 30f,
-            3 => Saturation / 2f,
-            4 => (Temperature + 100) / 200f,
-            5 => Contrast - 0.5f,
-            6 => RedMix - 0.5f,
-            7 => GreenMix - 0.5f,
-            8 => BlueMix - 0.5f,
+            0 => RedMix - 0.5f,
+            1 => GreenMix - 0.5f,
+            2 => BlueMix - 0.5f,
             _ => 0f
         };
         if (Page == 2) return row switch
@@ -982,236 +1023,4 @@ internal sealed class DebugMenu
             _ => 0f
         };
     }
-
-    static void PixelText(Graphics g, string text, Brush brush, int x, int y)
-    {
-        DrawPixelText(g,text,Brushes.Black,x+1,y+1);
-        DrawPixelText(g,text,brush,x,y);
-    }
-    static void DrawPixelText(Graphics g, string text, Brush brush, int x, int y)
-    {
-        foreach(char c in text.ToUpperInvariant())
-        {
-            if(Glyphs.TryGetValue(c,out var rows))
-                for(int yy=0;yy<7;yy++) for(int xx=0;xx<5;xx++)
-                    if((rows[yy] & (1 << (4-xx))) != 0) g.FillRectangle(brush,x+xx,y+yy,1,1);
-            x += 6;
-        }
-    }
-    static void DrawFrameCorners(Graphics g,Brush brush,RectangleF bounds,int offset)
-    {
-        int left=(int)bounds.Left+offset,top=(int)bounds.Top+offset;
-        int right=(int)bounds.Right+offset,bottom=(int)bounds.Bottom+offset;
-        int corner=Math.Clamp(Math.Min(right-left,bottom-top)/4,2,4);
-        g.FillRectangle(brush,left,top,corner,1);
-        g.FillRectangle(brush,left,top,1,corner);
-        g.FillRectangle(brush,right-corner,top,corner,1);
-        g.FillRectangle(brush,right-1,top,1,corner);
-        g.FillRectangle(brush,left,bottom-1,corner,1);
-        g.FillRectangle(brush,left,bottom-corner,1,corner);
-        g.FillRectangle(brush,right-corner,bottom-1,corner,1);
-        g.FillRectangle(brush,right-1,bottom-corner,1,corner);
-    }
-    void DrawPonder(Graphics g,Brush white,Brush paleBlue,Brush green)
-    {
-        g.FillRectangle(new SolidBrush(Color.FromArgb(218,5,10,13)),18,24,284,194);
-        using var border=new Pen(Color.FromArgb(120,84,224,160));
-        g.DrawLine(border,new PointF(18,24),new PointF(302,24));
-        g.DrawLine(border,new PointF(302,24),new PointF(302,218));
-        g.DrawLine(border,new PointF(302,218),new PointF(18,218));
-        g.DrawLine(border,new PointF(18,218),new PointF(18,24));
-        for(int y=28;y<216;y+=4) g.FillRectangle(new SolidBrush(Color.FromArgb(18,130,220,180)),20,y,280,1);
-        string[] titles=["PONDER: BUILD GRID","PONDER: WIRE POWER","PONDER: WELD SHAPES","PONDER: MATERIALS"];
-        string[] details=["PLACE DEVICES ON THE 5X5X5 GRID","G CONNECTS OUTPUT TO INPUT","K JOINS ANY TWO GRABBABLES","SELECT CONCRETE WOOD METAL PLASTIC"];
-        PixelText(g,titles[PonderStep],green,28,34);
-        PixelText(g,details[PonderStep],paleBlue,28,47);
-        PointF Project(int x,int y,int z) => new(160+(x-z)*12,144+(x+z)*6-y*12);
-        using var gridPen=new Pen(Color.FromArgb(96,120,196,207));
-        for(int layer=0;layer<5;layer++)
-        for(int line=0;line<=5;line++)
-        {
-            g.DrawLine(gridPen,Project(line,layer,0),Project(line,layer,5));
-            g.DrawLine(gridPen,Project(0,layer,line),Project(5,layer,line));
-        }
-        for(int x=0;x<=5;x+=5)
-        for(int z=0;z<=5;z+=5) g.DrawLine(gridPen,Project(x,0,z),Project(x,4,z));
-        void Block(int x,int y,int z,Color color,string label)
-        {
-            PointF at=Project(x,y,z); using var fill=new SolidBrush(color);
-            g.FillRectangle(fill,(int)at.X-6,(int)at.Y-6,13,13);
-            PixelText(g,label,white,(int)at.X-3,(int)at.Y-3);
-        }
-        if(PonderStep==0) { Block(2,0,2,Color.FromArgb(155,181,108,46),"C");Block(3,1,2,Color.FromArgb(155,62,117,144),"T"); }
-        else if(PonderStep==1) { Block(1,0,2,Color.FromArgb(180,190,54,40),"B");Block(3,0,2,Color.FromArgb(180,239,201,70),"L"); using var wire=new Pen(Color.FromArgb(210,84,224,160));g.DrawLine(wire,Project(1,0,2),Project(3,0,2)); }
-        else if(PonderStep==2) { Block(1,0,2,Color.FromArgb(165,122,72,34),"P");Block(3,1,2,Color.FromArgb(165,122,72,34),"P");using var weld=new Pen(Color.FromArgb(220,236,244,247));g.DrawLine(weld,Project(1,0,2),Project(3,1,2)); }
-        else { Block(1,0,2,Color.FromArgb(180,105,105,105),"C");Block(2,0,2,Color.FromArgb(180,142,82,38),"W");Block(3,0,2,Color.FromArgb(180,145,170,181),"M");Block(4,0,2,Color.FromArgb(180,82,156,190),"P"); }
-        PixelText(g,"< LEFT RIGHT >    ESC CLOSE",paleBlue,64,202);
-        PixelText(g,$"{PonderStep+1}/4",white,266,34);
-    }
-
-    internal Bitmap Draw()
-    {
-        var image = new Bitmap(320, 240, PixelFormat.Format32bppArgb);
-        using var g = Graphics.FromImage(image);
-        g.CompositingMode = CompositingMode.SourceOver;
-        g.SmoothingMode = SmoothingMode.None;
-        g.Clear(Color.Transparent);
-        using var white = new SolidBrush(Color.FromArgb(237, 246, 247));
-        using var paleBlue = new SolidBrush(Color.FromArgb(170, 211, 231));
-        using var green = new SolidBrush(Color.FromArgb(84, 224, 160));
-        using var unfilled = new SolidBrush(Color.FromArgb(130, 160, 171));
-        if(Open && PonderPage)
-        {
-            DrawPonder(g,white,paleBlue,green);
-        }
-        else if(Open && SandboxPage)
-        {
-            PixelText(g,"BEANROOMS MENU",paleBlue,12,4);
-            PixelText(g,"X",white,310,4);
-            for(int category=0;category<SandboxCategories.Length;category++)
-                PixelText(g,SandboxCategories[category],category==SandboxCategory?green:white,
-                    12+category*75,17);
-            SandboxKind[] items=SandboxItems[SandboxCategory];
-            for(int slot=0;slot<SandboxRows;slot++)
-            {
-                int row=SandboxScroll+slot;
-                if(row>=items.Length) break;
-                int y=SandboxTop+slot*SandboxPitch;
-                bool focused=row==SandboxSelected;
-                bool spawnable=SandboxEnabled || items[row]==SandboxKind.Cube;
-                Brush ink=spawnable?focused?green:white:unfilled;
-                PixelText(g,$"{row+1}.",ink,21,y+3);
-                PixelText(g,SandboxName(items[row]),ink,44,y+3);
-                string value=spawnable?focused?"SPAWN <":"SPAWN":"LOCKED";
-                PixelText(g,value,ink,316-value.Length*6,y+3);
-            }
-            if(SandboxScroll>0) PixelText(g,"^",paleBlue,8,SandboxTop-1);
-            if(SandboxScroll<SandboxMaxScroll) PixelText(g,"v",paleBlue,8,SandboxTop+SandboxRows*SandboxPitch-3);
-            PixelText(g,"CUBE COLOR",white,21,151);
-            PixelText(g,"< "+CubeColors[CubeColorIndex].Name+" >",green,215,151);
-            PixelText(g,"MATERIAL",white,21,171);
-            PixelText(g,"< "+CubeMaterial.ToString().ToUpperInvariant()+" >",green,215,171);
-            PixelText(g,"CLEAR CUBES",white,21,189);
-            PixelText(g,"CLEAR",white,274,189);
-            string detail=SandboxDetail(items[SandboxSelected]);
-            PixelText(g,detail.Length>22?detail[..22]:detail,paleBlue,13,215);
-            PixelText(g,NetworkConnected?(SandboxHost?"HOST CONTROLS":"GUEST CONTROLS"):"LOCAL SANDBOX",paleBlue,251,215);
-            PixelText(g,"B CLOSE  G WIRE  K WELD  E USE",paleBlue,13,231);
-        }
-        else if(Open && TitleScreen)
-        {
-            PixelText(g,TitlePage==0?"BEANROOMS MENU":"BEANROOMS ONLINE",paleBlue,12,4);
-            if(TitlePage==0)
-            {
-                PixelText(g,"SELECT MODE",white,44,43);
-                string[] options=["PLAY SOLO","JOIN ONLINE","SETTINGS","EXIT"];
-                for(int row=0;row<options.Length;row++)
-                {
-                    string label=options[row];
-                    Brush ink=row==TitleSelected?green:white;
-                    PixelText(g,$"{row+1}.",ink,21,72+row*24);
-                    PixelText(g,label,ink,44,72+row*24);
-                }
-                PixelText(g,"UP DOWN SELECT  ENTER CONFIRM",paleBlue,13,225);
-            }
-            else
-            {
-                PixelText(g,"1.",TitleSelected==0?green:white,21,70);
-                PixelText(g,"PHOTON ROOM",TitleSelected==0?green:white,44,70);
-                string masked=JoinKey.Length==0?"ENTER KEY":new string('*',Math.Min(JoinKey.Length,20));
-                PixelText(g,masked+(EditingJoinKey?"-":""),TitleSelected==0?green:white,44,83);
-                PixelText(g,"2.",TitleSelected==1?green:white,21,125);
-                PixelText(g,"CONNECT",TitleSelected==1?green:white,44,125);
-                PixelText(g,"3.",TitleSelected==2?green:white,21,160);
-                PixelText(g,"BACK",TitleSelected==2?green:white,44,160);
-                PixelText(g,"STATUS "+(NetworkConnected?"ONLINE":NetworkStatus),paleBlue,13,225);
-            }
-        }
-        else if (Open)
-        {
-            PixelText(g,"BEANROOMS MENU",paleBlue,12,4);
-            PixelText(g,"RESET",white,270,4);
-            PixelText(g,"X",white,310,4);
-            for(int tab=0;tab<Tabs.Length;tab++)
-                PixelText(g,Tabs[tab].Name,Tabs[tab].Page==2&&!MovementControlsWritable?unfilled:
-                    Page==Tabs[tab].Page?green:white,
-                    12+(tab%4)*75,17+(tab/4)*12);
-            for (int row=0; row<Labels[Page].Length; row++)
-            {
-                int y = 54 + row * RowPitch;
-                int textOffset = Page is 1 or 8 ? 1 : 3;
-                bool focused=row==Selected;
-                bool locked=Page==5&&!MonsterControlsWritable ||
-                    Page==8&&!FlickerControlsWritable ||
-                    Page==2&&!MovementControlsWritable ||
-                    Page==9&&row==1&&!NetworkConnected&&!NetworkRemote ||
-                    Page==9&&row==7&&NetworkConnected&&!SandboxSupported;
-                Brush ink=locked?unfilled:focused?green:white;
-                PixelText(g,$"{row+1}.",ink,21,y+textOffset);
-                PixelText(g,Labels[Page][row],ink,44,y+textOffset);
-                if (IsSlider(row))
-                {
-                    int filled=(int)MathF.Round(Math.Clamp(Fraction(row),0f,1f)*20f);
-                    for(int tick=0;tick<20;tick++)
-                        g.FillRectangle(tick<filled ? ink : unfilled,155+tick*5,y+textOffset+3,4,4);
-                }
-                string value=Value(row);
-                if(IsChoice(row)) value="< "+value+" >";
-                PixelText(g,value,ink,316-value.Length*6,y+textOffset);
-            }
-            PixelText(g,$"SEED {DebugSeed}",paleBlue,110,225);
-            PixelText(g,$"FPS {Math.Clamp(FpsValue,0,999):000}",white,13,225);
-            if((Page==5&&!MonsterControlsWritable)||(Page==8&&!FlickerControlsWritable))
-                PixelText(g,"HOST ONLY",paleBlue,251,225);
-            if(Page==2&&!MovementControlsWritable)
-                PixelText(g,"SOLO ONLY",paleBlue,251,225);
-        }
-        else
-        {
-            if(WireTool)
-                PixelText(g,"WIRE TOOL: CLICK SOURCE, THEN TARGET",green,13,225);
-            else if(WeldTool)
-                PixelText(g,"WELD TOOL: CLICK TWO OBJECTS",green,13,225);
-            else if(!string.IsNullOrEmpty(ToolStatus))
-                PixelText(g,ToolStatus,green,13,225);
-            foreach(var tag in PlayerTags)
-            {
-                using var brush=new SolidBrush(tag.Ink);
-                PixelText(g,tag.Label,brush,(int)tag.At.X-tag.Label.Length*3,(int)tag.At.Y);
-            }
-            if(ShowObjectFrames) foreach(var frame in ObjectFrames)
-            {
-                DrawFrameCorners(g,Brushes.Black,frame,1);
-                DrawFrameCorners(g,white,frame,0);
-            }
-            foreach(var wire in SandboxWires)
-            {
-                using var pen=new Pen(wire.Ink);
-                g.DrawLine(pen,wire.A,wire.B);
-            }
-            if(ShowDebugOverlay)
-            {
-                for(int line=0;line<DebugLines.Length;line++)
-                    PixelText(g,DebugLines[line],line==0?green:line==1?paleBlue:white,13,10+line*12);
-                PixelText(g,MonsterTargetText,paleBlue,190,10);
-            }
-            if(ShowDebugOverlay && MonsterDebug)
-            {
-                foreach(var segment in MonsterSegments)
-                {
-                    using var pen=new Pen(segment.Ink);
-                    g.DrawLine(pen,segment.A,segment.B);
-                }
-                foreach(var point in MonsterPoints)
-                {
-                    using var brush=new SolidBrush(point.Ink);
-                    g.FillRectangle(brush,point.At.X-2,point.At.Y-2,5,5);
-                    PixelText(g,point.Label,brush,(int)point.At.X+4,(int)point.At.Y-3);
-                }
-            }
-        }
-        Dirty = false;
-        return image;
-    }
-
 }

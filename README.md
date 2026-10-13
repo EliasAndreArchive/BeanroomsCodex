@@ -1,8 +1,8 @@
 # Beanrooms
 
-Beanrooms is a low resolution 4:3 desktop game with procedural rooms, path traced and hybrid lighting, Bepu physics, and online multiplayer. The client uses Silk.NET/GLFW, OpenGL 4.3, OpenAL Soft for playback, Vercidium Audio v1.10.1 for raytraced source filtering and EAX room reverb, and Photon Realtime for online rooms. Nearby spatial sounds use Vercidium's grouped room effects; local, UI, and untracked distant sounds use the listener room. The Photon room master runs the authoritative cube, sandbox, and monster simulation and broadcasts snapshots. Photon v5.1.20 and its license are in `Beanrooms.Silk/ThirdParty/PhotonRealtime/`; Vercidium's DLL, API XML, and license are in `Beanrooms.Silk/ThirdParty/VercidiumAudio/`.
+Beanrooms is a low resolution 4:3 desktop game with procedural rooms, path traced and hybrid lighting, Bepu physics, and online multiplayer. The client uses Silk.NET/GLFW, OpenGL 4.3, OpenAL Soft for playback, Vercidium Audio v1.10.1 for raytraced source filtering and EAX room reverb, and Photon Realtime for online rooms. Nearby spatial sounds use Vercidium's grouped room effects; local, UI, and untracked distant sounds use the listener room. The Photon room master runs authoritative cube and monster simulation and broadcasts snapshots. Photon v5.1.20 and its license are in `Beanrooms.Silk/ThirdParty/PhotonRealtime/`; Vercidium's DLL, API XML, and license are in `Beanrooms.Silk/ThirdParty/VercidiumAudio/`.
 
-Varied concrete footsteps play for the local and online players. All physics objects use the original wood impact and concrete scrape sounds. Each object corner is tracked against the floor, walls, and other objects, so a landing corner clicks while a resting object stays quiet. Online scraping uses authority-measured contact slip speed. Nearby ceiling lights each emit a spatial hum. Sound source licenses are in `Nullrooms/assets/SFX-LICENSES.md`. The Photon room master simulates online object grabs and throws, and clients display its snapshots. Sandbox mode works in solo and is host-controlled online. Players can step onto low pallets; larger cubes remain obstacles.
+Varied concrete footsteps play for the local and online players. All physics objects use the original wood impact and concrete scrape sounds. Each object corner is tracked against the floor, walls, and other objects, so a landing corner clicks while a resting object stays quiet. Online scraping uses authority-measured contact slip speed. Nearby ceiling lights each emit a spatial hum. Sound source licenses are in `Nullrooms/assets/SFX-LICENSES.md`. The Photon room master simulates online object grabs and throws, and clients display its snapshots. Pallets no longer spawn in the world.
 
 ## Run the client
 
@@ -12,7 +12,7 @@ Install the .NET 8 SDK and run:
 dotnet run --project Beanrooms.Silk/Beanrooms.Silk.csproj -c Release
 ```
 
-The game starts fullscreen. Press **F11** for windowed mode, **Tab** for settings, and **Escape** to release the mouse. The title menu offers solo and online play. A GPU driver with OpenGL 4.3 support is required.
+The game starts fullscreen. Press **F11** for windowed mode, **Tab** for the pause menu, and **Escape** to release the mouse. The title menu offers solo and online play. The pause menu separates player **Settings** from **Developer** controls. A GPU driver with OpenGL 4.3 support is required.
 
 To make a standalone Windows build:
 
@@ -28,7 +28,7 @@ Every push to `main` builds self-contained Windows and Linux archives and publis
 
 ## Online rooms
 
-Choose **JOIN ONLINE**, enter the same room name as the other players, then connect. The client uses the configured Photon App ID; set `BEANROOMS_PHOTON_APP_ID` to override it for another Photon application. `Nullrooms.Server` and `Beanrooms.RenderBridge` remain available for legacy dedicated-server testing.
+Choose **JOIN ONLINE**, enter the same room name as the other players, then connect. The client uses the configured Photon App ID; set `BEANROOMS_PHOTON_APP_ID` to override it for another Photon application. The old dedicated server and Render bridge have been removed.
 
 ## Checks
 
@@ -36,6 +36,4 @@ Choose **JOIN ONLINE**, enter the same room name as the other players, then conn
 dotnet run --project Beanrooms.PortChecks/Beanrooms.PortChecks.csproj -c Release
 ```
 
-Add `--photon` to run the live two-client Photon room smoke test.
-
-See [client details](Beanrooms.Silk/README.md) for controls and additional local network checks.
+See [client details](Beanrooms.Silk/README.md) for controls and menu details.

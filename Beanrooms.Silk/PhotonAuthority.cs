@@ -2,8 +2,7 @@ using System.Numerics;
 
 namespace Beanrooms;
 
-// Photon Realtime relays room events. The elected room master runs this same
-// authoritative simulation formerly hosted by the standalone TCP server.
+// Photon Realtime relays room events. The elected room master simulates shared physics.
 internal sealed class PhotonAuthority : IDisposable
 {
     const float Step=1f/120f;
@@ -11,15 +10,13 @@ internal sealed class PhotonAuthority : IDisposable
     readonly Queue<(int Id,NetMessage Message)> incoming=[];
     readonly List<(int Target,NetMessage Message)> outgoing=[];
     readonly PhysicsBodies physics=new();
-    readonly SandboxWorld sandbox=new();
     readonly MonsterTuning monsterSettings=new();
     readonly FlickerTuning flickerSettings=new();
     List<System.Drawing.RectangleF> walls=[];
     MonsterBrain? monster;
-    bool sandboxEnabled,blackout,blackoutAfterEvent;
+    bool blackoutAfterEvent;
     int seed=82317;
-    float accumulator,snapshotTimer,flickerTimer,lastFlicker=-99f,deviceSnapshotAge;
-    int lastSandboxSignature=int.MinValue;
+    float accumulator,snapshotTimer,flickerTimer,lastFlicker=-99f;
 
     internal PhotonAuthority(IEnumerable<int> playerIds)
     {
@@ -29,11 +26,8 @@ internal sealed class PhotonAuthority : IDisposable
 
     void ResetWorld()
     {
-        physics.Clear(); sandbox.Clear();
-        lastSandboxSignature=int.MinValue;deviceSnapshotAge=1f;
+        physics.Clear();
         walls=WorldLayout.Generate(seed).Walls;
-        foreach(var plank in WorldLayout.CornerPlanks(seed,walls))
-            physics.SpawnCornerPlank(plank.Position,plank.Yaw,walls,new Vector3(96f,1.68f,96f));
         monster=new MonsterBrain(seed,walls,monsterSettings);
     }
 
@@ -46,7 +40,7 @@ internal sealed class PhotonAuthority : IDisposable
         var peer=new PhotonPeer(id) { X=spawn.X,Z=spawn.Y };
         peers.Add(id,peer);
         Send(id,new NetMessage { Type="welcome",ProtocolVersion=NetProtocol.Version,Id=id,Seed=seed,
-            X=peer.X,Y=peer.Y,Z=peer.Z,Blackout=blackout,BlackoutAfter=blackoutAfterEvent,
+            X=peer.X,Y=peer.Y,Z=peer.Z,Blackout=blackoutAfterEvent,BlackoutAfter=blackoutAfterEvent,
             FlickerAge=MathF.Max(-1f,flickerSettings.EventDuration-(flickerTimer-lastFlicker)) });
     }
 
@@ -74,10 +68,6 @@ internal sealed class PhotonAuthority : IDisposable
         accumulator=Math.Min(accumulator+Math.Clamp(dt,0,.05f),.1f);
         while(accumulator>=Step)
         {
-            sandbox.Update(Step,d=>physics.ApplyThruster(d.Position,d.Yaw,Step,d.Id),
-                d=>physics.ApplyPiston(d.Position,d.Rotation,Step,d.Id),d=>physics.DevicePressed(d),
-                d=>peers.Values.Any(p=>Vector3.DistanceSquared(d.Position,new Vector3(p.X,p.Y,p.Z))<3f*3f),
-                d=>physics.ApplyMechanism(d,Step));
             foreach(PhotonPeer peer in peers.Values)
                 if(physics.HeldBy(peer.Id)) { physics.SlideResistance=peer.SlideResistance; break; }
             if(physics.Bodies.Count>0)
@@ -88,12 +78,11 @@ internal sealed class PhotonAuthority : IDisposable
                             peer.SpringFrequency,peer.SpringDamping,peer.PidSmoothing,peer.GrabYaw,peer.GrabPitch,peer.SnapHold,peer.SnapStep)
                         : null,
                     peers.Values.Select(p=>new Vector3(p.X,p.Y,p.Z)).ToArray());
-            physics.SyncSandboxDevices(sandbox.Devices);
             monster?.Update(Step,peers.Values.Select(p=>new PlayerState { Id=p.Id,X=p.X,Y=p.Y,Z=p.Z,Yaw=p.Yaw }).ToArray(),physics.Bodies);
             accumulator-=Step;
         }
         if(flickerSettings.RandomEvents && flickerTimer>=lastFlicker+flickerSettings.EventInterval)
-            BroadcastFlicker(true);
+            BroadcastFlicker();
         snapshotTimer+=dt;
         if(snapshotTimer>=.05f) { snapshotTimer=0; BroadcastSnapshot(); }
     }
@@ -136,79 +125,23 @@ internal sealed class PhotonAuthority : IDisposable
                     Send(peer.Id,new NetMessage { Type="pickup_result",Action=physics.HeldCubeId(peer.Id),GrabSequence=message.GrabSequence }); break;
                 case "release": physics.Release(peer.Id); break;
                 case "grab_scroll": physics.NudgeGrabDistance(peer.Id,Math.Clamp(message.Action,-1,1)*.2f); break;
-                case "spawn":
-                    if(message.Action==1&&!sandboxEnabled) break;
-                    physics.Spawn(new Vector3(peer.X,peer.Y,peer.Z),Look(peer.Yaw,peer.Pitch),message.Action==1,walls,new Vector3(peer.X,peer.Y,peer.Z),new Vector3(Math.Clamp(message.R,0,1),Math.Clamp(message.G,0,1),Math.Clamp(message.B,0,1)),
-                        Enum.IsDefined(message.Material)?message.Material:PhysicsMaterial.Wood); break;
-                case "sandbox_toggle": if(IsHost(peer.Id)) sandboxEnabled=!sandboxEnabled; break;
-                case "device_spawn":
-                    if(sandboxEnabled&&Enum.IsDefined((SandboxKind)message.Action))
-                    { SandboxDevice? d=sandbox.Spawn((SandboxKind)message.Action,new Vector3(peer.X,peer.Y,peer.Z),Look(peer.Yaw,peer.Pitch),peer.Yaw,walls);
-                      if(d!=null&&!physics.SpawnSandboxDevice(d,walls,new Vector3(peer.X,peer.Y,peer.Z))) sandbox.Remove(d.Id); } break;
-                case "copy_cube":
-                    if(sandboxEnabled) physics.Spawn(new Vector3(peer.X,peer.Y,peer.Z),Look(peer.Yaw,peer.Pitch),message.Action==1,walls,new Vector3(peer.X,peer.Y,peer.Z),new Vector3(Math.Clamp(message.R,0,1),Math.Clamp(message.G,0,1),Math.Clamp(message.B,0,1)),
-                        Enum.IsDefined(message.Material)?message.Material:PhysicsMaterial.Wood); break;
-                case "copy_device":
-                    if(sandboxEnabled&&Enum.IsDefined((SandboxKind)message.Action))
-                    { SandboxDevice? d=sandbox.Spawn((SandboxKind)message.Action,new Vector3(peer.X,peer.Y,peer.Z),Look(peer.Yaw,peer.Pitch),peer.Yaw,walls);
-                      if(d!=null&&!physics.SpawnSandboxDevice(d,walls,new Vector3(peer.X,peer.Y,peer.Z))) sandbox.Remove(d.Id); } break;
-                case "device_interact":
-                    if(sandboxEnabled&&sandbox.Devices.Any(d=>d.Id==message.Action&&
-                        Vector3.DistanceSquared(d.Position,new Vector3(peer.X,peer.Y,peer.Z))<6f*6f))
-                        sandbox.Interact(message.Action);
-                    break;
-                case "wire":
-                    if(sandboxEnabled&&sandbox.Devices.Any(d=>d.Id==message.FromId&&
-                        Vector3.DistanceSquared(d.Position,new Vector3(peer.X,peer.Y,peer.Z))<6f*6f))
-                        sandbox.Connect(message.FromId,message.ToId);
-                    break;
-                case "weld":
-                    if(physics.Bodies.Any(b=>b.Id==message.FromId&&
-                        Vector3.DistanceSquared(b.Position,new Vector3(peer.X,peer.Y,peer.Z))<6f*6f))
-                        physics.TryWeld(message.FromId,message.ToId);
-                    break;
-                case "clear": if(IsHost(peer.Id)) { physics.Clear();sandbox.Clear(); } break;
-                case "regen": if(IsHost(peer.Id)) Regenerate(); break;
-                case "flicker": if(IsHost(peer.Id)) BroadcastFlicker(); break;
             }
         }
     }
 
-    void Regenerate()
-    {
-        seed=Random.Shared.Next(1,1_000_000_000); ResetWorld(); int slot=0;
-        foreach(PhotonPeer peer in peers.Values.OrderBy(p=>p.Id))
-        { Vector2 spawn=SpawnForSlot(slot++);peer.X=spawn.X;peer.Y=1.68f;peer.Z=spawn.Y;
-          Send(peer.Id,new NetMessage { Type="world",Seed=seed,X=peer.X,Y=peer.Y,Z=peer.Z,RespawnId=peer.RespawnId }); }
-    }
-
-    void BroadcastFlicker(bool random=false)
+    void BroadcastFlicker()
     {
         if(flickerTimer-lastFlicker<.75f) return;
-        bool restoring=blackout||blackoutAfterEvent; blackout=false;
-        blackoutAfterEvent=!restoring&&random&&Random.Shared.NextSingle()<flickerSettings.BlackoutChance;
+        bool restoring=blackoutAfterEvent;
+        blackoutAfterEvent=!restoring&&Random.Shared.NextSingle()<flickerSettings.BlackoutChance;
         lastFlicker=flickerTimer; Broadcast(new NetMessage { Type="flicker",BlackoutAfter=blackoutAfterEvent });
-    }
-
-    int SandboxSignature()
-    {
-        var hash=new HashCode();
-        foreach(SandboxDevice d in sandbox.Devices)
-        { hash.Add(d.Id);hash.Add(d.Kind);hash.Add((int)(d.X*100));hash.Add((int)(d.Y*100));hash.Add((int)(d.Z*100));
-          hash.Add((int)(d.Qx*1000));hash.Add((int)(d.Qy*1000));hash.Add((int)(d.Qz*1000));hash.Add((int)(d.Qw*1000));
-          hash.Add(d.State);hash.Add(d.BodyId); }
-        foreach(SandboxWire wire in sandbox.Wires) { hash.Add(wire.From);hash.Add(wire.To); }
-        return hash.ToHashCode();
     }
 
     void BroadcastSnapshot()
     {
-        int signature=SandboxSignature();
-        bool devicesChanged=signature!=lastSandboxSignature||deviceSnapshotAge>=1f;
-        if(devicesChanged) { lastSandboxSignature=signature;deviceSnapshotAge=0f; } else deviceSnapshotAge+=.05f;
         PlayerState[] players=peers.Values.Select(p=>new PlayerState { Id=p.Id,X=p.X,Y=p.Y,Z=p.Z,Yaw=p.Yaw,MoveSpeed=p.MoveSpeed,SprintBlend=p.SprintBlend,CrouchBlend=p.CrouchBlend,Name=p.Name,R=p.R,G=p.G,B=p.B }).ToArray();
-        CubeState[] cubes=physics.Bodies.Where(b=>b.SandboxDeviceId==0).Select(b=>new CubeState { Id=b.Id,HolderId=physics.HolderOf(b),X=b.Position.X,Y=b.Position.Y,Z=b.Position.Z,Vx=b.Velocity.X,Vy=b.Velocity.Y,Vz=b.Velocity.Z,Ax=b.AngularVelocity.X,Ay=b.AngularVelocity.Y,Az=b.AngularVelocity.Z,Qx=b.Rotation.X,Qy=b.Rotation.Y,Qz=b.Rotation.Z,Qw=b.Rotation.W,Grounded=b.Grounded,SlipSpeed=PhysicsBodies.ContactSlipSpeed(b),HalfSize=b.HalfSize,Emissive=b.Emissive,Plank=b.Plank,Material=b.Material,R=b.Color.X,G=b.Color.Y,B=b.Color.Z }).ToArray();
-        Broadcast(new NetMessage { Type="snapshot",Seed=seed,Players=players,Cubes=cubes,HostId=players.Select(p=>p.Id).DefaultIfEmpty(0).Min(),SandboxEnabled=sandboxEnabled,Devices=devicesChanged?sandbox.Devices.ToArray():[],Wires=devicesChanged?sandbox.Wires.ToArray():[],DevicesChanged=devicesChanged,CubeImpacts=physics.DrainCubeImpacts(),MonsterTuning=monsterSettings.Clone(),FlickerTuning=flickerSettings.Clone(),Monster=monster?.State });
+        CubeState[] cubes=physics.Bodies.Select(b=>new CubeState { Id=b.Id,HolderId=physics.HolderOf(b),X=b.Position.X,Y=b.Position.Y,Z=b.Position.Z,Vx=b.Velocity.X,Vy=b.Velocity.Y,Vz=b.Velocity.Z,Ax=b.AngularVelocity.X,Ay=b.AngularVelocity.Y,Az=b.AngularVelocity.Z,Qx=b.Rotation.X,Qy=b.Rotation.Y,Qz=b.Rotation.Z,Qw=b.Rotation.W,Grounded=b.Grounded,SlipSpeed=PhysicsBodies.ContactSlipSpeed(b),HalfSize=b.HalfSize,Emissive=b.Emissive,Plank=b.Plank,Material=b.Material,R=b.Color.X,G=b.Color.Y,B=b.Color.Z }).ToArray();
+        Broadcast(new NetMessage { Type="snapshot",Seed=seed,Players=players,Cubes=cubes,HostId=players.Select(p=>p.Id).DefaultIfEmpty(0).Min(),CubeImpacts=physics.DrainCubeImpacts(),MonsterTuning=monsterSettings.Clone(),FlickerTuning=flickerSettings.Clone(),Monster=monster?.State });
     }
 
     public void Dispose() => physics.Dispose();

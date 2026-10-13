@@ -12,7 +12,6 @@ namespace Beanrooms;
 internal sealed class RigidCube
 {
     internal int Id;
-    internal int SandboxDeviceId;
     internal Vector3 Position, Velocity, AngularVelocity;
     internal Vector3 Color = new(0.82f, 0.69f, 0.22f);
     internal Quaternion Rotation = Quaternion.Identity;
@@ -120,8 +119,6 @@ internal sealed class PhysicsBodies : IDisposable
         internal bool Active;
     }
     readonly Dictionary<int,Grab> grabs = new();
-    readonly List<ConstraintHandle> welds = new();
-    readonly HashSet<(int First,int Second)> weldedPairs = new();
     internal RigidCube? Held => grabs.TryGetValue(0,out Grab? grab) ? grab.Cube : null;
     internal int HolderOf(RigidCube cube) => grabs.FirstOrDefault(pair=>pair.Value.Cube==cube).Key;
     internal bool HeldBy(int holderId) => grabs.ContainsKey(holderId);
@@ -132,14 +129,6 @@ internal sealed class PhysicsBodies : IDisposable
         float desired=Math.Clamp(grab.LastHoldDistance+grab.DistanceOffset+delta,0.35f,6f);
         grab.DistanceOffset=desired-grab.LastHoldDistance;
         return true;
-    }
-    internal void ApplyThruster(Vector3 position,float yaw,float dt,int sourceDeviceId=0)
-    {
-        RigidCube? cube=Bodies.Where(body=>!body.HasHoldTarget && body.SandboxDeviceId!=sourceDeviceId)
-            .OrderBy(body=>Vector3.DistanceSquared(body.Position,position)).FirstOrDefault();
-        if(cube==null || Vector3.DistanceSquared(cube.Position,position)>1.5f*1.5f) return;
-        BodyReference reference=simulation.Bodies[cube.Handle];
-        reference.Velocity.Linear+=new Vector3(MathF.Sin(yaw),0f,MathF.Cos(yaw))*10f*dt;
     }
     internal float PickupRange = 5f, HoldDistance = 2.25f, Frequency = 8.5f, Damping = 1.35f, TargetSmoothing = 18f, SlideResistance = 4.5f;
     internal float RotateYaw=0f,RotatePitch=0f;
@@ -167,8 +156,6 @@ internal sealed class PhysicsBodies : IDisposable
             new SolveDescription(8, 2, 128), null, null);
         environmentReady = false;
         grabs.Clear();
-        welds.Clear();
-        weldedPairs.Clear();
         accumulator = 0;
     }
 
@@ -221,71 +208,6 @@ internal sealed class PhysicsBodies : IDisposable
             localExtents.X*MathF.Abs(m.M13) + localExtents.Y*MathF.Abs(m.M23) + localExtents.Z*MathF.Abs(m.M33));
     }
 
-    // A powered piston shoves the nearest free body directly in front of its face
-    // along the device's 3D forward axis, Minecraft-style (with the base excluded).
-    internal void ApplyPiston(Vector3 position,Quaternion rotation,float dt,int sourceDeviceId=0)
-    {
-        Vector3 forward=Vector3.Transform(Vector3.UnitZ,rotation);
-        if(forward.LengthSquared()<0.5f) forward=Vector3.UnitZ;
-        forward=Vector3.Normalize(forward);
-        Vector3 face=position+forward*0.5f;
-        RigidCube? cube=null;
-        float nearestAlong=float.MaxValue;
-        foreach(RigidCube body in Bodies)
-        {
-            if(body.HasHoldTarget || body.SandboxDeviceId==sourceDeviceId) continue;
-            Vector3 delta=body.Position-face;
-            float along=Vector3.Dot(delta,forward);
-            if(along<0.08f || along>1.6f || along>=nearestAlong) continue;
-            Vector3 radial=delta-forward*along;
-            if(radial.LengthSquared()>0.6f*0.6f) continue;
-            cube=body;nearestAlong=along;
-        }
-        if(cube==null) return;
-        simulation.Bodies[cube.Handle].Velocity.Linear+=forward*11f*dt;
-    }
-    internal void ApplyMechanism(SandboxDevice device,float dt)
-    {
-        RigidCube? source=Bodies.FirstOrDefault(body=>body.SandboxDeviceId==device.Id);
-        Vector3 forward=Vector3.Transform(Vector3.UnitZ,device.Rotation);
-        if(forward.LengthSquared()<.5f) forward=Vector3.UnitZ;
-        forward=Vector3.Normalize(forward);
-        if(device.Kind==SandboxKind.Hinge && source!=null)
-        { simulation.Bodies[source.Handle].Velocity.Angular+=Vector3.UnitY*5f*dt;return; }
-        if(device.Kind==SandboxKind.Wheel && source!=null)
-        { simulation.Bodies[source.Handle].Velocity.Linear+=forward*8f*dt;return; }
-        if(device.Kind==SandboxKind.Rope)
-        {
-            RigidCube? target=Bodies.Where(body=>body!=source&&!body.HasHoldTarget)
-                .OrderBy(body=>Vector3.DistanceSquared(body.Position,device.Position)).FirstOrDefault();
-            if(target!=null)
-            {
-                Vector3 pull=device.Position-target.Position;
-                if(pull.LengthSquared()<36f&&pull.LengthSquared()>.04f)
-                    simulation.Bodies[target.Handle].Velocity.Linear+=Vector3.Normalize(pull)*7f*dt;
-            }
-            return;
-        }
-        if(device.Kind==SandboxKind.Conveyor)
-            foreach(RigidCube body in Bodies)
-            {
-                if(body==source||body.HasHoldTarget) continue;
-                Vector3 delta=body.Position-device.Position;
-                if(MathF.Abs(delta.X)<.8f&&MathF.Abs(delta.Z)<.8f&&delta.Y>.05f&&delta.Y<.85f)
-                    simulation.Bodies[body.Handle].Velocity.Linear+=forward*5f*dt;
-            }
-    }
-
-    internal bool DevicePressed(SandboxDevice device)
-    {
-        foreach(RigidCube body in Bodies)
-        {
-            if(body.SandboxDeviceId==device.Id) continue;
-            Vector3 delta=body.Position-device.Position;
-            if(delta.X*delta.X+delta.Z*delta.Z<.48f*.48f && MathF.Abs(delta.Y)<.55f) return true;
-        }
-        return false;
-    }
     internal static float ContactSlipSpeed(Vector3 velocity,Vector3 angularVelocity,Quaternion rotation,float halfSize)
         => ContactSlipSpeed(velocity,angularVelocity,rotation,new Vector3(halfSize));
 
@@ -387,66 +309,6 @@ internal sealed class PhysicsBodies : IDisposable
         Bodies.Add(new RigidCube { Id=nextBodyId++,Position=position,HalfSize=half,
             LocalHalfExtents=new Vector3(half,halfHeight,half),Plank=true,
             Rotation=rotation,Material=PhysicsMaterial.Wood,Color=new Vector3(.43f,.24f,.10f),Handle=handle });
-        return true;
-    }
-
-    internal bool SpawnSandboxDevice(SandboxDevice device,IReadOnlyList<RectangleF> walls,Vector3 player)
-    {
-        EnsureEnvironment(walls);
-        const float half=0.35f;
-        Vector3 position=device.Position;
-        if(SpawnBlocked(position,half,walls,player)) return false;
-        Quaternion rotation=device.Rotation;
-        if(rotation.LengthSquared()<0.001f) rotation=Quaternion.CreateFromAxisAngle(Vector3.UnitY,device.Yaw);
-        var shape=new Box(half*2f,half*2f,half*2f);
-        TypedIndex shapeIndex=simulation.Shapes.Add(in shape);
-        BodyInertia inertia=shape.ComputeInertia(0.8f);
-        BodyHandle handle=simulation.Bodies.Add(BodyDescription.CreateDynamic(
-            new RigidPose(position,rotation),new BodyVelocity(),inertia,
-            new CollidableDescription(shapeIndex,0f,3f,ContinuousDetection.Continuous()),
-            new BodyActivityDescription(0.0001f,60)));
-        var body=new RigidCube { Id=nextBodyId++,SandboxDeviceId=device.Id,Position=position,
-            HalfSize=half,Material=PhysicsMaterial.Metal,Color=new Vector3(.42f,.48f,.52f),Handle=handle };
-        Bodies.Add(body);device.BodyId=body.Id;
-        return true;
-    }
-
-    internal void SyncSandboxDevices(IReadOnlyList<SandboxDevice> devices)
-    {
-        foreach(SandboxDevice device in devices)
-        {
-            RigidCube? body=Bodies.FirstOrDefault(candidate=>candidate.SandboxDeviceId==device.Id);
-            if(body==null) continue;
-            device.BodyId=body.Id;device.X=body.Position.X;device.Y=body.Position.Y;device.Z=body.Position.Z;
-            device.Qx=body.Rotation.X;device.Qy=body.Rotation.Y;device.Qz=body.Rotation.Z;device.Qw=body.Rotation.W;
-            device.Yaw=MathF.Atan2(2f*(body.Rotation.W*body.Rotation.Y+body.Rotation.X*body.Rotation.Z),
-                1f-2f*(body.Rotation.Y*body.Rotation.Y+body.Rotation.Z*body.Rotation.Z));
-        }
-    }
-
-    internal bool TryWeld(int firstId,int secondId)
-    {
-        if(firstId==secondId) return false;
-        (int First,int Second) pair=firstId<secondId?(firstId,secondId):(secondId,firstId);
-        if(!weldedPairs.Add(pair)) return false;
-        RigidCube? first=Bodies.FirstOrDefault(body=>body.Id==firstId);
-        RigidCube? second=Bodies.FirstOrDefault(body=>body.Id==secondId);
-        if(first==null||second==null||first.HasHoldTarget||second.HasHoldTarget)
-        { weldedPairs.Remove(pair);return false; }
-        // Measure reach from each body's true rotated shape, so two wide pallets
-        // can be welded from their opposite boards instead of being limited by a cube-only centre radius.
-        Vector3 reach=Extents(first)+Extents(second)+new Vector3(.35f);
-        Vector3 separation=Vector3.Abs(first.Position-second.Position);
-        if(separation.X>reach.X||separation.Y>reach.Y||separation.Z>reach.Z)
-        { weldedPairs.Remove(pair);return false; }
-        Quaternion inverse=Quaternion.Inverse(first.Rotation);
-        var weld=new Weld
-        {
-            LocalOffset=Vector3.Transform(second.Position-first.Position,inverse),
-            LocalOrientation=Quaternion.Normalize(inverse*second.Rotation),
-            SpringSettings=new SpringSettings(40f,2.2f)
-        };
-        welds.Add(simulation.Solver.Add(first.Handle,second.Handle,weld));
         return true;
     }
 

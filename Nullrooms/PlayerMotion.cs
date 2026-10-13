@@ -68,7 +68,7 @@ internal sealed class PlayerMotion
             { camera.Z=nextZ;FootElevation=zFoot; }
             else velocity.Y=0f;
             // Physical feet follow the support immediately for collision; the
-            // view follows smoothly so walking onto a pallet has no camera pop.
+            // view follows smoothly so stepping onto low support has no camera pop.
             float settledSupport=supportHeight(camera.X,camera.Z);
             if(settledSupport<=FootElevation+MaxStepHeight) FootElevation=settledSupport;
         }
