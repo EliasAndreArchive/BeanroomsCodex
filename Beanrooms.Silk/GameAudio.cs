@@ -73,6 +73,17 @@ internal sealed class GameAudio : IDisposable
         catch(Exception ex) { Console.Error.WriteLine($"Vercidium audio unavailable: {ex.Message}"); }
     }
 
+    internal void UpdateMenu(float dt)
+    {
+        if(!available) return;
+        foreach(LoopingSound lamp in lamps!)
+        { lamp.SetTarget(0);lamp.Update(dt); }
+        monster!.SetTarget(0);
+        monster.Update(dt);
+        physical!.Update(Vector3.Zero,0,new FootstepSource(0,Vector3.Zero,0,0,0),
+            [],[],[],dt,_=>VercidiumAcoustics.Filter.Clear,_=>-1,[]);
+    }
+
     internal void Update(Vector3 listener,float yaw,IReadOnlyList<Vector2> fixtures,bool lightsOn,
         MonsterState? eye,bool monsterOn,float speed,float sprintBlend,float crouchBlend,float dt,
         IReadOnlyList<FootstepSource> remotePlayers,IReadOnlyList<CubeSoundSource> cubes,

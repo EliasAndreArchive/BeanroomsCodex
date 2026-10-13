@@ -11,7 +11,7 @@ internal sealed partial class GameWindow
 {
     protected override void OnRawMouse(float dx,float dy)
     {
-        if(active && Focused) MoveMouse((int)MathF.Round(dx),(int)MathF.Round(dy));
+        if(HasPlayer && !menu.Open && active && Focused) MoveMouse((int)MathF.Round(dx),(int)MathF.Round(dy));
     }
     void MoveMouse(int dx,int dy)
     {

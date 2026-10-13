@@ -8,7 +8,7 @@ Run from the repository root:
 dotnet run --project Beanrooms.Silk/Beanrooms.Silk.csproj -c Release
 ```
 
-The game starts fullscreen with a low resolution 4:3 image. **F11** toggles fullscreen. **Tab** opens the pause menu; **Escape** goes back in menus or releases the mouse in play.
+The game starts fullscreen at a camcorder-style main menu with no active player or world camera. **F11** toggles fullscreen. **Tab** opens the pause menu while playing; **Escape** goes back in menus or releases the mouse in play.
 
 ## Controls
 
@@ -24,7 +24,7 @@ The game starts fullscreen with a low resolution 4:3 image. **F11** toggles full
 | Tab | Pause menu |
 | F11 | Fullscreen |
 
-The title screen is a non-player state: choose solo or join an online room before movement and interaction are enabled. Leaving either kind of session returns to that title screen and clears the active player. The pause menu has separate **Settings** and **Developer** entries. Settings contains display (including the lighting renderer), image (post effects, dither, and posterization), camera, HUD, and player profile. Developer contains detailed rendering, monster behavior, and diagnostics. Posterization uses a fixed 16-step palette. Monster controls are host-only in Photon rooms. Flicker remains part of the world without a settings page.
+Choose solo or join an online room before movement and interaction are enabled. Leaving either kind of session returns to the main menu, stops the world feed, and releases the player. The pause menu has separate **Settings** and **Developer** entries. Settings contains display (including the lighting renderer), image (post effects, dither, and posterization), HUD, and player profile. Developer contains detailed rendering, monster behavior, and diagnostics. Use **Q/E** to switch settings pages, arrows to change a setting, and **R** to reset the current page. Posterization uses a fixed 16-step palette. Monster controls are host-only in Photon rooms. Flicker remains part of the world without a settings page.
 
 Choose **JOIN ONLINE** on the title screen, enter the same Photon room name as the other players, then connect. `BEANROOMS_PHOTON_APP_ID` can override the included Photon App ID. The room master simulates online cubes and monster behavior; guests display its snapshots.
 

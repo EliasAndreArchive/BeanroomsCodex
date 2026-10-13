@@ -12,7 +12,7 @@ Install the .NET 8 SDK and run:
 dotnet run --project Beanrooms.Silk/Beanrooms.Silk.csproj -c Release
 ```
 
-The game starts fullscreen. Press **F11** for windowed mode, **Tab** for the pause menu, and **Escape** to release the mouse. The title menu offers solo and online play. The pause menu separates player **Settings** from **Developer** controls. A GPU driver with OpenGL 4.3 support is required.
+The game starts fullscreen on a camcorder-style main menu without a player or world camera. Choose solo or online play to enter a room; leaving either session returns to that menu and releases player control. Press **F11** for windowed mode, **Tab** for the pause menu while playing, and **Escape** to release the mouse. The pause menu separates player **Settings** from **Developer** controls. **Display > Lighting** switches between realtime and path traced rendering. The menu shows its navigation keys, and **R** resets the current settings page. A GPU driver with OpenGL 4.3 support is required.
 
 To make a standalone Windows build:
 

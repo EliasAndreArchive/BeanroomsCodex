@@ -11,21 +11,6 @@ internal sealed partial class DebugMenu
         12 => (10,row),
         _ => (page,row)
     };
-    bool IsSlider(int row)
-    {
-        var (page,mappedRow)=MappedSetting(Page,row);
-        return IsSliderCore(page,mappedRow);
-    }
-    static bool IsSliderCore(int page,int row) => page switch
-    {
-        1 => row is 1 or 2 or 3 or 4 or 5 or 6 or 7 or 9 or 12 or 13 or 14 or 15 or 16,
-        5 => row > 0,
-        6 => row is 2 or 3 or 4,
-        7 => row is 2 or 5 or 6 or 7,
-        9 => false,
-        10 => false,
-        _ => true
-    };
     bool IsChoice(int row)
     {
         var (page,mappedRow)=MappedSetting(Page,row);
@@ -33,32 +18,8 @@ internal sealed partial class DebugMenu
         {
             1 => mappedRow==0,
             6 => mappedRow==1,
-            7 => mappedRow==1,
             _ => false
         };
-    }
-    void SetSliderFromX(int row,int x)
-    {
-        float target=Math.Clamp((x-(WindowX+120))/58f,0f,1f);
-        float current=Fraction(row);
-        int direction=target>current?1:-1;
-        bool changed=false;
-        for(int attempt=0;attempt<1200;attempt++)
-        {
-            float distance=MathF.Abs(current-target);
-            Adjust(row,direction,false);
-            float next=Fraction(row);
-            if(MathF.Abs(next-current)<0.000001f) break;
-            if(MathF.Abs(next-target)>distance)
-            {
-                Adjust(row,-direction,false);
-                break;
-            }
-            changed=true;
-            current=next;
-            if(distance<0.00001f) break;
-        }
-        if(changed) InteractionSound?.Invoke();
     }
     void Adjust(int row, int direction,bool playSound=true)
     {
@@ -155,17 +116,14 @@ internal sealed partial class DebugMenu
             switch(row)
             {
                 case 0: PostEnabled=!PostEnabled;break;
-                case 1: TonemapMode=direction>0
-                    ? TonemapMode switch { 0=>2, 2=>3, _=>0 }
-                    : TonemapMode switch { 0=>3, 3=>2, _=>0 };break;
-                case 2: Exposure=Math.Clamp(Exposure+direction*0.01f,0.25f,3f);break;
-                case 3: AutoExposure=!AutoExposure;break;
-                case 4: Bloom=!Bloom;break;
-                case 5: BloomStrength=Math.Clamp(BloomStrength+direction*0.01f,0f,2f);break;
-                case 6: BloomThreshold=Math.Clamp(BloomThreshold+direction*0.01f,0.25f,4f);break;
-                case 7: BloomRadius=Math.Clamp(BloomRadius+direction*0.01f,0.5f,4f);break;
-                case 8: Dithering=!Dithering;break;
-                case 9: PaletteReduction=!PaletteReduction;break;
+                case 1: Exposure=Math.Clamp(Exposure+direction*0.01f,0.25f,3f);break;
+                case 2: AutoExposure=!AutoExposure;break;
+                case 3: Bloom=!Bloom;break;
+                case 4: BloomStrength=Math.Clamp(BloomStrength+direction*0.01f,0f,2f);break;
+                case 5: BloomThreshold=Math.Clamp(BloomThreshold+direction*0.01f,0.25f,4f);break;
+                case 6: BloomRadius=Math.Clamp(BloomRadius+direction*0.01f,0.5f,4f);break;
+                case 7: Dithering=!Dithering;break;
+                case 8: PaletteReduction=!PaletteReduction;break;
             }
         }
         else
@@ -212,11 +170,10 @@ internal sealed partial class DebugMenu
         if(Page == 7) return row switch
         {
             0 => PostEnabled?"ON":"OFF",
-            1 => TonemapMode switch { 0=>"OFF",2=>"ACES",_=>"NEUTRAL" },
-            2 => $"{Exposure:0.00}",3 => AutoExposure?"ON":"OFF",
-            4 => Bloom?"ON":"OFF",5 => $"{BloomStrength:0.00}",
-            6 => $"{BloomThreshold:0.00}",7 => $"{BloomRadius:0.00}",
-            8 => Dithering?"ON":"OFF",9 => PaletteReduction?"ON":"OFF",_ => ""
+            1 => $"{Exposure:0.00}",2 => AutoExposure?"ON":"OFF",
+            3 => Bloom?"ON":"OFF",4 => $"{BloomStrength:0.00}",
+            5 => $"{BloomThreshold:0.00}",6 => $"{BloomRadius:0.00}",
+            7 => Dithering?"ON":"OFF",8 => PaletteReduction?"ON":"OFF",_ => ""
         };
         if(Page == 6) return row switch
         {
@@ -277,67 +234,4 @@ internal sealed partial class DebugMenu
             _ => ""
         };
     }
-    float Fraction(int row)
-    {
-        if(Page>=11)
-        {
-            var (page,mappedRow)=MappedSetting(Page,row);
-            int original=Page;Page=page;
-            try { return Fraction(mappedRow); }
-            finally { Page=original; }
-        }
-        if(Page == 7) return row switch
-        {
-            2 => (Exposure-0.25f)/2.75f,
-            5 => BloomStrength/2f,6 => (BloomThreshold-0.25f)/3.75f,
-            7 => (BloomRadius-0.5f)/3.5f,_ => 0f
-        };
-        if(Page == 6) return row switch
-        { 2 => (PlayerRed-0.05f)/0.95f,3 => (PlayerGreen-0.05f)/0.95f,4 => (PlayerBlue-0.05f)/0.95f,_ => 0f };
-        if(Page == 5) return row switch
-        {
-            1 => (MonsterSettings.RoamSpeed-0.3f)/3.7f,
-            2 => (MonsterSettings.SearchSpeed-0.5f)/7.5f,
-            3 => (MonsterSettings.ChaseSpeed-2f)/12f,
-            4 => (MonsterSettings.ChaseTurn-20f)/220f,
-            5 => (MonsterSettings.SearchTurn-20f)/220f,
-            6 => (MonsterSettings.RoamTurn-20f)/220f,
-            7 => (MonsterSettings.SightRange-5f)/75f,
-            8 => (MonsterSettings.SightAngle-45f)/315f,
-            9 => (MonsterSettings.SearchRadius-0.5f)/4.5f,
-            10 => (MonsterSettings.RoamRadius-5f)/55f,
-            _ => 0f
-        };
-        if (Page == 3) return row switch
-        {
-            0 => (MouseSensitivity-0.0004f)/0.0046f,
-            1 => IdleShake/4f,
-            2 => WalkShake/8f,
-            3 => SprintShake/8f,
-            4 => CrouchShake/4f,
-            5 => HeadBob/2f,
-            6 => SwayAmount/2f,
-            7 => StrafeRoll/5f,
-            8 => TurnRoll/3f,
-            9 => MovePitch/4f,
-            10 => (CameraSmooth-1f)/19f,
-            _ => 0f
-        };
-        return row switch
-        {
-            3 => BounceStrength / 3f,
-            4 => AO / 1.5f,
-            5 => (LightIntensity - 0.1f) / 1.9f,
-            6 => LightDensity,
-            1 => Math.Max(0,Array.IndexOf(SampleChoices,Samples))/4f,
-            2 => (Bounces-1)/2f,
-            7 => ResolutionIndex/2f,
-            9 => FpsLimit == 0 ? 1f : (FpsLimit-15)/235f,
-            12 => FogDensity / 0.1f,
-            13 => (FogSteps - 2) / 6f,
-            14 => ProbeQuality/3f,
-            15 => (ProbeBounces-1)/5f,
-            16 => (HybridDirectSamples-1)/7f,
-            _ => 0f
-        };
-    }}
+}

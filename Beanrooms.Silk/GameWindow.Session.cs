@@ -149,6 +149,7 @@ internal sealed partial class GameWindow
         chaseLocked=false;chaseBlend=0f;mouseYawDelta=0f;
         menu.BodyCount=0;
         menu.ShowTitle();
+        audio?.SetWorld([]);
         wantsCapture=false;
         SuspendMouse();
     }

@@ -151,6 +151,7 @@ internal sealed partial class GameWindow : SilkForm
                 if(e.KeyCode==Keys.Escape) ToggleSettings(back:true);
                 else if(e.KeyCode==Keys.Q) menu.CyclePage(-1);
                 else if(e.KeyCode==Keys.E) menu.CyclePage(1);
+                else if(e.KeyCode==Keys.R && menu.View==DebugMenu.MenuView.Settings) menu.ResetDefaults();
                 else if(e.KeyCode==Keys.Up) menu.Select(-1);
                 else if(e.KeyCode==Keys.Down) menu.Select(1);
                 else if(e.KeyCode==Keys.Left) menu.AdjustSelected(-1);
@@ -171,7 +172,7 @@ internal sealed partial class GameWindow : SilkForm
         KeyUp += (_, e) =>
         {
             keys.Remove(e.KeyCode);
-            if(menu.Open) return;
+            if(menu.Open || !HasPlayer) return;
             if(e.KeyCode==Keys.C) crouchToggle=!crouchToggle;
         };
         MouseDown += (_, e) =>
@@ -215,7 +216,7 @@ internal sealed partial class GameWindow : SilkForm
             ToggleFullscreen();
             return true;
         }
-        if(keyData == Keys.Tab)
+        if(keyData == Keys.Tab && HasPlayer)
         {
             ToggleSettings();
             return true;
@@ -297,7 +298,6 @@ internal sealed partial class GameWindow : SilkForm
             CreateProbeTargets();
             CreateExposureTargets();
             audio=new GameAudio();
-            GenerateWorld();
             localMonster=null;
             visibleMonster=null;
             ready=true;
@@ -332,6 +332,12 @@ internal sealed partial class GameWindow : SilkForm
             double now=watch.Elapsed.TotalSeconds;
             float dt=(float)Math.Min(now-lastTime,0.05); lastTime=now;
             UpdateGame(dt);
+            if(!HasPlayer)
+            {
+                audio?.UpdateMenu(dt);
+                Render();
+                return;
+            }
             // Chase lighting is shared by everyone in the room, regardless of which player the monster sees.
             chaseLocked=menu.MonsterSettings.Enabled && visibleMonster?.Mode==2 &&
                 visibleMonster.TargetId>0;

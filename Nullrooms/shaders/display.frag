@@ -17,6 +17,7 @@ uniform int tonemapMode;
 uniform float exposure;
 uniform float transitionDark;
 uniform float transitionFlash;
+uniform int menuMode;
 const int bayer8[64] = int[64](
      0,48,12,60, 3,51,15,63,
     32,16,44,28,35,19,47,31,
@@ -57,6 +58,14 @@ void main() {
         return;
     }
     vec2 imageUv = contentPosition/contentSize;
+    if(menuMode != 0) {
+        ivec2 overlaySize = textureSize(overlayTexture,0);
+        ivec2 overlayPixel = clamp(ivec2(imageUv.x*float(overlaySize.x),
+            (1.0-imageUv.y)*float(overlaySize.y)),ivec2(0),overlaySize-1);
+        vec4 hud=texelFetch(overlayTexture,overlayPixel,0);
+        fragColor=vec4(mix(vec3(0.025,0.055,0.05),hud.rgb,hud.a),1.0);
+        return;
+    }
     ivec2 size = textureSize(accumulation,0);
     ivec2 pixel = clamp(ivec2(imageUv * vec2(size)),ivec2(0),size-1);
     vec3 c = texelFetch(accumulation,pixel,0).rgb;

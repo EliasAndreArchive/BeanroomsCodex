@@ -28,7 +28,8 @@ internal sealed partial class GameWindow
             flicker.Restore(watch.Elapsed.TotalSeconds,world.Blackout,world.BlackoutAfter);
             if(world.FlickerAge>=0f && world.FlickerAge<FlickerProfile.EventDuration)
                 flicker.Trigger(watch.Elapsed.TotalSeconds-world.FlickerAge,world.BlackoutAfter);
-            if(seed!=world.Seed) { seed=world.Seed; GenerateWorld(); }
+            if(sessionPhase==GameSessionPhase.JoiningRoom || seed!=world.Seed)
+            { seed=world.Seed; GenerateWorld(); }
             camera=new Vector3(world.X,world.Y,world.Z);
             motion.Reset();
             networkCubes=[];

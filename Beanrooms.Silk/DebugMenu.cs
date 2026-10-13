@@ -6,7 +6,6 @@ namespace Beanrooms;
 internal sealed partial class DebugMenu
 {
     internal enum MenuView { Pause, Categories, Settings, Help }
-    enum ParentWindowKind { None, Pause, Categories, Help }
     internal MenuView View = MenuView.Pause;
     MenuView settingsReturn=MenuView.Categories;
     internal int CategorySelected, ScrollRow;
@@ -63,19 +62,12 @@ internal sealed partial class DebugMenu
         ("WHITE", new Vector3(0.92f,0.92f,0.92f)),
         ("ORANGE", new Vector3(1f,0.36f,0.08f))
     };
-    int dragging = -1;
     int hoveredItem = -1;
-    internal int WindowX=45, WindowY=40;
-    bool movingWindow;
-    int windowGrabX, windowGrabY;
-    ParentWindowKind parentWindow;
-    int parentWindowX, parentWindowY;
     static readonly int[] SampleChoices = { 16, 32, 64, 128, 256 };
     bool developerCategories;
     static readonly (string Name,int Page)[] PlayerTabs =
     {
-        ("DISPLAY",11), ("IMAGE",7), ("CAMERA",3),
-        ("HUD",12), ("PROFILE",6)
+        ("DISPLAY",11), ("IMAGE",7), ("HUD",12), ("PROFILE",6)
     };
     static readonly (string Name,int Page)[] DeveloperTabs =
     {
@@ -117,8 +109,8 @@ internal sealed partial class DebugMenu
         new[] { "MOUSE SENS", "IDLE SHAKE", "WALK SHAKE", "SPRINT SHAKE", "CROUCH SHAKE", "HEAD BOB", "SWAY AMOUNT", "STRAFE ROLL", "TURN ROLL", "MOVE PITCH", "LOOK SMOOTH" },
         Array.Empty<string>(),
         new[] { "MONSTER", "ROAM SPEED", "SEARCH SPEED", "CHASE SPEED", "CHASE TURN", "SEARCH TURN", "ROAM TURN", "SIGHT RANGE", "SIGHT ANGLE", "SEARCH RADIUS", "ROAM RADIUS" },
-        new[] { "PLAYER NAME", "BEAN COLOR", "RED", "GREEN", "BLUE" },
-        new[] { "POST FX", "TONEMAP", "EXPOSURE", "AUTO EXPOSURE", "BLOOM", "BLOOM STRENGTH", "BLOOM THRESHOLD", "BLOOM RADIUS", "DITHER", "POSTERIZATION" },
+        new[] { "PLAYER NAME", "BEAN COLOR" },
+        new[] { "POST FX", "EXPOSURE", "AUTO EXPOSURE", "BLOOM", "BLOOM STRENGTH", "BLOOM THRESHOLD", "BLOOM RADIUS", "DITHER", "POSTERIZATION" },
         Array.Empty<string>(),
         new[] { "RESUME", "PROFILE", "SETTINGS", "DEVELOPER", "HELP", "LEAVE SESSION", "QUIT GAME" },
         new[] { "FRAME RATE", "OBJECT OUTLINES", "PLAYER NAMES", "SYSTEM INFO", "MONSTER VECTORS" },
