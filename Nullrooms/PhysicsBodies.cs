@@ -284,10 +284,10 @@ internal sealed class PhysicsBodies : IDisposable
     }
 
     internal bool SpawnAt(Vector3 position,bool emissive,IReadOnlyList<RectangleF> walls,Vector3 player,Vector3 color,
-        PhysicsMaterial material=PhysicsMaterial.Wood)
+        PhysicsMaterial material=PhysicsMaterial.Wood,float size=0f)
     {
         EnsureEnvironment(walls);
-        float half = emissive ? 0.38f : 0.43f;
+        float half = size>0f ? Math.Clamp(size,0.25f,2.5f)*0.5f : emissive ? 0.38f : 0.43f;
         position.Y = Math.Clamp(position.Y, half + 0.08f, Ceiling - half - 0.08f);
         if (SpawnBlocked(position, half, walls, player)) return false;
 

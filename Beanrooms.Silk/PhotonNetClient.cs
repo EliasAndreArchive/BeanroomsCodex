@@ -39,7 +39,7 @@ internal sealed class PhotonNetClient : INetClient, IConnectionCallbacks, IMatch
         if(started||disposed) return;
         started=true; status="CONNECTING";
         string appId=Environment.GetEnvironmentVariable("BEANROOMS_PHOTON_APP_ID")??DefaultAppId;
-        var settings=new AppSettings { AppIdRealtime=appId,AppVersion="beanrooms-3",FixedRegion="eu",
+        var settings=new AppSettings { AppIdRealtime=appId,AppVersion=$"beanrooms-{NetProtocol.Version}",FixedRegion="eu",
             Protocol=ConnectionProtocol.Udp,EnableProtocolFallback=true,NetworkLogging=LogLevel.Error,ClientLogging=LogLevel.Warning };
         if(!client.ConnectUsingSettings(settings)) status="PHOTON UNAVAILABLE";
     }

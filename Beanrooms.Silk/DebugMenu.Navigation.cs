@@ -8,48 +8,81 @@ internal sealed partial class DebugMenu
     internal void Toggle()
     {
         FinishEditing();
-        if(TitleScreen) { if(TitlePage==1) ShowTitle();return; }
-        if(Open && SettingsFromTitle) { ShowTitle();return; }
+        ClearCommand();
+        if(TitleScreen) { if(TitlePage==1) ShowTitle(resetHistory:false);return; }
+        if(Open && SettingsFromTitle) { ShowTitle(resetHistory:false);return; }
         Open=!Open;TitleScreen=false;SettingsFromTitle=false;
-        if(Open) { View=MenuView.Pause;Page=9;Selected=0; }
-        hoveredItem=-1;Dirty=true;InteractionSound?.Invoke();
+        if(Open)
+        {
+            View=MenuView.Pause;Page=9;Selected=0;
+            ResetTerminal();
+            PrintLine("TYPE COMMAND OR NUMBER, THEN ENTER");
+            PrintLine("PAGE UP / PAGE DOWN / WHEEL SCROLL");
+            PrintCurrentView();
+        }
+        Dirty=true;InteractionSound?.Invoke();
     }
     internal void Back()
     {
         FinishEditing();
-        if(TitleScreen) { if(TitlePage==1) ShowTitle();return; }
+        ClearCommand();
+        if(TitleScreen) { if(TitlePage==1) ShowTitle(resetHistory:false);return; }
         if(View==MenuView.Settings)
         {
             View=settingsReturn;
+            PrintCurrentView();
             Dirty=true;return;
         }
-        if(View is MenuView.Categories or MenuView.Help)
-        { if(SettingsFromTitle) ShowTitle(); else { View=MenuView.Pause;Page=9;Selected=0;Dirty=true; } return; }
+        if(View is MenuView.Categories or MenuView.Help or MenuView.Spawn)
+        { if(SettingsFromTitle) ShowTitle(resetHistory:false); else { View=MenuView.Pause;Page=9;Selected=0;PrintCurrentView();Dirty=true; } return; }
         Toggle();
     }
     internal void OpenCategories(bool developer=false)
     {
         FinishEditing();
+        ClearCommand();
         TitleScreen=false;developerCategories=developer;View=MenuView.Categories;CategorySelected=0;Dirty=true;InteractionSound?.Invoke();
+        PrintCurrentView();
     }
     internal void OpenHelp()
     {
         FinishEditing();
+        ClearCommand();
         TitleScreen=false;View=MenuView.Help;Dirty=true;InteractionSound?.Invoke();
+        PrintCurrentView();
     }
-    internal void ShowTitle()
+    internal void OpenSpawn()
+    {
+        FinishEditing();
+        ClearCommand();
+        TitleScreen=false;View=MenuView.Spawn;Dirty=true;InteractionSound?.Invoke();
+        PrintCurrentView();
+    }
+    internal void ShowTitle(bool resetHistory=true)
     {
         if(TitleScreen && TitlePage==1) CancelJoinAction?.Invoke();
+        ClearCommand();
+        if(resetHistory)
+        {
+            ResetTerminal();
+            PrintLine("BEANROOMS COMMAND TERMINAL READY");
+            PrintLine("TYPE COMMAND OR NUMBER, THEN ENTER");
+            PrintLine("PAGE UP / PAGE DOWN / WHEEL SCROLL");
+        }
         FinishEditing(); Open=true;TitleScreen=true;SettingsFromTitle=false;
-        TitlePage=0;TitleSelected=0;hoveredItem=-1;Dirty=true;
+        TitlePage=0;Dirty=true;
+        PrintCurrentView();
     }
     internal void LeaveTitle()
     {
-        FinishEditing(); Open=false;TitleScreen=false;SettingsFromTitle=false;Dirty=true;
+        ClearCommand();
+        FinishEditing(); Open=false;TitleScreen=false;SettingsFromTitle=false;ResetTerminal();Dirty=true;
     }
     internal void ShowJoinScreen()
     {
-        FinishEditing();TitleScreen=true;TitlePage=1;TitleSelected=0;Dirty=true;
+        ClearCommand();
+        FinishEditing();TitleScreen=true;TitlePage=1;Dirty=true;
+        PrintCurrentView();
     }
     internal void ShowSettingsFromTitle()
     {
@@ -58,11 +91,13 @@ internal sealed partial class DebugMenu
     internal void SetPage(int page)
     {
         if(page is 0 or 2 or 4 or 8 || page<0 || page>=Labels.Length) return;
+        ClearCommand();
         if(page!=9 && View!=MenuView.Settings)
             settingsReturn=View==MenuView.Pause?MenuView.Pause:MenuView.Categories;
         FinishEditing(); Page=Math.Clamp(page,0,12); Selected=0;ScrollRow=0;
         View=Page==9?MenuView.Pause:MenuView.Settings;
-        hoveredItem=-1;Dirty=true;InteractionSound?.Invoke();
+        Dirty=true;InteractionSound?.Invoke();
+        PrintCurrentView();
     }
     internal void CyclePage(int step)
     {
@@ -124,147 +159,12 @@ internal sealed partial class DebugMenu
         }
         FinishEditing();Dirty=true;
     }
-    internal void EditNameCharacter(char c)
-    {
-        c=char.ToUpperInvariant(c);
-        if(EditingName && (char.IsAsciiLetterOrDigit(c)||c==' '||c=='-') && PlayerName.Length<12)
-        { PlayerName+=c; Dirty=true; InteractionSound?.Invoke(); }
-    }
-    internal void BackspaceName() { if(EditingName && PlayerName.Length>0) { PlayerName=PlayerName[..^1];Dirty=true;InteractionSound?.Invoke(); } }
-    internal void FinishName() { EditingName=false;PlayerName=PlayerName.Trim();if(PlayerName.Length==0) PlayerName="BEAN";Dirty=true;InteractionSound?.Invoke(); }
-    internal void FinishEditing()
-    {
-        if(EditingName) FinishName();
-        EditingJoinKey=false;
-        JoinKey=JoinKey.Trim();
-        Dirty=true;
-    }
-    internal void EditConnectionCharacter(char c)
-    {
-        if(c<32 || c>126) return;
-        if(EditingJoinKey && JoinKey.Length<128) JoinKey+=c;
-        else return;
-        Dirty=true;
-    }
-    internal void PasteConnectionText(string text)
-    {
-        foreach(char c in text) EditConnectionCharacter(c);
-    }
-    internal void BackspaceConnection()
-    {
-        if(EditingJoinKey && JoinKey.Length>0) JoinKey=JoinKey[..^1];
-        Dirty=true;
-    }
-    internal void ClearConnectionField()
-    {
-        if(EditingJoinKey) JoinKey="";
-        Dirty=true;
-    }
-    internal void Select(int step)
-    {
-        if(TitleScreen)
-        {
-            int next=Math.Clamp(TitleSelected+step,0,TitlePage==0?3:2);
-            if(next!=TitleSelected) InteractionSound?.Invoke();
-            TitleSelected=next;Dirty=true;return;
-        }
-        if(View==MenuView.Categories)
-        { CategorySelected=Math.Clamp(CategorySelected+step,0,Tabs.Length-1);Dirty=true;InteractionSound?.Invoke();return; }
-        if(View==MenuView.Help) return;
-        int selected=Math.Clamp(Selected + step, 0, Labels[Page].Length - 1);
-        if(selected!=Selected) InteractionSound?.Invoke(); Selected=selected; Dirty=true;
-        EnsureVisible();
-    }
+    internal void FinishEditing() { JoinKey=JoinKey.Trim(); }
     void EnsureVisible()
     {
         if(View!=MenuView.Settings) return;
         if(Selected<ScrollRow) ScrollRow=Selected;
         else if(Selected>=ScrollRow+VisibleRows) ScrollRow=Selected-VisibleRows+1;
     }
-    const int VisibleRows=9;
-    const int PauseRowTop=80, PauseRowPitch=15;
-    const int CategoryRowTop=85, CategoryRowPitch=21;
-    const int SettingsRowTop=80, SettingsRowPitch=12;
-    const int TitleRowTop=91, TitleRowPitch=25;
-    static int RowAt(int x,int y,int first,int pitch,int count)
-    {
-        if(x<27 || x>=293 || y<first-6 || y>=first-6+count*pitch) return -1;
-        return (y-(first-6))/pitch;
-    }
-    int CategoryAt(int x,int y) => RowAt(x,y,CategoryRowTop,CategoryRowPitch,Tabs.Length);
-    int PauseAt(int x,int y) => RowAt(x,y,PauseRowTop,PauseRowPitch,Labels[9].Length);
-    int SettingsAt(int x,int y)
-    {
-        int slot=RowAt(x,y,SettingsRowTop,SettingsRowPitch,VisibleRows);
-        int row=slot<0?-1:ScrollRow+slot;
-        return row<Labels[Page].Length?row:-1;
-    }
-    int TitleRowAt(int x,int y) => RowAt(x,y,TitleRowTop,TitleRowPitch,TitlePage==0?4:3);
-    internal void AdjustSelected(int direction)
-    {
-        if(TitleScreen) ActivateTitleSelection();
-        else if(View==MenuView.Categories) SetPage(Tabs[CategorySelected].Page);
-        else if(View==MenuView.Help) Back();
-        else Adjust(Selected,direction);
-    }
-    void ActivateTitleSelection()
-    {
-        InteractionSound?.Invoke();
-        if(TitlePage==0)
-        {
-            switch(TitleSelected)
-            {
-                case 1: ShowJoinScreen();break;
-                case 2: ShowSettingsFromTitle();break;
-                default: TitleAction?.Invoke(TitleSelected);break;
-            }
-        }
-        else switch(TitleSelected)
-        {
-            case 0: FinishEditing();EditingJoinKey=true;JoinKey="";break;
-            case 1: FinishEditing();ConnectAction?.Invoke();break;
-            case 2: ShowTitle();break;
-        }
-        Dirty=true;
-    }
-    internal void MouseDown(int x,int y)
-    {
-        if(!Open) return;
-        if(TitleScreen)
-        {
-            int row=TitleRowAt(x,y);
-            if(row>=0) { TitleSelected=row;ActivateTitleSelection(); }
-            return;
-        }
-        if(View==MenuView.Help) { Back();return; }
-        if(View==MenuView.Categories)
-        {
-            int row=CategoryAt(x,y);
-            if(row>=0) { CategorySelected=row;SetPage(Tabs[row].Page); }
-            return;
-        }
-        int selected=View==MenuView.Pause?PauseAt(x,y):SettingsAt(x,y);
-        if(selected<0) return;
-        Selected=selected;Dirty=true;
-        if(View==MenuView.Pause) Adjust(selected,1);
-        else Adjust(selected,x>170 && x<205?-1:1);
-    }
-    internal void MouseMove(int x,int y)
-    {
-        if(!Open) return;
-        int row=TitleScreen?TitleRowAt(x,y):View==MenuView.Categories?CategoryAt(x,y):
-            View==MenuView.Pause?PauseAt(x,y):View==MenuView.Settings?SettingsAt(x,y):-1;
-        if(row<0 || row==hoveredItem) return;
-        hoveredItem=row;
-        if(TitleScreen) TitleSelected=row;
-        else if(View==MenuView.Categories) CategorySelected=row;
-        else Selected=row;
-        Dirty=true;HoverSound?.Invoke();
-    }
-    internal void MouseUp() { }
-    internal void MouseWheel(int delta)
-    {
-        if(View==MenuView.Settings)
-        { ScrollRow=Math.Clamp(ScrollRow-Math.Sign(delta),0,Math.Max(0,Labels[Page].Length-VisibleRows));Dirty=true; }
-    }
+    const int VisibleRows=10;
 }

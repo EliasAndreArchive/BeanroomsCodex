@@ -5,14 +5,15 @@ namespace Beanrooms;
 
 internal sealed partial class DebugMenu
 {
-    internal enum MenuView { Pause, Categories, Settings, Help }
+    internal enum MenuView { Pause, Categories, Settings, Help, Spawn }
     internal MenuView View = MenuView.Pause;
     MenuView settingsReturn=MenuView.Categories;
     internal int CategorySelected, ScrollRow;
     internal bool Open, TitleScreen, SettingsFromTitle, Dithering = true, PaletteReduction = true, PostEnabled = true, AutoExposure, Bloom = true, Lights = true, Vsync = true, Dirty = true, Volumetrics = true;
     internal string ObjectPrompt="";
+    internal string CommandLine="", CommandFeedback="";
     internal bool ShowFps;
-    internal int TitlePage, TitleSelected;
+    internal int TitlePage;
     internal int RenderMode = 2, ProbeQuality = 2, ProbeBounces = 4, HybridDirectSamples = 4;
     internal string RenderModeName => RenderMode == 1 ? "Realtime" : "Path traced";
     internal int Samples = 32, Bounces = 2, ResolutionIndex, FpsLimit;
@@ -36,8 +37,7 @@ internal sealed partial class DebugMenu
     internal string PlayerName = "BEAN";
     internal float PlayerRed = 0.78f, PlayerGreen = 0.76f, PlayerBlue = 0.70f;
     internal int PlayerColorIndex = -1;
-    internal bool EditingName, EditingJoinKey, NetworkConnected;
-    internal bool EditingText => EditingName || EditingJoinKey;
+    internal bool NetworkConnected;
     internal string JoinKey = "", NetworkStatus = "OFFLINE";
     internal int NetworkId, NetworkHost, NetworkPlayers;
     internal (PointF A,PointF B,Color Ink)[] MonsterSegments = [];
@@ -51,6 +51,7 @@ internal sealed partial class DebugMenu
     internal Action<int>? SessionAction;
     internal Action? InteractionSound, HoverSound;
     internal Action? CancelJoinAction;
+    internal Func<CubeSpawnSpec,string>? SpawnAction;
     static readonly (string Name, Vector3 Color)[] CubeColors =
     {
         ("AMBER", new Vector3(0.82f,0.69f,0.22f)),
@@ -62,7 +63,6 @@ internal sealed partial class DebugMenu
         ("WHITE", new Vector3(0.92f,0.92f,0.92f)),
         ("ORANGE", new Vector3(1f,0.36f,0.08f))
     };
-    int hoveredItem = -1;
     static readonly int[] SampleChoices = { 16, 32, 64, 128, 256 };
     bool developerCategories;
     static readonly (string Name,int Page)[] PlayerTabs =
@@ -99,7 +99,8 @@ internal sealed partial class DebugMenu
         ['*']=[0,4,21,14,21,4,0],
         ['<']=[2,4,8,16,8,4,2], ['>']=[8,4,2,1,2,4,8],
         ['.']=[0,0,0,0,0,12,12], ['-']=[0,0,0,31,0,0,0],
-        ['+']=[0,4,4,31,4,4,0], [':']=[0,4,4,0,4,4,0]
+        ['+']=[0,4,4,31,4,4,0], [':']=[0,4,4,0,4,4,0],
+        ['_']=[0,0,0,0,0,0,31], ['=']=[0,0,31,0,31,0,0]
     };
     static readonly string[][] Labels =
     {
@@ -112,7 +113,7 @@ internal sealed partial class DebugMenu
         new[] { "PLAYER NAME", "BEAN COLOR" },
         new[] { "POST FX", "EXPOSURE", "AUTO EXPOSURE", "BLOOM", "BLOOM STRENGTH", "BLOOM THRESHOLD", "BLOOM RADIUS", "DITHER", "POSTERIZATION" },
         Array.Empty<string>(),
-        new[] { "RESUME", "PROFILE", "SETTINGS", "DEVELOPER", "HELP", "LEAVE SESSION", "QUIT GAME" },
+        new[] { "RESUME", "PROFILE", "SETTINGS", "DEVELOPER", "SPAWN", "HELP", "LEAVE SESSION", "QUIT GAME" },
         new[] { "FRAME RATE", "OBJECT OUTLINES", "PLAYER NAMES", "SYSTEM INFO", "MONSTER VECTORS" },
         new[] { "LIGHTING", "RESOLUTION", "FPS LIMIT", "VSYNC" },
         new[] { "FPS COUNTER", "OBJECT BRACKETS", "PLAYER NAMES" }

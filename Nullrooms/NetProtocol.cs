@@ -6,7 +6,7 @@ internal static class NetProtocol
 {
     // Bump when a server changes a feature whose absence would otherwise look like
     // a valid, but ignored, client command.
-    internal const int Version=6;
+    internal const int Version=7;
 }
 
 internal sealed class NetMessage
@@ -17,6 +17,9 @@ internal sealed class NetMessage
     public int Seed { get; set; }
     public int Action { get; set; }
     public int GrabSequence { get; set; }
+    public int SpawnAmount { get; set; }
+    public float SpawnSize { get; set; }
+    public bool Emissive { get; set; }
     public float MoveSpeed { get; set; }
     public float SprintBlend { get; set; }
     public float CrouchBlend { get; set; }

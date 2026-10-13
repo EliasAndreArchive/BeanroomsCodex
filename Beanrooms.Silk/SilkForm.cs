@@ -10,7 +10,7 @@ namespace Beanrooms;
 internal enum Keys
 {
     None,A,B,Back,C,ControlKey,D,D1,D2,D3,Delete,Down,E,Enter,Escape,F,F11,G,H,
-    K,LControlKey,Left,LShiftKey,M,O,OemCloseBrackets,OemMinus,OemOpenBrackets,Oemplus,
+    K,LControlKey,Left,LShiftKey,M,O,OemCloseBrackets,OemMinus,OemOpenBrackets,Oemplus,PageUp,PageDown,
     P,Q,R,RControlKey,Right,RShiftKey,S,ShiftKey,Space,T,Tab,Up,V,W,X,Y
 }
 internal sealed class KeyEventArgs(Keys key,bool control) : EventArgs
@@ -176,6 +176,7 @@ internal abstract class SilkForm : IDisposable
         Key.Backspace=>Keys.Back,Key.Delete=>Keys.Delete,Key.Down=>Keys.Down,
         Key.Enter=>Keys.Enter,Key.Escape=>Keys.Escape,Key.F11=>Keys.F11,
         Key.Left=>Keys.Left,Key.Right=>Keys.Right,Key.Up=>Keys.Up,
+        Key.PageUp=>Keys.PageUp,Key.PageDown=>Keys.PageDown,
         Key.Space=>Keys.Space,Key.Tab=>Keys.Tab,Key.ControlLeft=>Keys.LControlKey,
         Key.ControlRight=>Keys.RControlKey,Key.ShiftLeft=>Keys.LShiftKey,
         Key.ShiftRight=>Keys.RShiftKey,Key.LeftBracket=>Keys.OemOpenBrackets,

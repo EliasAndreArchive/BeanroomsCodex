@@ -17,7 +17,7 @@ Beanrooms is a .NET 8 desktop game. The main client uses Silk.NET/GLFW, OpenGL 4
 | `Beanrooms.Silk/PhotonNetClient.cs` | Photon transport and snapshot buffering |
 | `Beanrooms.Silk/PhotonAuthority.cs` | Room master physics, monster, and flicker authority |
 | `Beanrooms.Silk/GameAudio.cs`, `PhysicalSounds.cs`, `VercidiumAcoustics.cs` | Sound playback, physics contact audio, and raytraced acoustics |
-| `Nullrooms/PhysicsBodies.cs`, `WorldProps.cs` | Shared Bepu cube simulation, placement, collisions, pickup, and fixed interaction values |
+| `Nullrooms/PhysicsBodies.cs`, `WorldProps.cs`, `CubeSpawner.cs` | Shared Bepu cube simulation, fixed props, command spawning, collisions, and pickup |
 | `Nullrooms/NetworkClient.cs`, `NetProtocol.cs` | Solo/online transport contract and messages |
 | `Nullrooms/WorldLayout.cs`, `MonsterBrain.cs`, `PlayerMotion.cs`, `LightFlicker.cs` | Shared game behavior and fixed world profiles |
 | `Nullrooms/shaders/`, `Nullrooms/assets/` | Rendering source and licensed game assets |
@@ -28,6 +28,7 @@ Beanrooms is a .NET 8 desktop game. The main client uses Silk.NET/GLFW, OpenGL 4
 - Keep shared game rules in `Nullrooms/`. The client presents state and gathers input; `PhotonAuthority` owns online shared physics and host controls.
 - Do not predict held cube movement or throws on guests without reconciliation. `CubeState.HolderId` identifies a current holder.
 - Keep world props consistent across solo and Photon authority setup.
+- Route cube spawn commands through `CubeSpawner` in solo and Photon authority; validate size, color, amount, and world object count.
 - Changes to object encoding must update both `GameWindow.Rendering.cs` and `pathtrace.frag`.
 - Settings are for player preferences, including the lighting renderer and image post effects. Developer controls contain monster behavior, detailed GI parameters, and diagnostics. Host-only controls must stay host-only online. Flicker and object physics remain gameplay systems without tuning pages.
 - Preserve raytraced audio and original impact/scrape sounds. Retain Photon, Vercidium, and sound asset licenses.

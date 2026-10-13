@@ -132,6 +132,23 @@ internal sealed partial class GameWindow
         CloseSettings();
     }
 
+    string SpawnCubes(CubeSpawnSpec spec)
+    {
+        if(!HasPlayer) return "NO ACTIVE SESSION";
+        if(network.Connected)
+        {
+            network.Send(new NetMessage { Type="spawn_cube",SpawnSize=spec.Size,
+                SpawnAmount=spec.Amount,Emissive=spec.Emissive,
+                R=spec.Color.X,G=spec.Color.Y,B=spec.Color.Z });
+            return "SPAWN REQUEST SENT";
+        }
+        ViewPose(out Vector3 eye,out Vector3 forward);
+        int spawned=CubeSpawner.Spawn(physics,boxes,eye,forward,spec);
+        menu.BodyCount=physics.Bodies.Count;
+        menu.Dirty=true;
+        return spawned==0?"NO CLEAR SPACE":$"SPAWNED {spawned} OF {spec.Amount}";
+    }
+
     void LeaveSession()
     {
         if(network.Connected) network.Send(new NetMessage { Type="release" });
@@ -189,7 +206,6 @@ internal sealed partial class GameWindow
         network.Send(new NetMessage { Type="release" });
         physics.Release();
         if(back) menu.Back(); else menu.Toggle();
-        if(opening && !menu.TitleScreen) menu.SetPage(9);
         if(menu.Open) { wantsCapture=false; SuspendMouse(); }
         else CloseSettings();
     }

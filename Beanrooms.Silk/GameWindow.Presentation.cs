@@ -179,7 +179,7 @@ internal sealed partial class GameWindow
         }
         menu.ObjectFrames=found&&ProjectCubeFrame(hitPosition,hitRotation,hitHalf,eye,right,up,forward,out RectangleF bounds)
             ?[bounds]:[];
-        menu.ObjectPrompt=menu.ObjectFrames.Length==0?"":heldId!=0?"LMB HOLD":"LMB GRAB";
+        menu.ObjectPrompt=menu.ObjectFrames.Length==0?"":heldId!=0?"RMB TO ROTATE":"LMB GRAB";
         menu.Dirty=true;
     }
     void UploadOverlay()

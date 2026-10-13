@@ -19,7 +19,7 @@ internal sealed partial class GameWindow
         }
         string connectionStatus=network.Status;
         if(networkStarted && menu.NetworkStatus!=connectionStatus)
-        { menu.NetworkStatus=connectionStatus;menu.Dirty=true; }
+        { menu.NetworkStatus=connectionStatus;menu.ReportStatus(connectionStatus);menu.Dirty=true; }
         NetMessage? lightEvent=network.ConsumeFlicker();
         if(lightEvent!=null) flicker.Trigger(watch.Elapsed.TotalSeconds,lightEvent.BlackoutAfter);
         NetMessage? world=network.ConsumeWorld();

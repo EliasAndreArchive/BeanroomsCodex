@@ -11,16 +11,6 @@ internal sealed partial class DebugMenu
         12 => (10,row),
         _ => (page,row)
     };
-    bool IsChoice(int row)
-    {
-        var (page,mappedRow)=MappedSetting(Page,row);
-        return page switch
-        {
-            1 => mappedRow==0,
-            6 => mappedRow==1,
-            _ => false
-        };
-    }
     void Adjust(int row, int direction,bool playSound=true)
     {
         if(Page>=11)
@@ -91,7 +81,7 @@ internal sealed partial class DebugMenu
         {
             switch(row)
             {
-                case 0: FinishEditing();EditingName=true;PlayerName="";break;
+                case 0: break;
                 case 1: PlayerColorIndex=(PlayerColorIndex+direction+CubeColors.Length)%CubeColors.Length;
                     Vector3 color=CubeColors[PlayerColorIndex].Color;
                     PlayerRed=color.X;PlayerGreen=color.Y;PlayerBlue=color.Z;break;
@@ -106,9 +96,10 @@ internal sealed partial class DebugMenu
             else if(row==1) SetPage(6);
             else if(row==2) OpenCategories();
             else if(row==3) OpenCategories(developer:true);
-            else if(row==4) OpenHelp();
-            else if(row==5) SessionAction?.Invoke(1);
-            else if(row==6) SessionAction?.Invoke(2);
+            else if(row==4) OpenSpawn();
+            else if(row==5) OpenHelp();
+            else if(row==6) SessionAction?.Invoke(1);
+            else if(row==7) SessionAction?.Invoke(2);
             else return;
         }
         else if(Page == 7)
@@ -163,8 +154,8 @@ internal sealed partial class DebugMenu
         })?"ON":"OFF";
         if(Page == 9) return row switch
         {
-            0 => "PLAY",1=>"OPEN",2=>"OPEN",3=>"OPEN",4=>"OPEN",
-            5 => "MENU",6=>"EXIT",
+            0 => "PLAY",1=>"OPEN",2=>"OPEN",3=>"OPEN",4=>"OPEN",5=>"OPEN",
+            6 => "MENU",7=>"EXIT",
             _ => ""
         };
         if(Page == 7) return row switch
@@ -177,7 +168,7 @@ internal sealed partial class DebugMenu
         };
         if(Page == 6) return row switch
         {
-            0 => EditingName ? PlayerName+"_" : PlayerName,
+            0 => PlayerName,
             1 => PlayerColorIndex<0 ? "CUSTOM" : CubeColors[PlayerColorIndex].Name,
             2 => $"{PlayerRed:0.00}",3 => $"{PlayerGreen:0.00}",4 => $"{PlayerBlue:0.00}",
             _ => ""

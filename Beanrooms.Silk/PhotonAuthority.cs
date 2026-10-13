@@ -122,6 +122,17 @@ internal sealed class PhotonAuthority : IDisposable
                     Send(peer.Id,new NetMessage { Type="pickup_result",Action=physics.HeldCubeId(peer.Id),GrabSequence=message.GrabSequence }); break;
                 case "release": physics.Release(peer.Id); break;
                 case "grab_scroll": physics.NudgeGrabDistance(peer.Id,Math.Clamp(message.Action,-1,1)*.2f); break;
+                case "spawn_cube":
+                    if(!float.IsFinite(message.SpawnSize) || message.SpawnSize<0.25f || message.SpawnSize>2.5f ||
+                       message.SpawnAmount<1 || message.SpawnAmount>8 ||
+                       !float.IsFinite(message.R) || !float.IsFinite(message.G) || !float.IsFinite(message.B))
+                        break;
+                    var spawn=new CubeSpawnSpec(message.Emissive,message.SpawnSize,
+                        new Vector3(Math.Clamp(message.R,0f,1f),Math.Clamp(message.G,0f,1f),
+                            Math.Clamp(message.B,0f,1f)),message.SpawnAmount);
+                    CubeSpawner.Spawn(physics,walls,new Vector3(peer.X,peer.Y,peer.Z),
+                        Look(peer.Yaw,peer.Pitch),spawn);
+                    break;
             }
         }
     }

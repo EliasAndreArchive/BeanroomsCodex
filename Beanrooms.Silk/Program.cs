@@ -102,6 +102,7 @@ internal sealed partial class GameWindow : SilkForm
         network = new SoloNetClient();
         menu.ConnectAction=ConnectOnline;
         menu.CancelJoinAction=CancelJoin;
+        menu.SpawnAction=SpawnCubes;
         menu.TitleAction=choice=>
         {
             if(choice==0) StartSoloSession();
@@ -134,28 +135,16 @@ internal sealed partial class GameWindow : SilkForm
         {
             if(menu.Open)
             {
-                if(menu.EditingText)
-                {
-                    bool handled=true;
-                    if(e.KeyCode is Keys.Escape or Keys.Enter) menu.FinishEditing();
-                    else if(e.KeyCode==Keys.Back)
-                    { if(menu.EditingName) menu.BackspaceName(); else menu.BackspaceConnection(); }
-                    else if(e.KeyCode==Keys.Delete && !menu.EditingName) menu.ClearConnectionField();
-                    else if(e.Control && e.KeyCode==Keys.A && !menu.EditingName) menu.ClearConnectionField();
-                    else if(e.Control && e.KeyCode==Keys.V && !menu.EditingName && !string.IsNullOrEmpty(ClipboardText))
-                        menu.PasteConnectionText(ClipboardText);
-                    else handled=false;
-                    e.Handled=handled;
-                    return;
-                }
                 if(e.KeyCode==Keys.Escape) ToggleSettings(back:true);
-                else if(e.KeyCode==Keys.Q) menu.CyclePage(-1);
-                else if(e.KeyCode==Keys.E) menu.CyclePage(1);
-                else if(e.KeyCode==Keys.R && menu.View==DebugMenu.MenuView.Settings) menu.ResetDefaults();
-                else if(e.KeyCode==Keys.Up) menu.Select(-1);
-                else if(e.KeyCode==Keys.Down) menu.Select(1);
-                else if(e.KeyCode==Keys.Left) menu.AdjustSelected(-1);
-                else if(e.KeyCode is Keys.Right or Keys.Enter or Keys.Space) menu.AdjustSelected(1);
+                else if(e.KeyCode==Keys.Enter)
+                { menu.SubmitCommand();if(!menu.Open) CloseSettings(); }
+                else if(e.KeyCode==Keys.Back) menu.BackspaceCommand();
+                else if(e.KeyCode==Keys.PageUp) menu.ScrollTerminal(10);
+                else if(e.KeyCode==Keys.PageDown) menu.ScrollTerminal(-10);
+                else if(e.Control && e.KeyCode==Keys.V && !string.IsNullOrEmpty(ClipboardText))
+                    menu.PasteCommand(ClipboardText);
+                else if(e.Control && e.KeyCode==Keys.A) menu.ClearCommand();
+                else return;
                 e.Handled=true;
                 return;
             }
@@ -164,9 +153,8 @@ internal sealed partial class GameWindow : SilkForm
         };
         KeyPress += (_, e) =>
         {
-            if(!menu.Open || !menu.EditingText) return;
-            if(menu.EditingName) menu.EditNameCharacter(e.KeyChar);
-            else menu.EditConnectionCharacter(e.KeyChar);
+            if(!menu.Open) return;
+            menu.TypeCommandCharacter(e.KeyChar);
             e.Handled=true;
         };
         KeyUp += (_, e) =>
@@ -179,8 +167,6 @@ internal sealed partial class GameWindow : SilkForm
         {
             if(menu.Open)
             {
-                if(TryMenuPoint(e.Location,out Point point)) menu.MouseDown(point.X,point.Y);
-                if(!menu.Open) CloseSettings();
                 return;
             }
             if(!HasPlayer) return;
@@ -201,9 +187,8 @@ internal sealed partial class GameWindow : SilkForm
                 physics.TryPickup(eye,forward,ViewRotation(),boxes);
             }
         };
-        MouseMove += (_, e) => { if(menu.Open && TryMenuPoint(e.Location,out Point point)) menu.MouseMove(point.X,point.Y); };
-        MouseWheel += (_, e) => { if(e.Delta==0) return; if(menu.Open) { menu.MouseWheel(e.Delta); return; } if(!HasPlayer) return; int step=Math.Sign(e.Delta); if(network.Connected) { if(networkHolding || networkCubes.Any(cube=>cube.HolderId==network.Id && network.Id!=0)) network.Send(new NetMessage { Type="grab_scroll",Action=step }); } else physics.NudgeGrabDistance(0,step*0.2f); };
-        MouseUp += (_, e) => { menu.MouseUp(); if(!HasPlayer) return; if(e.Button==MouseButtons.Right) rotatingHeld=false; if(e.Button==MouseButtons.Left) { if(network.Connected) network.Send(new NetMessage { Type="release" }); else physics.Release(); networkHolding=false;networkHeldId=0;grabYaw=grabPitch=0f; } };
+        MouseWheel += (_, e) => { if(e.Delta==0) return; if(menu.Open) { menu.ScrollTerminal(Math.Sign(e.Delta)*3); return; } if(!HasPlayer) return; int step=Math.Sign(e.Delta); if(network.Connected) { if(networkHolding || networkCubes.Any(cube=>cube.HolderId==network.Id && network.Id!=0)) network.Send(new NetMessage { Type="grab_scroll",Action=step }); } else physics.NudgeGrabDistance(0,step*0.2f); };
+        MouseUp += (_, e) => { if(!HasPlayer) return; if(e.Button==MouseButtons.Right) rotatingHeld=false; if(e.Button==MouseButtons.Left) { if(network.Connected) network.Send(new NetMessage { Type="release" }); else physics.Release(); networkHolding=false;networkHeldId=0;grabYaw=grabPitch=0f; } };
         Activated += (_, _) => { if(ready && wantsCapture) BeginInvoke(new Action(CaptureMouse)); };
         Deactivate += (_, _) => { networkHolding=false;rotatingHeld=false; network.Send(new NetMessage { Type="release" }); physics.Release(); SuspendMouse(); };
         FormClosed += (_, _) => { audio?.Dispose(); network.Dispose(); physics.Dispose(); ReleaseMouse(); };
@@ -221,33 +206,7 @@ internal sealed partial class GameWindow : SilkForm
             ToggleSettings();
             return true;
         }
-        if(menu.Open)
-        {
-            switch(keyData)
-            {
-                case Keys.Up: menu.Select(-1); return true;
-                case Keys.Down: menu.Select(1); return true;
-                case Keys.Left: menu.AdjustSelected(-1); return true;
-                case Keys.Right: menu.AdjustSelected(1); return true;
-            }
-        }
         return base.ProcessCmdKey(ref msg,keyData);
-    }
-
-    Rectangle PresentationArea()
-    {
-        int viewWidth=Math.Min(ClientSize.Width,ClientSize.Height*4/3);
-        int viewHeight=Math.Min(ClientSize.Height,ClientSize.Width*3/4);
-        return new Rectangle((ClientSize.Width-viewWidth)/2,(ClientSize.Height-viewHeight)/2,viewWidth,viewHeight);
-    }
-
-    bool TryMenuPoint(Point mouse,out Point menuPoint)
-    {
-        Rectangle area=PresentationArea();
-        menuPoint=Point.Empty;
-        if(area.Width<=0 || area.Height<=0 || !area.Contains(mouse)) return false;
-        menuPoint=new Point((mouse.X-area.Left)*320/area.Width,(mouse.Y-area.Top)*240/area.Height);
-        return true;
     }
 
     void ToggleFullscreen()
@@ -331,6 +290,7 @@ internal sealed partial class GameWindow : SilkForm
             }
             double now=watch.Elapsed.TotalSeconds;
             float dt=(float)Math.Min(now-lastTime,0.05); lastTime=now;
+            menu.AdvanceTerminal(dt);
             UpdateGame(dt);
             if(!HasPlayer)
             {

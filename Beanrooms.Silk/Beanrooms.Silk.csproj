@@ -37,6 +37,7 @@
       <_Parameter1>Beanrooms.PortChecks</_Parameter1>
     </AssemblyAttribute>
     <Compile Include="../Nullrooms/CameraOrientation.cs" Link="CameraOrientation.cs" />
+    <Compile Include="../Nullrooms/CubeSpawner.cs" Link="CubeSpawner.cs" />
     <Compile Include="../Nullrooms/LightFlicker.cs" Link="LightFlicker.cs" />
     <Compile Include="../Nullrooms/NetworkClient.cs" Link="NetworkClient.cs" />
     <Compile Include="../Nullrooms/MonsterBrain.cs" Link="MonsterBrain.cs" />
