@@ -9,6 +9,13 @@ using BepuUtilities.Memory;
 
 namespace Beanrooms;
 
+internal static class ObjectInteractionProfile
+{
+    internal const float PickupRange=5f, HoldDistance=2.25f;
+    internal const float SpringFrequency=8.5f, SpringDamping=1.35f;
+    internal const float Smoothing=18f, SlideResistance=4.5f;
+}
+
 internal sealed class RigidCube
 {
     internal int Id;
@@ -127,7 +134,12 @@ internal sealed class PhysicsBodies : IDisposable
         grab.DistanceOffset=desired-grab.LastHoldDistance;
         return true;
     }
-    internal float PickupRange = 5f, HoldDistance = 2.25f, Frequency = 8.5f, Damping = 1.35f, TargetSmoothing = 18f, SlideResistance = 4.5f;
+    internal float PickupRange = ObjectInteractionProfile.PickupRange;
+    internal float HoldDistance = ObjectInteractionProfile.HoldDistance;
+    internal float Frequency = ObjectInteractionProfile.SpringFrequency;
+    internal float Damping = ObjectInteractionProfile.SpringDamping;
+    internal float TargetSmoothing = ObjectInteractionProfile.Smoothing;
+    internal float SlideResistance = ObjectInteractionProfile.SlideResistance;
     internal float RotateYaw=0f,RotatePitch=0f;
 
     const float Step = 1f / 120f;

@@ -71,9 +71,10 @@ internal sealed partial class GameWindow
         network.Send(new NetMessage { Type="state",X=eye.X,Y=eye.Y,Z=eye.Z,
             MoveSpeed=motion.Speed,SprintBlend=motion.SprintBlend,CrouchBlend=motion.CrouchBlend,
             Yaw=smoothYaw+motion.YawOffset,Pitch=Math.Clamp(smoothPitch+motion.PitchOffset,-1.45f,1.45f),
-            HoldDistance=menu.HoldDistance,PickupRange=menu.PickupRange,GrabYaw=grabYaw,GrabPitch=grabPitch,
-            SpringFrequency=menu.SpringFrequency,SpringDamping=menu.SpringDamping,
-            PidSmoothing=menu.PidSmoothing,SlideResistance=menu.SlideResistance,
+            HoldDistance=ObjectInteractionProfile.HoldDistance,PickupRange=ObjectInteractionProfile.PickupRange,
+            GrabYaw=grabYaw,GrabPitch=grabPitch,
+            SpringFrequency=ObjectInteractionProfile.SpringFrequency,SpringDamping=ObjectInteractionProfile.SpringDamping,
+            PidSmoothing=ObjectInteractionProfile.Smoothing,SlideResistance=ObjectInteractionProfile.SlideResistance,
             MonsterTuning=menu.MonsterSettings.Clone(),
             Name=menu.PlayerName,RespawnId=respawnId,
             R=menu.PlayerRed,G=menu.PlayerGreen,B=menu.PlayerBlue });

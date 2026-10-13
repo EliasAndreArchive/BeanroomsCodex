@@ -196,7 +196,7 @@ internal sealed partial class GameWindow : SilkForm
             else
             {
                 ViewPose(out Vector3 eye,out Vector3 forward);
-                physics.HoldDistance=menu.HoldDistance;
+                physics.HoldDistance=ObjectInteractionProfile.HoldDistance;
                 physics.TryPickup(eye,forward,ViewRotation(),boxes);
             }
         };

@@ -174,10 +174,13 @@ internal sealed partial class GameWindow
         networkHolding=false;
 
         if(!menu.MonsterControlsWritable) { menu.MonsterControlsWritable=true;menu.Dirty=true; }
-        physics.PickupRange=menu.PickupRange; physics.HoldDistance=menu.HoldDistance;
+        physics.PickupRange=ObjectInteractionProfile.PickupRange;
+        physics.HoldDistance=ObjectInteractionProfile.HoldDistance;
         physics.RotateYaw=grabYaw;physics.RotatePitch=grabPitch;
-        physics.Frequency=menu.SpringFrequency; physics.Damping=menu.SpringDamping; physics.TargetSmoothing=menu.PidSmoothing;
-        physics.SlideResistance=menu.SlideResistance;
+        physics.Frequency=ObjectInteractionProfile.SpringFrequency;
+        physics.Damping=ObjectInteractionProfile.SpringDamping;
+        physics.TargetSmoothing=ObjectInteractionProfile.Smoothing;
+        physics.SlideResistance=ObjectInteractionProfile.SlideResistance;
         physics.Update(dt,eye,forward,ViewRotation(),boxes,camera);
         localMonster?.Update(dt,[new PlayerState { Id=1,X=eye.X,Y=eye.Y,Z=eye.Z,Yaw=smoothYaw }],physics.Bodies);
         visibleMonster=localMonster?.State;

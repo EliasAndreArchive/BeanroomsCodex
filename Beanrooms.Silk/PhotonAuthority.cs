@@ -145,8 +145,14 @@ internal sealed class PhotonAuthority : IDisposable
 
     sealed class PhotonPeer(int id)
     {
-        internal int Id=id,RespawnId=0; internal float X=96,Y=1.68f,Z=96,Yaw=.63f,Pitch,HoldDistance=2.25f,GrabYaw,GrabPitch;
+        internal int Id=id,RespawnId=0; internal float X=96,Y=1.68f,Z=96,Yaw=.63f,Pitch,
+            HoldDistance=ObjectInteractionProfile.HoldDistance,GrabYaw,GrabPitch;
         internal float MoveSpeed,SprintBlend,CrouchBlend,R=.78f,G=.76f,B=.70f;
-        internal string Name=$"BEAN{id}"; internal float PickupRange=5,SpringFrequency=8.5f,SpringDamping=1.35f,PidSmoothing=18,SlideResistance=4.5f;
+        internal string Name=$"BEAN{id}";
+        internal float PickupRange=ObjectInteractionProfile.PickupRange,
+            SpringFrequency=ObjectInteractionProfile.SpringFrequency,
+            SpringDamping=ObjectInteractionProfile.SpringDamping,
+            PidSmoothing=ObjectInteractionProfile.Smoothing,
+            SlideResistance=ObjectInteractionProfile.SlideResistance;
     }
 }

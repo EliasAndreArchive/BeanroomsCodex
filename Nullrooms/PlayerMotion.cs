@@ -2,6 +2,13 @@ using System.Numerics;
 
 namespace Beanrooms;
 
+internal static class MovementProfile
+{
+    internal const float WalkSpeed=3.2f, SprintMultiplier=1.75f, CrouchMultiplier=.48f;
+    internal const float Acceleration=6f, Deceleration=9f, StanceSmooth=5f, SprintSmooth=5f;
+    internal const float CrouchHeight=1.12f, StepLength=2.2f;
+}
+
 internal sealed class PlayerMotion
 {
     const float StandingEye = 1.68f;
@@ -38,15 +45,15 @@ internal sealed class PlayerMotion
         if(localInput.LengthSquared()>1f) localInput=Vector2.Normalize(localInput);
         if(!allowTranslation) localInput=Vector2.Zero;
 
-        crouchBlend=Follow(crouchBlend,crouchHeld?1f:0f,settings.StanceSmooth,dt);
-        sprintBlend=Follow(sprintBlend,sprintHeld&&!crouchHeld?1f:0f,settings.SprintSmooth,dt);
-        float speedLimit=settings.WalkSpeed * (1f+(settings.SprintMultiplier-1f)*sprintBlend)
-            * (1f+(settings.CrouchMultiplier-1f)*crouchBlend);
+        crouchBlend=Follow(crouchBlend,crouchHeld?1f:0f,MovementProfile.StanceSmooth,dt);
+        sprintBlend=Follow(sprintBlend,sprintHeld&&!crouchHeld?1f:0f,MovementProfile.SprintSmooth,dt);
+        float speedLimit=MovementProfile.WalkSpeed * (1f+(MovementProfile.SprintMultiplier-1f)*sprintBlend)
+            * (1f+(MovementProfile.CrouchMultiplier-1f)*crouchBlend);
         Vector2 forward=new(MathF.Sin(yaw),MathF.Cos(yaw));
         Vector2 right=new(forward.Y,-forward.X);
         Vector2 desired=(right*localInput.X+forward*localInput.Y)*speedLimit;
         float response=desired.LengthSquared()>velocity.LengthSquared()+0.01f ||
-            Vector2.Dot(desired,velocity)<0f ? settings.Acceleration : settings.Deceleration;
+            Vector2.Dot(desired,velocity)<0f ? MovementProfile.Acceleration : MovementProfile.Deceleration;
         velocity=Vector2.Lerp(velocity,desired,1f-MathF.Exp(-response*dt));
         if(velocity.LengthSquared()<0.0001f && desired.LengthSquared()==0f) velocity=Vector2.Zero;
 
@@ -62,10 +69,10 @@ internal sealed class PlayerMotion
         else velocity=Vector2.Zero;
 
         float actualSpeed=velocity.Length();
-        float movement=Math.Clamp(actualSpeed/MathF.Max(settings.WalkSpeed*0.75f,0.2f),0f,1f);
+        float movement=Math.Clamp(actualSpeed/MathF.Max(MovementProfile.WalkSpeed*0.75f,0.2f),0f,1f);
         Vector2 localVelocity=new(Vector2.Dot(velocity,right),Vector2.Dot(velocity,forward));
-        float maxSpeed=MathF.Max(settings.WalkSpeed*settings.SprintMultiplier,0.2f);
-        gaitPhase+=actualSpeed*dt*Tau/MathF.Max(settings.StepLength,0.5f);
+        float maxSpeed=MathF.Max(MovementProfile.WalkSpeed*MovementProfile.SprintMultiplier,0.2f);
+        gaitPhase+=actualSpeed*dt*Tau/MathF.Max(MovementProfile.StepLength,0.5f);
         float gait=MathF.Sin(gaitPhase);
         float bobAmplitude=settings.HeadBob*movement*(0.011f+0.013f*sprintBlend)*(1f-0.45f*crouchBlend);
 
@@ -96,7 +103,7 @@ internal sealed class PlayerMotion
         PitchOffset=smoothPitch+pitchNoise;
         YawOffset=smoothYaw+yawNoise;
 
-        camera.Y=StandingEye-(StandingEye-settings.CrouchHeight)*crouchBlend
+        camera.Y=StandingEye-(StandingEye-MovementProfile.CrouchHeight)*crouchBlend
             +bobAmplitude*MathF.Sin(gaitPhase*2f)
             +0.002f*settings.IdleShake*(1f-movement)*slowNoise;
         float sideMotion=settings.SwayAmount*(

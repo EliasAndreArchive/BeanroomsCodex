@@ -22,9 +22,6 @@ internal sealed partial class DebugMenu
     internal float BloomStrength = 0.1f, BloomThreshold = 0.85f, BloomRadius = 1.9f;
     internal float BounceStrength = 1.75f, AO = 0.9f, LightIntensity = 1f, LightDensity = 0.65f, FogDensity = 0.008f;
     internal int FogSteps = 8;
-    internal float WalkSpeed = 3.2f, SprintMultiplier = 1.75f, CrouchMultiplier = 0.48f;
-    internal float Acceleration = 6f, Deceleration = 9f, StanceSmooth = 5f, SprintSmooth = 5f;
-    internal float CrouchHeight = 1.12f, StepLength = 2.2f;
     internal float MouseSensitivity = 0.00155f, IdleShake = 3f, WalkShake = 5f;
     internal float SprintShake = 7f, CrouchShake = 2f, HeadBob = 1f;
     internal float SwayAmount = 1.2f, StrafeRoll = 5f, TurnRoll = 1.5f, MovePitch = 4f, SwaySmooth = 11f, CameraSmooth = 11f;
@@ -55,7 +52,6 @@ internal sealed partial class DebugMenu
     internal Action<int>? SessionAction;
     internal Action? InteractionSound, HoverSound;
     internal Action? CancelJoinAction;
-    internal float PickupRange=5f, HoldDistance=2.25f, SpringFrequency=8.5f, SpringDamping=1.35f, PidSmoothing=18f, SlideResistance=4.5f;
     static readonly (string Name, Vector3 Color)[] CubeColors =
     {
         ("AMBER", new Vector3(0.82f,0.69f,0.22f)),

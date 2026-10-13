@@ -17,9 +17,9 @@ Beanrooms is a .NET 8 desktop game. The main client uses Silk.NET/GLFW, OpenGL 4
 | `Beanrooms.Silk/PhotonNetClient.cs` | Photon transport and snapshot buffering |
 | `Beanrooms.Silk/PhotonAuthority.cs` | Room master physics, monster, and flicker authority |
 | `Beanrooms.Silk/GameAudio.cs`, `PhysicalSounds.cs`, `VercidiumAcoustics.cs` | Sound playback, physics contact audio, and raytraced acoustics |
-| `Nullrooms/PhysicsBodies.cs`, `WorldProps.cs` | Shared Bepu cube simulation, placement, collisions, and pickup |
+| `Nullrooms/PhysicsBodies.cs`, `WorldProps.cs` | Shared Bepu cube simulation, placement, collisions, pickup, and fixed interaction values |
 | `Nullrooms/NetworkClient.cs`, `NetProtocol.cs` | Solo/online transport contract and messages |
-| `Nullrooms/WorldLayout.cs`, `MonsterBrain.cs`, `PlayerMotion.cs`, `LightFlicker.cs` | Shared game behavior |
+| `Nullrooms/WorldLayout.cs`, `MonsterBrain.cs`, `PlayerMotion.cs`, `LightFlicker.cs` | Shared game behavior and fixed world profiles |
 | `Nullrooms/shaders/`, `Nullrooms/assets/` | Rendering source and licensed game assets |
 | `Beanrooms.PortChecks/` | Headless checks for retained behavior |
 

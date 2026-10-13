@@ -142,7 +142,7 @@ internal sealed partial class GameWindow
             ? networkHolding?networkHeldId:networkCubes.FirstOrDefault(cube=>cube.HolderId==network.Id)?.Id??0
             : physics.Held?.Id??0;
         float nearest=heldId==0
-            ? MathF.Min(menu.PickupRange,PhysicsBodies.WallRay(eye,forward,boxes,menu.PickupRange))
+            ? MathF.Min(ObjectInteractionProfile.PickupRange,PhysicsBodies.WallRay(eye,forward,boxes,ObjectInteractionProfile.PickupRange))
             : float.PositiveInfinity;
         Vector3 hitPosition=default;
         Quaternion hitRotation=Quaternion.Identity;
