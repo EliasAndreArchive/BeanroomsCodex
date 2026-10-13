@@ -18,17 +18,14 @@ internal sealed class RigidCube
     internal Vector3 HoldTarget, HoldTargetVelocity;
     internal Quaternion CarryRotationOffset = Quaternion.Identity;
     internal float HalfSize, Drag = 0.025f, RestDrag;
-    // Cubes leave this empty; pallets use their actual low rectangular bounds.
-    internal Vector3 LocalHalfExtents;
-    internal bool HasHoldTarget, Grounded, Emissive, Plank;
+    internal bool HasHoldTarget, Grounded, Emissive;
     internal PhysicsMaterial Material=PhysicsMaterial.Wood;
     internal float ImpactCooldown;
     internal BodyHandle Handle;
 }
 
 internal readonly record struct GrabInput(Vector3 Eye,Vector3 Forward,Quaternion Rotation,
-    float HoldDistance,float Frequency,float Damping,float Smoothing,float RotateYaw=0f,float RotatePitch=0f,
-    bool SnapHold=false,float SnapStep=.25f);
+    float HoldDistance,float Frequency,float Damping,float Smoothing,float RotateYaw=0f,float RotatePitch=0f);
 
 internal struct PhysicsNarrowPhaseCallbacks : INarrowPhaseCallbacks
 {
@@ -132,8 +129,6 @@ internal sealed class PhysicsBodies : IDisposable
     }
     internal float PickupRange = 5f, HoldDistance = 2.25f, Frequency = 8.5f, Damping = 1.35f, TargetSmoothing = 18f, SlideResistance = 4.5f;
     internal float RotateYaw=0f,RotatePitch=0f;
-    internal bool SnapHold=false;
-    internal float SnapStep=.25f;
 
     const float Step = 1f / 120f;
     const float Ceiling = 3.4f;
@@ -191,7 +186,7 @@ internal sealed class PhysicsBodies : IDisposable
     }
 
     internal static Vector3 LocalExtents(RigidCube body)
-        => body.LocalHalfExtents.LengthSquared()>0.000001f ? body.LocalHalfExtents : new Vector3(body.HalfSize);
+        => new(body.HalfSize);
 
     internal static Vector3 Extents(RigidCube body)
         => RotatedExtents(LocalExtents(body),body.Rotation);
@@ -272,9 +267,15 @@ internal sealed class PhysicsBodies : IDisposable
     internal bool Spawn(Vector3 eye, Vector3 forward, bool emissive, IReadOnlyList<RectangleF> walls, Vector3 player, Vector3 color,
         PhysicsMaterial material=PhysicsMaterial.Wood)
     {
+        Vector3 position = eye + forward * 2.35f;
+        return SpawnAt(position,emissive,walls,player,color,material);
+    }
+
+    internal bool SpawnAt(Vector3 position,bool emissive,IReadOnlyList<RectangleF> walls,Vector3 player,Vector3 color,
+        PhysicsMaterial material=PhysicsMaterial.Wood)
+    {
         EnsureEnvironment(walls);
         float half = emissive ? 0.38f : 0.43f;
-        Vector3 position = eye + forward * 2.35f;
         position.Y = Math.Clamp(position.Y, half + 0.08f, Ceiling - half - 0.08f);
         if (SpawnBlocked(position, half, walls, player)) return false;
 
@@ -288,27 +289,6 @@ internal sealed class PhysicsBodies : IDisposable
         BodyHandle handle = simulation.Bodies.Add(description);
         Bodies.Add(new RigidCube { Id = nextBodyId++, Position = position, HalfSize = half, Emissive = emissive,
             Material=material, Color = color, Handle = handle });
-        return true;
-    }
-
-    internal bool SpawnCornerPlank(Vector3 position,float yaw,IReadOnlyList<RectangleF> walls,Vector3 player)
-    {
-        EnsureEnvironment(walls);
-        // A low square pallet: several visible boards share one solid Bepu body.
-        const float half=.90f, halfHeight=.11f;
-        position.Y=halfHeight+.03f;
-        if(SpawnBlocked(position,new Vector3(half,halfHeight,half),walls,player)) return false;
-        Quaternion rotation=Quaternion.CreateFromAxisAngle(Vector3.UnitY,yaw);
-        var shape=new Box(half*2f,halfHeight*2f,half*2f);
-        TypedIndex shapeIndex=simulation.Shapes.Add(in shape);
-        BodyInertia inertia=shape.ComputeInertia(.7f);
-        BodyHandle handle=simulation.Bodies.Add(BodyDescription.CreateDynamic(
-            new RigidPose(position,rotation),new BodyVelocity(),inertia,
-            new CollidableDescription(shapeIndex,0f,3f,ContinuousDetection.Continuous()),
-            new BodyActivityDescription(.0001f,60)));
-        Bodies.Add(new RigidCube { Id=nextBodyId++,Position=position,HalfSize=half,
-            LocalHalfExtents=new Vector3(half,halfHeight,half),Plank=true,
-            Rotation=rotation,Material=PhysicsMaterial.Wood,Color=new Vector3(.43f,.24f,.10f),Handle=handle });
         return true;
     }
 
@@ -439,7 +419,7 @@ internal sealed class PhysicsBodies : IDisposable
             {
                 Grab grab=pair.Value;
                 GrabInput? input=onlineInput==null
-                    ? new GrabInput(eye,forward,cameraRotation,HoldDistance,Frequency,Damping,TargetSmoothing,RotateYaw,RotatePitch,SnapHold,SnapStep)
+                    ? new GrabInput(eye,forward,cameraRotation,HoldDistance,Frequency,Damping,TargetSmoothing,RotateYaw,RotatePitch)
                     : onlineInput(pair.Key);
                 if(input==null) { Release(pair.Key); continue; }
                 GrabInput current=input.Value;
@@ -453,11 +433,6 @@ internal sealed class PhysicsBodies : IDisposable
                 float centerY=Math.Clamp(desiredTarget.Y-worldGrabOffset.Y,halfHeight+0.005f,Ceiling-halfHeight-0.005f);
                 desiredTarget.Y=centerY+worldGrabOffset.Y;
                 Vector3 center=desiredTarget-worldGrabOffset;
-                if(current.SnapHold)
-                {
-                    float step=Math.Clamp(current.SnapStep,.05f,2f);
-                    center=new Vector3(MathF.Round(center.X/step)*step,MathF.Round(center.Y/step)*step,MathF.Round(center.Z/step)*step);
-                }
                 Vector3 extents=RotatedExtents(LocalExtents(cube),desiredOrientation);
                 foreach(Vector3 playerPosition in playerPositions??[player])
                 {

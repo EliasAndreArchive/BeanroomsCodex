@@ -17,7 +17,7 @@ internal sealed class PhotonNetClient : INetClient, IConnectionCallbacks, IMatch
     NetMessage? pendingWorld,pendingRespawn,pendingPickupResult,pendingFlicker;
     readonly Queue<CubeImpactEvent> pendingCubeImpacts=[];
     PlayerState[] players=[]; CubeState[] cubes=[]; MonsterState? monster;
-    MonsterTuning? monsterTuning; FlickerTuning? flickerTuning;
+    MonsterTuning? monsterTuning;
     PhotonAuthority? authority;
     int id,hostId,protocolVersion;
     bool started,disposed;
@@ -141,7 +141,7 @@ internal sealed class PhotonNetClient : INetClient, IConnectionCallbacks, IMatch
                 case "pickup_result": pendingPickupResult=message;break;
                 case "flicker": pendingFlicker=message;break;
                 case "snapshot":
-                    players=message.Players;cubes=message.Cubes;monster=message.Monster;monsterTuning=message.MonsterTuning;flickerTuning=message.FlickerTuning;
+                    players=message.Players;cubes=message.Cubes;monster=message.Monster;monsterTuning=message.MonsterTuning;
                     hostId=message.HostId;
                     foreach(CubeImpactEvent impact in message.CubeImpacts) pendingCubeImpacts.Enqueue(impact);
                     while(pendingCubeImpacts.Count>128) pendingCubeImpacts.Dequeue();
@@ -155,8 +155,8 @@ internal sealed class PhotonNetClient : INetClient, IConnectionCallbacks, IMatch
     public NetMessage? ConsumeFlicker() { lock(stateLock) { var result=pendingFlicker;pendingFlicker=null;return result; } }
     public NetMessage? ConsumePickupResult() { lock(stateLock) { var result=pendingPickupResult;pendingPickupResult=null;return result; } }
     public CubeImpactEvent[] ConsumeCubeImpacts() { lock(stateLock) { var result=pendingCubeImpacts.ToArray();pendingCubeImpacts.Clear();return result; } }
-    public (PlayerState[] Players,CubeState[] Cubes,MonsterState? Monster,MonsterTuning? MonsterTuning,FlickerTuning? FlickerTuning,int HostId) Snapshot()
-    { lock(stateLock) return (players,cubes,monster,monsterTuning,flickerTuning,hostId); }
+    public (PlayerState[] Players,CubeState[] Cubes,MonsterState? Monster,MonsterTuning? MonsterTuning,int HostId) Snapshot()
+    { lock(stateLock) return (players,cubes,monster,monsterTuning,hostId); }
 
     public void Dispose()
     {

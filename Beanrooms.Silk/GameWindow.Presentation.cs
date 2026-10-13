@@ -209,8 +209,7 @@ internal sealed partial class GameWindow
             Gl.UseProgram(exposureProgram);
             Bind(0,sceneTexture);Uniform1(exposureProgram,"sceneTex",0);
             Bind(1,previous);Uniform1(exposureProgram,"previousExposure",1);
-            Uniform1f(exposureProgram,"brightenSpeed",menu.BrightenSpeed);
-            Uniform1f(exposureProgram,"darkenSpeed",menu.DarkenSpeed);
+            Uniform1f(exposureProgram,"adaptationSpeed",1.7f);
             Uniform1f(exposureProgram,"deltaTime",dt);
             Gl.DrawArrays(0x0004,0,3);
             exposureCurrent=1-exposureCurrent;
@@ -289,9 +288,9 @@ internal sealed partial class GameWindow
         Uniform1f(pathProgram,"lightDensity",menu.LightDensity);
         Uniform1f(pathProgram,"lightIntensity",menu.LightIntensity);
         Uniform1(pathProgram,"volumetricsEnabled",menu.Volumetrics?1:0);
-        float chaseFog=menu.FlickerSettings.ChaseFog ? chaseBlend : 0f;
+        float chaseFog=chaseBlend;
         Uniform1f(pathProgram,"fogDensity",menu.FogDensity+
-            (MathF.Max(menu.FogDensity,menu.FlickerSettings.ChaseFogMax)-menu.FogDensity)*chaseFog);
+            (MathF.Max(menu.FogDensity,FlickerProfile.ChaseFogMax)-menu.FogDensity)*chaseFog);
         Uniform1(pathProgram,"fogSteps",menu.FogSteps);
         UploadObjects(pathProgram,true);
         int remoteCount=Math.Min(4,remotePositions.Count);
@@ -339,7 +338,6 @@ internal sealed partial class GameWindow
         Bind(3,exposureCurrent==0?exposureA:exposureB);Uniform1(displayProgram,"exposureTexture",3);
         Uniform1(displayProgram,"ditheringEnabled",menu.Dithering?1:0);
         Uniform1(displayProgram,"paletteReduction",menu.PaletteReduction?1:0);
-        Uniform1(displayProgram,"temperature",0);
         Uniform1(displayProgram,"paletteSteps",16);
         (float transitionDark,float transitionFlash)=spawnTransition.Sample(watch.Elapsed.TotalSeconds);
         Uniform1f(displayProgram,"transitionDark",transitionDark);
@@ -350,9 +348,6 @@ internal sealed partial class GameWindow
         Uniform1f(displayProgram,"bloomStrength",menu.BloomStrength);
         Uniform1(displayProgram,"tonemapMode",menu.TonemapMode);
         Uniform1f(displayProgram,"exposure",menu.Exposure);
-        Uniform1f(displayProgram,"saturation",1f);
-        Uniform1f(displayProgram,"contrast",1f);
-        Gl.Uniform3f(Gl.GetUniformLocation(displayProgram,"colorMix"),menu.RedMix,menu.GreenMix,menu.BlueMix);
         Uniform2(displayProgram,"windowSize",FramebufferSize.Width,FramebufferSize.Height);
         Gl.DrawArrays(0x0004,0,3);
         frames++;
@@ -369,7 +364,6 @@ internal sealed partial class GameWindow
         if(watch.Elapsed.TotalSeconds-lastDebugTime>=0.2)
         {
             lastDebugTime=watch.Elapsed.TotalSeconds;
-            menu.DebugSeed=seed;
             menu.DebugLines=
             [
                 $"FPS {fpsValue:000}  {frameMs:0.0}MS",

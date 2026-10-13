@@ -166,12 +166,9 @@ internal sealed partial class DebugMenu
             for(int row=0;row<Tabs.Length;row++)
             {
                 int y=CategoryY(row);
-                bool locked=Tabs[row].Page==2&&!MovementControlsWritable;
                 Button(Tabs[row].Name,X(48),y-4,166,14,row==CategorySelected);
-                if((Tabs[row].Page==5&&!MonsterControlsWritable) ||
-                   (Tabs[row].Page==8&&!FlickerControlsWritable))
+                if(Tabs[row].Page==5&&!MonsterControlsWritable)
                     SmallText("HOST",disabled,X(204),y);
-                else if(locked) SmallText("SOLO",disabled,X(204),y);
             }
             Footer("ARROWS / ENTER     ESC BACK");
             return;
@@ -185,7 +182,7 @@ internal sealed partial class DebugMenu
                 "WASD MOVE  SHIFT SPRINT", "C CROUCH  MOUSE LOOK",
                 "LMB CARRY  WHEEL DIST", "RMB + MOUSE ROTATE",
                 "TAB PAUSE  ESC RELEASE", "F11 FULLSCREEN",
-                "Q E CHANGE MENU PAGE", "ARROWS ADJUST VALUES"
+                "Q/E PAGES  ARROWS ADJUST", "DISPLAY: LIGHTING MODE"
             ];
             for(int row=0;row<help.Length;row++) SmallText(help[row],black,X(48),Y(42)+row*15);
             Footer("ESC BACK");
@@ -201,9 +198,7 @@ internal sealed partial class DebugMenu
             if(row>=Labels[Page].Length) break;
             int y=SettingsRowTop+slot*SettingsRowPitch;
             bool selected=row==Selected;
-            bool locked=Page==5&&!MonsterControlsWritable ||
-                Page==8&&!FlickerControlsWritable ||
-                Page==2&&!MovementControlsWritable;
+            bool locked=Page==5&&!MonsterControlsWritable;
             string value=Value(row);
             if(IsChoice(row)) value="< "+value+" >";
             Row(Labels[Page][row],IsSlider(row)?"":value,y,selected,locked,!IsSlider(row));

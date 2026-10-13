@@ -16,7 +16,7 @@ internal interface INetClient : IDisposable
     NetMessage? ConsumePickupResult();
     CubeImpactEvent[] ConsumeCubeImpacts();
     (PlayerState[] Players,CubeState[] Cubes,MonsterState? Monster,
-        MonsterTuning? MonsterTuning,FlickerTuning? FlickerTuning,int HostId) Snapshot();
+        MonsterTuning? MonsterTuning,int HostId) Snapshot();
 }
 
 internal sealed class SoloNetClient : INetClient
@@ -34,7 +34,7 @@ internal sealed class SoloNetClient : INetClient
     public NetMessage? ConsumePickupResult() => null;
     public CubeImpactEvent[] ConsumeCubeImpacts() => [];
     public (PlayerState[] Players,CubeState[] Cubes,MonsterState? Monster,
-        MonsterTuning? MonsterTuning,FlickerTuning? FlickerTuning,int HostId) Snapshot()
-        => ([],[],null,null,null,0);
+        MonsterTuning? MonsterTuning,int HostId) Snapshot()
+        => ([],[],null,null,0);
     public void Dispose() { }
 }

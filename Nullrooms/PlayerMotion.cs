@@ -5,10 +5,9 @@ namespace Beanrooms;
 internal sealed class PlayerMotion
 {
     const float StandingEye = 1.68f;
-    internal const float MaxStepHeight = 0.42f;
     const float Tau = MathF.PI * 2f;
     Vector2 velocity;
-    float crouchBlend, sprintBlend, gaitPhase, clock, turnRate, lastForwardSpeed, visualFootElevation;
+    float crouchBlend, sprintBlend, gaitPhase, clock, turnRate, lastForwardSpeed;
     float smoothRoll, smoothPitch, smoothYaw;
     internal float Roll { get; private set; }
     internal float PitchOffset { get; private set; }
@@ -17,7 +16,6 @@ internal sealed class PlayerMotion
     internal float Speed => velocity.Length();
     internal float CrouchBlend => crouchBlend;
     internal float SprintBlend => sprintBlend;
-    internal float FootElevation { get; private set; }
 
     static float Follow(float current, float target, float rate, float dt) =>
         current + (target-current) * (1f-MathF.Exp(-MathF.Max(rate,0.01f)*dt));
@@ -28,13 +26,12 @@ internal sealed class PlayerMotion
         velocity=Vector2.Zero;
         crouchBlend=sprintBlend=gaitPhase=turnRate=lastForwardSpeed=0f;
         smoothRoll=smoothPitch=smoothYaw=Roll=PitchOffset=YawOffset=0f;
-        FootElevation=visualFootElevation=0f;
         ViewOffset=Vector3.Zero;
     }
 
     internal void Update(float dt, Vector2 localInput, bool sprintHeld, bool crouchHeld,
         float mouseYawDelta, float yaw, DebugMenu settings, ref Vector3 camera,
-        Func<float,float,float,bool> collides, Func<float,float,float> supportHeight,bool allowTranslation)
+        Func<float,float,float,bool> collides,bool allowTranslation)
     {
         dt=Math.Clamp(dt,0f,0.05f);
         clock+=dt;
@@ -56,25 +53,13 @@ internal sealed class PlayerMotion
         if(allowTranslation)
         {
             float nextX=camera.X+velocity.X*dt;
-            float xSupport=supportHeight(nextX,camera.Z);
-            float xFoot=MathF.Max(FootElevation,xSupport);
-            if(xSupport<=FootElevation+MaxStepHeight && !collides(nextX,camera.Z,xFoot))
-            { camera.X=nextX;FootElevation=xFoot; }
+            if(!collides(nextX,camera.Z,0f)) camera.X=nextX;
             else velocity.X=0f;
             float nextZ=camera.Z+velocity.Y*dt;
-            float zSupport=supportHeight(camera.X,nextZ);
-            float zFoot=MathF.Max(FootElevation,zSupport);
-            if(zSupport<=FootElevation+MaxStepHeight && !collides(camera.X,nextZ,zFoot))
-            { camera.Z=nextZ;FootElevation=zFoot; }
+            if(!collides(camera.X,nextZ,0f)) camera.Z=nextZ;
             else velocity.Y=0f;
-            // Physical feet follow the support immediately for collision; the
-            // view follows smoothly so stepping onto low support has no camera pop.
-            float settledSupport=supportHeight(camera.X,camera.Z);
-            if(settledSupport<=FootElevation+MaxStepHeight) FootElevation=settledSupport;
         }
         else velocity=Vector2.Zero;
-
-        visualFootElevation=Follow(visualFootElevation,FootElevation,11f,dt);
 
         float actualSpeed=velocity.Length();
         float movement=Math.Clamp(actualSpeed/MathF.Max(settings.WalkSpeed*0.75f,0.2f),0f,1f);
@@ -111,7 +96,7 @@ internal sealed class PlayerMotion
         PitchOffset=smoothPitch+pitchNoise;
         YawOffset=smoothYaw+yawNoise;
 
-        camera.Y=StandingEye+visualFootElevation-(StandingEye-settings.CrouchHeight)*crouchBlend
+        camera.Y=StandingEye-(StandingEye-settings.CrouchHeight)*crouchBlend
             +bobAmplitude*MathF.Sin(gaitPhase*2f)
             +0.002f*settings.IdleShake*(1f-movement)*slowNoise;
         float sideMotion=settings.SwayAmount*(

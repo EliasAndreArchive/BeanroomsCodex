@@ -32,12 +32,17 @@ menu.AdjustSelected(1);
 Check(menu.Page==11,"Title settings did not open player display controls.");
 menu.CyclePage(1);
 Check(menu.Page==7,"Player image tab did not open post effects.");
-menu.Selected=10;
+menu.Selected=8;
 menu.AdjustSelected(1);
 Check(!menu.Dithering,"Image dither toggle did not change the render setting.");
-menu.Selected=11;
+menu.Selected=9;
 menu.AdjustSelected(1);
 Check(!menu.PaletteReduction,"Image posterization toggle did not change the render setting.");
+menu.SetPage(11);
+menu.Selected=0;
+int oldRenderer=menu.RenderMode;
+menu.AdjustSelected(1);
+Check(menu.RenderMode!=oldRenderer,"Display menu did not expose renderer selection.");
 menu.Back();
 menu.LeaveTitle();
 menu.Open=true;
@@ -46,6 +51,12 @@ menu.Selected=3;
 menu.AdjustSelected(1);
 menu.AdjustSelected(1);
 Check(menu.Page==1,"Developer entry did not open render tuning.");
+menu.SetPage(2);
+Check(menu.Page==1,"Removed movement settings are still reachable.");
+menu.SetPage(4);
+Check(menu.Page==1,"Removed object physics settings are still reachable.");
+menu.SetPage(8);
+Check(menu.Page==1,"Removed flicker settings are still reachable.");
 menu.SetPage(5);
 bool monsterBefore=menu.MonsterSettings.Enabled;
 menu.Selected=0;
@@ -73,6 +84,19 @@ menu.Select(1);
 Check(menu.Selected==6,"Pause menu still has a hidden main-menu row.");
 using(var frame=menu.Draw())
     Check(frame.Width==320 && frame.Height==240,"Menu rendering size changed.");
+if(args.Length==2 && args[0]=="--menu-preview")
+{
+    Directory.CreateDirectory(args[1]);
+    menu.ShowTitle();
+    using(var title=menu.Draw()) File.WriteAllBytes(Path.Combine(args[1],"title.bgra"),title.Pixels);
+    menu.ShowSettingsFromTitle();
+    menu.AdjustSelected(1);
+    using(var display=menu.Draw()) File.WriteAllBytes(Path.Combine(args[1],"display.bgra"),display.Pixels);
+    menu.LeaveTitle();menu.Open=true;menu.SetPage(9);
+    using(var pause=menu.Draw()) File.WriteAllBytes(Path.Combine(args[1],"pause.bgra"),pause.Pixels);
+    menu.OpenCategories(developer:true);menu.SetPage(10);
+    using(var diagnostics=menu.Draw()) File.WriteAllBytes(Path.Combine(args[1],"diagnostics.bgra"),diagnostics.Pixels);
+}
 
 var layout=WorldLayout.Generate(82317);
 Check(layout.Walls.Count>0,"Procedural layout has no walls.");
@@ -93,7 +117,8 @@ using(var authority=new PhotonAuthority([4,9]))
     authority.Update(.06f);
     NetMessage? initial=authority.DrainOutgoing().LastOrDefault(item=>item.Message.Type=="snapshot").Message;
     Check(initial?.HostId==4 && initial.Players.Length==2,"Photon authority did not assign host and players.");
-    Check(initial?.Cubes.Length==0,"Photon world still seeds pallets.");
+    Check(initial?.Cubes.Length==2 && initial.Cubes.All(cube=>cube.HalfSize>0),
+        "Photon room did not place its two playable cubes.");
     var hostTuning=new MonsterTuning { Enabled=true };
     authority.Receive(4,new NetMessage { Type="state",MonsterTuning=hostTuning });
     authority.Update(.06f);

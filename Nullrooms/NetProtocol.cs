@@ -6,7 +6,7 @@ internal static class NetProtocol
 {
     // Bump when a server changes a feature whose absence would otherwise look like
     // a valid, but ignored, client command.
-    internal const int Version=5;
+    internal const int Version=6;
 }
 
 internal sealed class NetMessage
@@ -37,8 +37,6 @@ internal sealed class NetMessage
     public float SpringDamping { get; set; }
     public float PidSmoothing { get; set; }
     public float SlideResistance { get; set; }
-    public bool SnapHold { get; set; }
-    public float SnapStep { get; set; }
     public float R { get; set; }
     public float G { get; set; }
     public float B { get; set; }
@@ -49,73 +47,7 @@ internal sealed class NetMessage
     public CubeImpactEvent[] CubeImpacts { get; set; } = [];
     public MonsterState? Monster { get; set; }
     public MonsterTuning? MonsterTuning { get; set; }
-    public FlickerTuning? FlickerTuning { get; set; }
     public int HostId { get; set; }
-}
-
-internal sealed class FlickerTuning
-{
-    public bool MinorEnabled { get; set; } = true;
-    public float MinorInterval { get; set; } = 34f;
-    public float MinorChance { get; set; } = 0.36f;
-    public float MinorDuration { get; set; } = 1.5f;
-    public bool RandomEvents { get; set; } = true;
-    public float EventInterval { get; set; } = 112f;
-    public float EventDuration { get; set; } = 4.5f;
-    public float EventSpeedMin { get; set; } = 5f;
-    public float EventSpeedMax { get; set; } = 14f;
-    public float EventOffChance { get; set; } = 0.46f;
-    public float BlackoutChance { get; set; } = 0.12f;
-    public bool ChaseFlicker { get; set; } = true;
-    public bool ChaseFog { get; set; } = true;
-    public float ChaseFogMax { get; set; } = 0.1f;
-    public float FogRise { get; set; } = 1.8f;
-    public float FogFall { get; set; } = 0.9f;
-    public bool ChaseRed { get; set; } = true;
-    public float ChaseRedChance { get; set; } = 0.8f;
-
-    internal FlickerTuning Clone() => (FlickerTuning)MemberwiseClone();
-
-    internal bool CopyFrom(FlickerTuning source)
-    {
-        bool changed=MinorEnabled!=source.MinorEnabled||MinorInterval!=source.MinorInterval||
-            MinorChance!=source.MinorChance||MinorDuration!=source.MinorDuration||
-            RandomEvents!=source.RandomEvents||EventInterval!=source.EventInterval||
-            EventDuration!=source.EventDuration||EventSpeedMin!=source.EventSpeedMin||
-            EventSpeedMax!=source.EventSpeedMax||EventOffChance!=source.EventOffChance||BlackoutChance!=source.BlackoutChance||
-            ChaseFlicker!=source.ChaseFlicker||ChaseFog!=source.ChaseFog||
-            ChaseFogMax!=source.ChaseFogMax||FogRise!=source.FogRise||FogFall!=source.FogFall||
-            ChaseRed!=source.ChaseRed||ChaseRedChance!=source.ChaseRedChance;
-        MinorEnabled=source.MinorEnabled;MinorInterval=source.MinorInterval;
-        MinorChance=source.MinorChance;MinorDuration=source.MinorDuration;
-        RandomEvents=source.RandomEvents;EventInterval=source.EventInterval;
-        EventDuration=source.EventDuration;EventSpeedMin=source.EventSpeedMin;
-        EventSpeedMax=source.EventSpeedMax;EventOffChance=source.EventOffChance;BlackoutChance=source.BlackoutChance;
-        ChaseFlicker=source.ChaseFlicker;ChaseFog=source.ChaseFog;
-        ChaseFogMax=source.ChaseFogMax;FogRise=source.FogRise;FogFall=source.FogFall;
-        ChaseRed=source.ChaseRed;ChaseRedChance=source.ChaseRedChance;
-        return changed;
-    }
-
-    internal void Clamp()
-    {
-        static float Limit(float value,float min,float max,float fallback) =>
-            float.IsFinite(value)?Math.Clamp(value,min,max):fallback;
-        MinorInterval=Limit(MinorInterval,8f,120f,34f);
-        MinorChance=Limit(MinorChance,0f,1f,0.36f);
-        MinorDuration=Limit(MinorDuration,0.5f,3f,1.5f);
-        EventInterval=Limit(EventInterval,20f,300f,112f);
-        EventDuration=Limit(EventDuration,1f,12f,4.5f);
-        EventSpeedMin=Limit(EventSpeedMin,2f,20f,5f);
-        EventSpeedMax=Limit(EventSpeedMax,2f,25f,14f);
-        if(EventSpeedMax<EventSpeedMin) EventSpeedMax=EventSpeedMin;
-        EventOffChance=Limit(EventOffChance,0.05f,0.9f,0.46f);
-        BlackoutChance=Limit(BlackoutChance,0f,1f,0.12f);
-        ChaseFogMax=Limit(ChaseFogMax,0f,0.1f,0.1f);
-        FogRise=Limit(FogRise,0.2f,8f,1.8f);
-        FogFall=Limit(FogFall,0.2f,8f,0.9f);
-        ChaseRedChance=Limit(ChaseRedChance,0.08f,1f,0.8f);
-    }
 }
 
 internal sealed class MonsterTuning
@@ -229,7 +161,6 @@ internal sealed class CubeState
     public float Qw { get; set; }
     public float HalfSize { get; set; }
     public bool Emissive { get; set; }
-    public bool Plank { get; set; }
     public PhysicsMaterial Material { get; set; } = PhysicsMaterial.Wood;
     public float R { get; set; }
     public float G { get; set; }

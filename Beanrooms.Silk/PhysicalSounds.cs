@@ -6,7 +6,7 @@ namespace Beanrooms;
 internal readonly record struct FootstepSource(int Id,Vector3 Position,float Speed,float Sprint,float Crouch);
 internal readonly record struct CubeSoundSource(int Id,Vector3 Position,Vector3 Velocity,float HalfSize,
     bool Grounded,bool Held,Quaternion Rotation,Vector3 AngularVelocity,float SlipSpeed,
-    PhysicsMaterial Material=PhysicsMaterial.Wood,Vector3 LocalHalfExtents=default);
+    PhysicsMaterial Material=PhysicsMaterial.Wood);
 
 internal sealed class PhysicalSounds : IDisposable
 {
@@ -72,7 +72,7 @@ internal sealed class PhysicalSounds : IDisposable
     // Scraping follows the velocity of the lowest contact points, not the centre of mass.
     // Online cubes carry the server-measured value in CubeSoundSource.SlipSpeed.
     static Vector3 LocalExtents(CubeSoundSource cube)
-        => cube.LocalHalfExtents.LengthSquared()>0.000001f?cube.LocalHalfExtents:new Vector3(cube.HalfSize);
+        => new(cube.HalfSize);
     internal static float FloorSlipSpeed(CubeSoundSource cube)
         => PhysicsBodies.ContactSlipSpeed(cube.Velocity,cube.AngularVelocity,cube.Rotation,LocalExtents(cube));
 

@@ -171,7 +171,7 @@ internal sealed partial class GameWindow
                 texels[j+3]=b.HalfSize*(animate?CubeVisualScale(i,b.Id,now):1f);
                 texels[j+4]=b.Qx;texels[j+5]=b.Qy;texels[j+6]=b.Qz;texels[j+7]=b.Qw;
                 texels[j+8]=b.R;texels[j+9]=b.G;texels[j+10]=b.B;
-                texels[j+11]=b.Emissive?1f:b.Plank?-1f:0f;
+                texels[j+11]=b.Emissive?1f:0f;
             }
             else
             {
@@ -180,7 +180,7 @@ internal sealed partial class GameWindow
                 texels[j+3]=b.HalfSize*(animate?CubeVisualScale(i,b.Id,now):1f);
                 texels[j+4]=b.Rotation.X; texels[j+5]=b.Rotation.Y; texels[j+6]=b.Rotation.Z; texels[j+7]=b.Rotation.W;
                 texels[j+8]=b.Color.X; texels[j+9]=b.Color.Y; texels[j+10]=b.Color.Z;
-                texels[j+11]=b.Emissive?1f:b.Plank?-1f:0f;
+                texels[j+11]=b.Emissive?1f:0f;
             }
         }
         int textureUnit=program==probeProgram?4:9;

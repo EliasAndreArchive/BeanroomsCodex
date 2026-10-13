@@ -45,6 +45,7 @@
     <Compile Include="../Nullrooms/PlayerMotion.cs" Link="PlayerMotion.cs" />
     <Compile Include="../Nullrooms/SpawnTransition.cs" Link="SpawnTransition.cs" />
     <Compile Include="../Nullrooms/WorldLayout.cs" Link="WorldLayout.cs" />
+    <Compile Include="../Nullrooms/WorldProps.cs" Link="WorldProps.cs" />
     <None Include="../Nullrooms/shaders/*.frag" Link="shaders/%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" />
     <None Include="../Nullrooms/shaders/*.vert" Link="shaders/%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" />
     <None Include="../Nullrooms/assets/*" Link="assets/%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" />

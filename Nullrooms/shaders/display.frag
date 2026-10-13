@@ -8,7 +8,6 @@ uniform sampler2D overlayTexture;
 uniform vec2 windowSize;
 uniform int ditheringEnabled;
 uniform int paletteReduction;
-uniform int temperature;
 uniform int paletteSteps;
 uniform int autoExposure;
 uniform int postEnabled;
@@ -16,9 +15,6 @@ uniform int bloomEnabled;
 uniform float bloomStrength;
 uniform int tonemapMode;
 uniform float exposure;
-uniform float saturation;
-uniform float contrast;
-uniform vec3 colorMix;
 uniform float transitionDark;
 uniform float transitionFlash;
 const int bayer8[64] = int[64](
@@ -31,13 +27,6 @@ const int bayer8[64] = int[64](
     10,58, 6,54, 9,57, 5,53,
     42,26,38,22,41,25,37,21
 );
-// Hable's Uncharted 2 filmic curve: filmicworlds.com/blog/filmic-tonemapping-operators/
-vec3 hableCurve(vec3 x) {
-    return ((x*(0.15*x+0.05)+0.004)/(x*(0.15*x+0.50)+0.06))-0.02/0.30;
-}
-vec3 filmicTonemap(vec3 x) {
-    return clamp(hableCurve(x*2.0)/hableCurve(vec3(11.2)),0.0,1.0);
-}
 // Narkowicz's ACES fit: knarkowicz.wordpress.com/2016/01/06/aces-filmic-tone-mapping-curve/
 vec3 acesTonemap(vec3 x) {
     return clamp((x*(2.51*x+0.03))/(x*(2.43*x+0.59)+0.14),0.0,1.0);
@@ -77,18 +66,10 @@ void main() {
     vec2 gamePixelUv = (vec2(pixel)+0.5)/vec2(size);
     if (postEnabled != 0 && bloomEnabled != 0) c += texture(bloomTexture,gamePixelUv).rgb*bloomStrength*exposureScale;
     if (postEnabled == 0) c=clamp(c,0.0,1.0);
-    else if (tonemapMode == 1) c=filmicTonemap(c);
     else if (tonemapMode == 2) c=acesTonemap(c);
     else if (tonemapMode == 3) c=neutralTonemap(c);
     else c=clamp(c,0.0,1.0);
     c = pow(clamp(c,0.0,1.0),vec3(1.0/2.2));
-    if (postEnabled != 0) {
-        float warmth = clamp(float(temperature)/100.0,-1.0,1.0);
-        c *= vec3(1.0+0.45*warmth,1.0+0.10*warmth,1.0-0.55*warmth) * colorMix;
-        float luminance = dot(c,vec3(0.2126,0.7152,0.0722));
-        c = vec3(luminance) + (c-vec3(luminance))*saturation;
-        c = clamp((c-0.5)*contrast+0.5,0.0,1.0);
-    }
     if (paletteReduction != 0) {
         float threshold = (float(bayer8[(pixel.y & 7)*8 + (pixel.x & 7)])+0.5)/64.0;
         float levels = float(max(paletteSteps-1,1));

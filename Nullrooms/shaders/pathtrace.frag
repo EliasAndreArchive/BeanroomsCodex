@@ -34,8 +34,7 @@ uniform sampler2D objectMap;
 vec4 objectData(int index) { return texelFetch(objectMap,ivec2(0,index),0); }
 vec4 objectRotation(int index) { return texelFetch(objectMap,ivec2(1,index),0); }
 vec3 objectColor(int index) { return texelFetch(objectMap,ivec2(2,index),0).rgb; }
-bool objectEmissive(int index) { float code=texelFetch(objectMap,ivec2(2,index),0).a; return code>0.5 && code<1.5 || code>10.25 && code<10.75; }
-float objectCode(int index) { return texelFetch(objectMap,ivec2(2,index),0).a; }
+bool objectEmissive(int index) { return texelFetch(objectMap,ivec2(2,index),0).a>0.5; }
 uniform int remoteCount;
 uniform vec4 remoteData[4];
 uniform vec3 remoteColor[4];
@@ -111,34 +110,13 @@ Hit trace(vec3 ro, vec3 rd, float limit) {
     }
     for(int object=0;object<objectCount;object++) {
         vec4 data=objectData(object);
-        float radius=objectCode(object)<-0.5 ? 1.55 : data.w*1.733;
+        float radius=data.w*1.733;
         vec3 toCenter=data.xyz-ro;
         float along=dot(toCenter,rd);
         if(along < -radius || along > h.t+radius || dot(toCenter-rd*along,toCenter-rd*along)>radius*radius) continue;
         vec4 inverseRotation=vec4(-objectRotation(object).xyz,objectRotation(object).w);
         vec3 localOrigin=rotateQ(inverseRotation,ro-data.xyz);
         vec3 localDirection=rotateQ(inverseRotation,rd);
-        if(objectCode(object)<-0.5) {
-            // Five top boards on three lower runners make a square wooden pallet.
-            vec3 safe=sign(localDirection)*max(abs(localDirection),vec3(0.000001));
-            for(int part=0;part<8;part++) {
-                vec3 center,halfSize;
-                vec3 wood=objectColor(object)*(0.88+0.035*float(part%3));
-                if(part<5) { center=vec3(0.0,0.075,-0.66+0.33*float(part));halfSize=vec3(0.88,0.065,0.145); }
-                else { center=vec3(-0.62+0.62*float(part-5),-0.065,0.0);halfSize=vec3(0.115,0.075,0.80);wood*=0.76; }
-                vec3 nearPart=(-halfSize-(localOrigin-center))/safe;
-                vec3 farPart=(halfSize-(localOrigin-center))/safe;
-                vec3 loPart=min(nearPart,farPart),hiPart=max(nearPart,farPart);
-                float entryPart=max(max(loPart.x,loPart.y),loPart.z);
-                float leavePart=min(min(hiPart.x,hiPart.y),hiPart.z);
-                if(entryPart>0.001 && entryPart<leavePart && entryPart<h.t) {
-                    vec3 n=loPart.x>loPart.y && loPart.x>loPart.z ? vec3(-sign(localDirection.x),0,0) :
-                           loPart.y>loPart.z ? vec3(0,-sign(localDirection.y),0) : vec3(0,0,-sign(localDirection.z));
-                    h.t=entryPart;h.normal=rotateQ(objectRotation(object),n);h.baseColor=wood;h.material=4;
-                }
-            }
-            continue;
-        }
         vec3 safeDirection=vec3(
             localDirection.x>=0.0?max(localDirection.x,0.000001):min(localDirection.x,-0.000001),
             localDirection.y>=0.0?max(localDirection.y,0.000001):min(localDirection.y,-0.000001),
