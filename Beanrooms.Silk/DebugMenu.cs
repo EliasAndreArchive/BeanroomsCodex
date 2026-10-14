@@ -8,7 +8,7 @@ internal sealed partial class DebugMenu
     internal enum MenuView { Pause, Categories, Settings, Help, Spawn }
     internal MenuView View = MenuView.Pause;
     MenuView settingsReturn=MenuView.Categories;
-    internal int CategorySelected, ScrollRow;
+    internal int CategorySelected;
     internal bool Open, TitleScreen, SettingsFromTitle, Dithering = true, PaletteReduction = true, PostEnabled = true, AutoExposure, Bloom = true, Lights = true, Vsync = true, Dirty = true, Volumetrics = true;
     internal string ObjectPrompt="";
     internal string CommandLine="", CommandFeedback="";
@@ -49,7 +49,7 @@ internal sealed partial class DebugMenu
     internal Action? ConnectAction;
     internal Action<int>? TitleAction;
     internal Action<int>? SessionAction;
-    internal Action? InteractionSound, HoverSound;
+    internal Action? InteractionSound, HoverSound, InputSound, OutputSound;
     internal Action? CancelJoinAction;
     internal Func<CubeSpawnSpec,string>? SpawnAction;
     static readonly (string Name, Vector3 Color)[] CubeColors =
@@ -98,6 +98,7 @@ internal sealed partial class DebugMenu
         ['|']=[4,4,4,4,4,4,4], ['^']=[4,10,17,0,0,0,0],
         ['*']=[0,4,21,14,21,4,0],
         ['<']=[2,4,8,16,8,4,2], ['>']=[8,4,2,1,2,4,8],
+        ['[']=[14,8,8,8,8,8,14], [']']=[14,2,2,2,2,2,14],
         ['.']=[0,0,0,0,0,12,12], ['-']=[0,0,0,31,0,0,0],
         ['+']=[0,4,4,31,4,4,0], [':']=[0,4,4,0,4,4,0],
         ['_']=[0,0,0,0,0,0,31], ['=']=[0,0,31,0,31,0,0]

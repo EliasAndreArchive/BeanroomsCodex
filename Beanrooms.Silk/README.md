@@ -8,7 +8,7 @@ Run from the repository root:
 dotnet run --project Beanrooms.Silk/Beanrooms.Silk.csproj -c Release
 ```
 
-The game starts fullscreen at a white-on-black command menu with no active player or world camera. Type a displayed command or number and press **Enter**. The current menu path appears at the input prompt, and previous commands remain in scrollback. **Page Up/Page Down** or the mouse wheel scrolls the terminal. **F11** toggles fullscreen. **Tab** opens a translucent pause terminal while playing; **Escape** goes back in menus or releases the mouse in play.
+The game starts fullscreen at a white-on-black command menu with no active player or world camera. Click an option or type its name and press **Enter**. The current menu path appears at the input prompt, and previous commands remain in scrollback. **Page Up/Page Down** or the mouse wheel scrolls every menu item on long pages. **F11** toggles fullscreen. **Tab** opens a dark translucent pause terminal while playing; **Escape** goes back in menus or releases the mouse in play. Every typed and printed character triggers its own terminal sound.
 
 ## Controls
 
@@ -24,11 +24,11 @@ The game starts fullscreen at a white-on-black command menu with no active playe
 | Tab | Pause menu |
 | F11 | Fullscreen |
 
-Choose solo or join an online room before movement and interaction are enabled. Leaving either kind of session returns to the main menu, stops the world feed, and releases the player. The pause terminal accepts **SETTINGS**, **DEVELOPER**, **SPAWN**, **HELP**, **LEAVE**, and **RESUME**. In settings, type a row number to change it, `N -` to decrease it, `SET N VALUE` to request a value, **NEXT/PREV** to switch pages, or **RESET**. Display contains the lighting renderer. Image contains post effects, dither, and posterization; HUD and player profile have their own pages. Developer contains detailed rendering, monster behavior, and diagnostics. Monster controls are host-only in Photon rooms. Flicker remains part of the world without a settings page.
+Choose solo or join an online room before movement and interaction are enabled. Leaving either kind of session returns to the main menu, stops the world feed, and releases the player. The pause terminal accepts **SETTINGS**, **DEVELOPER**, **SPAWN**, **HELP**, **LEAVE**, and **RESUME**. Named settings show `<CURRENT VALUE>` and cycle when clicked; numeric settings have draggable sliders. Commands use setting names, for example `LIGHTING`, `SET EXPOSURE 2.25`, **RESET**, and **BACK**. Long settings pages print every item into the scrollable transcript. Display contains the lighting renderer. Image contains post effects, dither, and posterization; HUD and player profile have their own pages. Developer contains detailed rendering, monster behavior, and diagnostics. Monster controls are host-only in Photon rooms. Flicker remains part of the world without a settings page.
 
 In **SPAWN**, type `CUBE 1 WHITE 2` or `GLOWCUBE 1 BLUE 2`: type, size in meters, color, then amount. Sizes range from 0.25 to 2.5, and a command can request up to eight cubes. Solo and online rooms both use the same spawn rules. The held-object hint displays **RMB TO ROTATE**.
 
-Choose **JOIN ONLINE** on the title screen, enter the same Photon room name as the other players, then connect. `BEANROOMS_PHOTON_APP_ID` can override the included Photon App ID. The room master simulates online cubes and monster behavior; guests display its snapshots.
+Choose **ONLINE** on the title screen, then type `CONNECT BEAN` for a room named BEAN. `BEANROOMS_PHOTON_APP_ID` can override the included Photon App ID. The room master simulates online cubes and monster behavior; guests display its snapshots.
 
 Two fixed cubes appear in each room before players spawn more. Pallets, the sandbox browser, devices, cables, welding, copy/place tools, and Ponder guide have been removed.
 

@@ -119,6 +119,8 @@ internal sealed partial class GameWindow : SilkForm
         };
         menu.InteractionSound=()=>audio?.PlayClick();
         menu.HoverSound=()=>audio?.PlayHover();
+        menu.InputSound=()=>audio?.PlayTerminalInput();
+        menu.OutputSound=()=>audio?.PlayTerminalOutput();
         Text = "BEANROOMS";
         ClientSize = new Size(960, 720);
         string? localSide=Environment.GetCommandLineArgs().Skip(1).FirstOrDefault(arg=>arg is "--local-left" or "--local-right");
@@ -167,6 +169,8 @@ internal sealed partial class GameWindow : SilkForm
         {
             if(menu.Open)
             {
+                if(e.Button==MouseButtons.Left && MenuPixel(e.Location) is Point point)
+                    menu.ClickTerminal(point.X,point.Y);
                 return;
             }
             if(!HasPlayer) return;
@@ -187,11 +191,27 @@ internal sealed partial class GameWindow : SilkForm
                 physics.TryPickup(eye,forward,ViewRotation(),boxes);
             }
         };
+        MouseMove += (_, e) =>
+        {
+            if(menu.Open && MenuPixel(e.Location) is Point point)
+                menu.DragTerminalSlider(point.X);
+        };
         MouseWheel += (_, e) => { if(e.Delta==0) return; if(menu.Open) { menu.ScrollTerminal(Math.Sign(e.Delta)*3); return; } if(!HasPlayer) return; int step=Math.Sign(e.Delta); if(network.Connected) { if(networkHolding || networkCubes.Any(cube=>cube.HolderId==network.Id && network.Id!=0)) network.Send(new NetMessage { Type="grab_scroll",Action=step }); } else physics.NudgeGrabDistance(0,step*0.2f); };
-        MouseUp += (_, e) => { if(!HasPlayer) return; if(e.Button==MouseButtons.Right) rotatingHeld=false; if(e.Button==MouseButtons.Left) { if(network.Connected) network.Send(new NetMessage { Type="release" }); else physics.Release(); networkHolding=false;networkHeldId=0;grabYaw=grabPitch=0f; } };
+        MouseUp += (_, e) => { if(menu.Open) { if(e.Button==MouseButtons.Left) menu.ReleaseTerminalSlider();return; } if(!HasPlayer) return; if(e.Button==MouseButtons.Right) rotatingHeld=false; if(e.Button==MouseButtons.Left) { if(network.Connected) network.Send(new NetMessage { Type="release" }); else physics.Release(); networkHolding=false;networkHeldId=0;grabYaw=grabPitch=0f; } };
         Activated += (_, _) => { if(ready && wantsCapture) BeginInvoke(new Action(CaptureMouse)); };
         Deactivate += (_, _) => { networkHolding=false;rotatingHeld=false; network.Send(new NetMessage { Type="release" }); physics.Release(); SuspendMouse(); };
         FormClosed += (_, _) => { audio?.Dispose(); network.Dispose(); physics.Dispose(); ReleaseMouse(); };
+    }
+
+    Point? MenuPixel(Point pointer)
+    {
+        Size size=ClientSize;
+        float contentWidth=Math.Min(size.Width,size.Height*4f/3f);
+        float contentHeight=contentWidth*3f/4f;
+        float left=(size.Width-contentWidth)/2f,top=(size.Height-contentHeight)/2f;
+        if(pointer.X<left || pointer.X>=left+contentWidth || pointer.Y<top || pointer.Y>=top+contentHeight)
+            return null;
+        return new Point((int)((pointer.X-left)*320f/contentWidth),(int)((pointer.Y-top)*240f/contentHeight));
     }
 
     protected override bool ProcessCmdKey(ref Message msg, Keys keyData)

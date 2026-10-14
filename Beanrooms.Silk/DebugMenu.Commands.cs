@@ -15,6 +15,7 @@ internal sealed partial class DebugMenu
     {
         if(!Open || char.IsControl(c) || CommandLine.Length>=128) return;
         CommandLine+=char.ToUpperInvariant(c);
+        InputSound?.Invoke();
         CommandFeedback="";
         Dirty=true;
     }
@@ -28,6 +29,7 @@ internal sealed partial class DebugMenu
     {
         if(CommandLine.Length==0) return;
         CommandLine=CommandLine[..^1];
+        InputSound?.Invoke();
         CommandFeedback="";
         Dirty=true;
     }
@@ -38,6 +40,7 @@ internal sealed partial class DebugMenu
         string command=CommandLine.Trim();
         CommandLine="";
         if(command.Length==0) { Dirty=true;return; }
+        InputSound?.Invoke();
         string upper=command.ToUpperInvariant();
         CommandFeedback="";
         FlushTerminal();
@@ -71,6 +74,7 @@ internal sealed partial class DebugMenu
         else RunSettingCommand(command,upper);
         if(terminalLines.Count==previousLines && CommandFeedback.Length>0)
             PrintLine(CommandFeedback);
+        if(View==MenuView.Settings) RefreshSettingLines();
         Dirty=true;
     }
 
@@ -78,22 +82,21 @@ internal sealed partial class DebugMenu
     {
         switch(command)
         {
-            case "1": case "SOLO": case "PLAY": case "PLAY SOLO":
+            case "SOLO": case "PLAY": case "PLAY SOLO":
                 TitleAction?.Invoke(0);break;
-            case "2": case "ONLINE": case "JOIN": case "JOIN ONLINE":
+            case "ONLINE": case "JOIN": case "JOIN ONLINE":
                 ShowJoinScreen();break;
-            case "3": case "SETTINGS": case "OPTIONS":
+            case "SETTINGS": case "OPTIONS":
                 ShowSettingsFromTitle();break;
-            case "4": case "QUIT": case "EXIT":
+            case "QUIT": case "EXIT":
                 TitleAction?.Invoke(3);break;
-            default: CommandFeedback="UNKNOWN COMMAND  /  TYPE 1 TO 4";break;
+            default: CommandFeedback="TYPE SOLO, ONLINE, SETTINGS OR QUIT";break;
         }
     }
 
     void RunJoinCommand(string command,string upper)
     {
-        if(upper.StartsWith("ROOM ",StringComparison.Ordinal) ||
-           upper.StartsWith("1 ",StringComparison.Ordinal))
+        if(upper.StartsWith("ROOM ",StringComparison.Ordinal))
         {
             int space=command.IndexOf(' ');
             JoinKey=command[(space+1)..].Trim();
@@ -103,17 +106,24 @@ internal sealed partial class DebugMenu
         }
         switch(upper)
         {
-            case "1": case "ROOM":
+            case "ROOM":
                 CommandFeedback="TYPE ROOM <NAME>";break;
-            case "2": case "CONNECT": case "JOIN":
+            case "CONNECT": case "JOIN":
                 ConnectAction?.Invoke();
                 CommandFeedback=NetworkStatus;
                 break;
-            case "3": ShowTitle(resetHistory:false);break;
+            case "BACK": ShowTitle(resetHistory:false);break;
             default:
-                JoinKey=command.Trim();
-                CommandFeedback="ROOM SET  /  TYPE CONNECT";
-                PrintCurrentView();break;
+                if(upper.StartsWith("CONNECT ",StringComparison.Ordinal))
+                {
+                    JoinKey=command[8..].Trim();
+                    if(JoinKey.Length==0) { CommandFeedback="ROOM NAME REQUIRED";break; }
+                    PrintCurrentView();
+                    ConnectAction?.Invoke();
+                    CommandFeedback=NetworkStatus;
+                }
+                else CommandFeedback="TYPE CONNECT <ROOM NAME>";
+                break;
         }
     }
 
@@ -121,17 +131,17 @@ internal sealed partial class DebugMenu
     {
         int row=command switch
         {
-            "1" or "RESUME" or "CONTINUE"=>0,
-            "2" or "PROFILE"=>1,
-            "3" or "SETTINGS" or "OPTIONS"=>2,
-            "4" or "DEVELOPER" or "DEBUG"=>3,
-            "5" or "SPAWN"=>4,
-            "6" or "HELP" or "CONTROLS"=>5,
-            "7" or "LEAVE" or "LEAVE SESSION" or "MENU"=>6,
-            "8" or "QUIT" or "EXIT"=>7,
+            "RESUME" or "CONTINUE"=>0,
+            "PROFILE"=>1,
+            "SETTINGS" or "OPTIONS"=>2,
+            "DEVELOPER" or "DEBUG"=>3,
+            "SPAWN"=>4,
+            "HELP" or "CONTROLS"=>5,
+            "LEAVE" or "LEAVE SESSION" or "MENU"=>6,
+            "QUIT" or "EXIT"=>7,
             _=>-1
         };
-        if(row<0) { CommandFeedback="UNKNOWN COMMAND  /  TYPE 1 TO 8";return; }
+        if(row<0) { CommandFeedback="TYPE AN OPTION NAME";return; }
         Selected=row;
         Adjust(row,1);
     }
@@ -146,12 +156,10 @@ internal sealed partial class DebugMenu
 
     void RunCategoryCommand(string command)
     {
-        int row=-1;
-        if(int.TryParse(command,out int number)) row=number-1;
-        else row=Array.FindIndex(Tabs,tab=>tab.Name==command ||
+        int row=Array.FindIndex(Tabs,tab=>tab.Name==command ||
             tab.Name.Replace(" TUNING","",StringComparison.Ordinal)==command);
         if(row<0 || row>=Tabs.Length)
-        { CommandFeedback=$"TYPE 1 TO {Tabs.Length} OR A PAGE NAME";return; }
+        { CommandFeedback="TYPE A PAGE NAME";return; }
         CategorySelected=row;
         SetPage(Tabs[row].Page);
     }
@@ -160,15 +168,7 @@ internal sealed partial class DebugMenu
     {
         switch(upper)
         {
-            case "NEXT": case "PAGE NEXT": CyclePage(1);return;
-            case "PREV": case "PREVIOUS": case "PAGE PREV": CyclePage(-1);return;
             case "RESET": ResetDefaults();CommandFeedback="DEFAULTS RESTORED";return;
-            case "MORE":
-                ScrollRow=Math.Min(Math.Max(0,Labels[Page].Length-VisibleRows),ScrollRow+VisibleRows);
-                PrintCurrentView();return;
-            case "LESS":
-                ScrollRow=Math.Max(0,ScrollRow-VisibleRows);
-                PrintCurrentView();return;
         }
         if(Page==6 && upper.StartsWith("NAME ",StringComparison.Ordinal))
         {
@@ -176,31 +176,34 @@ internal sealed partial class DebugMenu
             return;
         }
         string argument=upper.StartsWith("SET ",StringComparison.Ordinal)?command[4..].Trim():command;
-        string[] parts=argument.Split(' ',2,StringSplitOptions.RemoveEmptyEntries);
-        if(parts.Length==0 || !int.TryParse(parts[0],out int number) ||
-           number<1 || number>Labels[Page].Length)
+        int row=Array.FindIndex(Labels[Page],label=>argument.Equals(label,StringComparison.OrdinalIgnoreCase));
+        string value="";
+        if(row<0)
         {
-            CommandFeedback="TYPE NUMBER  /  NEXT  /  BACK";
+            row=Array.FindIndex(Labels[Page],label=>argument.StartsWith(label+" ",StringComparison.OrdinalIgnoreCase));
+            if(row>=0) value=argument[(Labels[Page][row].Length+1)..].Trim();
+        }
+        if(row<0)
+        {
+            CommandFeedback="TYPE A SETTING NAME OR BACK";
             return;
         }
-        int row=number-1;
         Selected=row;
-        EnsureVisible();
-        if(parts.Length==1 || parts[1]=="+")
+        if(value.Length==0 || value=="+")
         {
             if(Page==6 && row==0)
             { CommandFeedback="TYPE NAME <TEXT>";return; }
             Adjust(row,1);
             CommandFeedback=$"{Labels[Page][row]}  {Value(row)}";
         }
-        else if(parts[1]=="-")
+        else if(value=="-")
         {
             Adjust(row,-1);
             CommandFeedback=$"{Labels[Page][row]}  {Value(row)}";
         }
-        else if(Page==6 && row==0) SetPlayerName(parts[1]);
+        else if(Page==6 && row==0) SetPlayerName(value);
         else if(Page==5 && !MonsterControlsWritable) CommandFeedback="HOST ONLY";
-        else if(TrySetValue(row,parts[1]))
+        else if(TrySetValue(row,value))
             CommandFeedback=$"{Labels[Page][row]}  {Value(row)}";
         else CommandFeedback="VALUE NOT AVAILABLE";
     }
@@ -255,6 +258,20 @@ internal sealed partial class DebugMenu
         {
             string before=Value(row);
             Adjust(row,-1,false);
+            if(Value(row)==before) break;
+        }
+        for(int attempt=0;attempt<1000;attempt++)
+        {
+            string before=Value(row);
+            Adjust(row,-1,false);
+            string after=Value(row);
+            if(Matches(after)) return true;
+            if(after==before) break;
+        }
+        for(int attempt=0;attempt<1000 && Value(row)!=original;attempt++)
+        {
+            string before=Value(row);
+            Adjust(row,1,false);
             if(Value(row)==before) break;
         }
         return false;

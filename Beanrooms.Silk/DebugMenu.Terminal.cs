@@ -6,12 +6,16 @@ internal sealed partial class DebugMenu
 {
     sealed class TerminalLine
     {
-        internal readonly string Text;
+        internal string Text;
         internal int Visible;
+        internal string Action="";
+        internal int SettingPage=-1, SettingRow=-1;
+        internal int SliderStart=-1, SliderEnd=-1;
         internal TerminalLine(string text) { Text=text; }
     }
 
     const int TerminalVisibleRows=17;
+    const int TerminalRowHeight=12, TerminalTop=10;
     readonly List<TerminalLine> terminalLines=[];
     int terminalScroll;
     float revealBudget;
@@ -34,7 +38,7 @@ internal sealed partial class DebugMenu
         Dirty=true;
     }
 
-    void PrintLine(string line="")
+    void PrintLine(string line="",string action="",int settingRow=-1,int sliderStart=-1,int sliderEnd=-1)
     {
         if(line.Length==0)
         {
@@ -45,7 +49,16 @@ internal sealed partial class DebugMenu
         {
             for(int start=0;start<line.Length;start+=49)
             {
-                terminalLines.Add(new TerminalLine(line.Substring(start,Math.Min(49,line.Length-start))));
+                var entry=new TerminalLine(line.Substring(start,Math.Min(49,line.Length-start)));
+                if(start==0)
+                {
+                    entry.Action=action;
+                    entry.SettingPage=settingRow<0?-1:Page;
+                    entry.SettingRow=settingRow;
+                    entry.SliderStart=sliderStart;
+                    entry.SliderEnd=sliderEnd;
+                }
+                terminalLines.Add(entry);
                 if(terminalScroll>0) terminalScroll++;
             }
         }
@@ -61,6 +74,10 @@ internal sealed partial class DebugMenu
     internal void PrintCurrentView()
     {
         if(!Open) return;
+        activeSliderRow=-1;
+        foreach(TerminalLine line in terminalLines)
+        { line.Action="";line.SettingPage=-1;line.SettingRow=-1; }
+        int viewStart=terminalLines.Count;
         PrintLine();
         PrintLine(MenuPath+"> DIR");
         PrintLine();
@@ -68,28 +85,28 @@ internal sealed partial class DebugMenu
         {
             if(TitlePage==0)
             {
-                PrintLine("01. SOLO");
-                PrintLine("02. ONLINE");
-                PrintLine("03. SETTINGS");
-                PrintLine("04. QUIT");
+                PrintLine("SOLO",action:"SOLO");
+                PrintLine("ONLINE",action:"ONLINE");
+                PrintLine("SETTINGS",action:"SETTINGS");
+                PrintLine("QUIT",action:"QUIT");
             }
             else
             {
-                PrintLine("01. ROOM <NAME>  = "+(JoinKey.Length==0?"NOT SET":JoinKey.ToUpperInvariant()));
-                PrintLine("02. CONNECT");
-                PrintLine("03. BACK");
+                PrintLine("ROOM <NAME> = "+(JoinKey.Length==0?"NOT SET":JoinKey.ToUpperInvariant()),action:"ROOM ");
+                PrintLine("CONNECT <ROOM NAME>",action:"CONNECT ");
+                PrintLine("BACK",action:"BACK");
                 PrintLine("STATUS = "+(NetworkConnected?"ONLINE":NetworkStatus));
             }
         }
         else if(View==MenuView.Pause)
         {
             string[] options=["RESUME","PROFILE","SETTINGS","DEVELOPER","SPAWN","HELP","LEAVE","QUIT"];
-            for(int i=0;i<options.Length;i++) PrintLine($"{i+1:00}. {options[i]}");
+            foreach(string option in options) PrintLine(option,action:option);
         }
         else if(View==MenuView.Categories)
         {
-            for(int i=0;i<Tabs.Length;i++) PrintLine($"{i+1:00}. {Tabs[i].Name}");
-            PrintLine("TYPE BACK TO RETURN");
+            foreach(var tab in Tabs) PrintLine(tab.Name,action:tab.Name);
+            PrintLine("BACK",action:"BACK");
         }
         else if(View==MenuView.Help)
         {
@@ -100,10 +117,11 @@ internal sealed partial class DebugMenu
                 "RMB ROTATE HELD OBJECT",
                 "TAB PAUSE   ESC RELEASE",
                 "F11 FULLSCREEN",
-                "DISPLAY 1 SWITCHES RENDERER",
-                "TYPE BACK TO RETURN"
+                "DISPLAY / LIGHTING CHANGES RENDERER",
+                "BACK"
             ];
             foreach(string line in help) PrintLine(line);
+            terminalLines[^1].Action="BACK";
         }
         else if(View==MenuView.Spawn)
         {
@@ -114,24 +132,88 @@ internal sealed partial class DebugMenu
             PrintLine("SIZE 0.25 TO 2.5  /  AMOUNT 1 TO 8");
             PrintLine("WHITE RED GREEN BLUE YELLOW");
             PrintLine("ORANGE PURPLE CYAN AMBER");
-            PrintLine("TYPE BACK TO RETURN");
+            PrintLine("BACK",action:"BACK");
         }
         else
         {
-            for(int i=ScrollRow;i<Math.Min(ScrollRow+VisibleRows,Labels[Page].Length);i++)
-                PrintLine($"{i+1:00}. {Labels[Page][i]} = {Value(i)}");
-            PrintLine("NUMBER [+/-]  /  SET N VALUE");
-            if(Labels[Page].Length>VisibleRows)
-                PrintLine($"ROWS {ScrollRow+1:00}-{Math.Min(ScrollRow+VisibleRows,Labels[Page].Length):00} / MORE LESS");
-            PrintLine("NEXT PREV RESET BACK");
+            for(int i=0;i<Labels[Page].Length;i++)
+            {
+                var (line,start,end)=SettingLine(i);
+                PrintLine(line,settingRow:i,sliderStart:start,sliderEnd:end);
+            }
+            PrintLine("CLICK VALUE TO CYCLE / DRAG SLIDER");
+            PrintLine("RESET",action:"RESET");
+            PrintLine("BACK",action:"BACK");
         }
         PrintLine();
+        terminalScroll=Math.Max(0,terminalLines.Count-TerminalVisibleRows-viewStart);
+        Dirty=true;
     }
 
     internal void ScrollTerminal(int lines)
     {
         terminalScroll=Math.Clamp(terminalScroll+lines,0,Math.Max(0,terminalLines.Count-TerminalVisibleRows));
         Dirty=true;
+    }
+
+    internal void RefreshSettingLines()
+    {
+        foreach(TerminalLine line in terminalLines)
+        {
+            if(line.SettingPage!=Page || line.SettingRow<0) continue;
+            var (text,start,end)=SettingLine(line.SettingRow);
+            line.Text=text;
+            line.Visible=text.Length;
+            line.SliderStart=start;
+            line.SliderEnd=end;
+        }
+        Dirty=true;
+    }
+
+    internal void ClickTerminal(int x,int y)
+    {
+        if(!Open || x<10 || x>=310 || y<TerminalTop || y>=TerminalTop+TerminalVisibleRows*TerminalRowHeight) return;
+        int slot=(y-TerminalTop)/TerminalRowHeight;
+        int top=Math.Max(0,terminalLines.Count-TerminalVisibleRows-terminalScroll);
+        if(slot>=TerminalVisibleRows || top+slot>=terminalLines.Count) return;
+        TerminalLine line=terminalLines[top+slot];
+        if(line.Visible==0) return;
+        int column=(x-10)/6;
+        if(line.SettingRow>=0 && line.SettingPage==Page && View==MenuView.Settings)
+        {
+            if(Page==5 && !MonsterControlsWritable) { PrintLine("HOST ONLY");return; }
+            if(Page==6 && line.SettingRow==0)
+            { CommandLine="NAME ";Dirty=true;return; }
+            Selected=line.SettingRow;
+            if(line.SliderStart>=0 && column>=line.SliderStart && column<=line.SliderEnd)
+            {
+                activeSliderRow=line.SettingRow;
+                DragTerminalSlider(x);
+            }
+            else
+            {
+                Adjust(line.SettingRow,1);
+                RefreshSettingLines();
+            }
+            return;
+        }
+        if(line.Action.Length==0) return;
+        if(line.Action.EndsWith(' '))
+        { CommandLine=line.Action;Dirty=true;return; }
+        CommandLine=line.Action;
+        SubmitCommand();
+    }
+
+    int activeSliderRow=-1;
+    internal void ReleaseTerminalSlider() => activeSliderRow=-1;
+    internal void DragTerminalSlider(int x)
+    {
+        if(activeSliderRow<0) return;
+        TerminalLine? line=terminalLines.LastOrDefault(item=>item.SettingPage==Page && item.SettingRow==activeSliderRow);
+        if(line==null || line.SliderStart<0) return;
+        float fraction=Math.Clamp((x-(10+line.SliderStart*6))/(float)Math.Max(1,(line.SliderEnd-line.SliderStart)*6),0,1);
+        SetNumericFraction(activeSliderRow,fraction);
+        RefreshSettingLines();
     }
 
     internal void FlushTerminal()
@@ -159,6 +241,8 @@ internal sealed partial class DebugMenu
             int remaining=line.Text.Length-line.Visible;
             if(remaining<=0) continue;
             int reveal=Math.Min(remaining,budget);
+            if(OutputSound!=null)
+                for(int i=0;i<reveal;i++) OutputSound();
             line.Visible+=reveal;
             budget-=reveal;
             Dirty=true;
@@ -179,7 +263,7 @@ internal sealed partial class DebugMenu
         {
             TerminalLine line=terminalLines[top+i];
             if(line.Visible>0)
-                PixelText(g,line.Text[..line.Visible],white,10,10+i*12);
+                PixelText(g,line.Text[..line.Visible],white,10,TerminalTop+i*TerminalRowHeight);
         }
         PixelText(g,PromptText(),white,10,220);
     }

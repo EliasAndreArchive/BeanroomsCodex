@@ -11,21 +11,50 @@ static void Send(DebugMenu menu,string command)
     foreach(char c in command) menu.TypeCommandCharacter(c);
     menu.SubmitCommand();
 }
+static void ClickLine(DebugMenu menu,string prefix,int column=-1)
+{
+    menu.FlushTerminal();
+    IReadOnlyList<string> history=menu.TerminalHistory;
+    int top=Math.Max(0,history.Count-17-menu.TerminalScroll);
+    int index=-1;
+    for(int i=top;i<history.Count && i<top+17;i++)
+        if(history[i].StartsWith(prefix,StringComparison.Ordinal)) index=i;
+    Check(index>=top,$"Visible menu line missing: {prefix}");
+    menu.ClickTerminal(10+Math.Max(0,column)*6+2,10+(index-top)*12+3);
+}
+static void ClickWideRow(DebugMenu menu,string prefix)
+{
+    menu.FlushTerminal();
+    IReadOnlyList<string> history=menu.TerminalHistory;
+    int top=Math.Max(0,history.Count-17-menu.TerminalScroll);
+    int index=-1;
+    for(int i=top;i<history.Count && i<top+17;i++)
+        if(history[i].StartsWith(prefix,StringComparison.Ordinal)) index=i;
+    Check(index>=top,$"Visible menu line missing: {prefix}");
+    menu.ClickTerminal(300,10+(index-top)*12+11);
+}
 var menu=new DebugMenu();
 menu.ShowTitle();
+int outputSounds=0,inputSounds=0;
+menu.OutputSound=()=>outputSounds++;
+menu.InputSound=()=>inputSounds++;
 Check(menu.RevealedCharacters==0,"Terminal output appeared without being printed.");
 menu.AdvanceTerminal(.05f);
 Check(menu.RevealedCharacters>0 &&
     menu.RevealedCharacters<menu.TerminalHistory.Sum(line=>line.Length),
     "Terminal output did not write progressively.");
+Check(outputSounds==menu.RevealedCharacters,"Each printed character needs its own sound.");
 menu.FlushTerminal();
 menu.TypeCommandCharacter('S');
+Check(inputSounds==1,"Typed input did not trigger one sound per character.");
 menu.BackspaceCommand();
 Check(menu.CommandLine.Length==0,"Command backspace failed.");
-Send(menu,"ONLINE");
+ClickWideRow(menu,"ONLINE");
 Check(menu.TitleScreen && menu.TitlePage==1,"ONLINE did not open room joining.");
-Send(menu,"ROOM TEST ROOM");
-Check(menu.JoinKey=="TEST ROOM","ROOM command did not set the room name.");
+bool connectStarted=false;
+menu.ConnectAction=()=>connectStarted=true;
+Send(menu,"CONNECT BEAN");
+Check(menu.JoinKey=="BEAN" && connectStarted,"CONNECT BEAN did not join the named room.");
 bool joinCancelled=false;
 menu.CancelJoinAction=()=>joinCancelled=true;
 Send(menu,"BACK");
@@ -40,26 +69,38 @@ Check(menu.TerminalScroll>0,"Terminal scrollback cannot reach the main menu.");
 menu.ScrollTerminal(-100);
 Send(menu,"DISPLAY");
 Check(menu.Page==11,"DISPLAY did not open player display settings.");
-Send(menu,"SET 1 REALTIME");
+Check(menu.TerminalHistory.Any(line=>line.StartsWith("LIGHTING <PATH TRACED>")),
+    "Renderer did not show its current choice.");
+ClickLine(menu,"LIGHTING");
 Check(menu.RenderMode==1,"Renderer command did not select realtime lighting.");
+Check(menu.TerminalHistory.Any(line=>line.StartsWith("LIGHTING <REALTIME>")),
+    "Clicked choice did not update the displayed value.");
 Send(menu,"BACK");
 Send(menu,"IMAGE");
 Check(menu.Page==7,"IMAGE did not open image settings.");
 int tonemapBefore=menu.TonemapMode;
-Send(menu,"SET 2 2.25");
+string exposureLine=menu.TerminalHistory.Last(line=>line.StartsWith("EXPOSURE "));
+int slider=exposureLine.IndexOf('[')+1;
+ClickLine(menu,"EXPOSURE ",slider);
+menu.DragTerminalSlider(10+(slider+6)*6+2);
+menu.ReleaseTerminalSlider();
+Check(Math.Abs(menu.Exposure-3f)<.01f,"Exposure slider did not drag to maximum.");
+Send(menu,"SET EXPOSURE 2.25");
 Check(Math.Abs(menu.Exposure-2.25f)<0.01f && menu.TonemapMode==tonemapBefore,
     "Image exposure command changed tonemap or missed the requested value.");
-Send(menu,"SET 2 9999");
+Send(menu,"SET EXPOSURE 9999");
 Check(Math.Abs(menu.Exposure-2.25f)<0.01f && menu.CommandFeedback=="VALUE NOT AVAILABLE",
     "Invalid setting value changed exposure.");
-Send(menu,"8");
+ClickLine(menu,"DITHER ");
 Check(!menu.Dithering,"Dither command did not toggle.");
-Send(menu,"9");
+Send(menu,"POSTERIZATION");
 Check(!menu.PaletteReduction,"Posterization command did not toggle.");
-Send(menu,"NEXT");
-Check(menu.Page==12,"NEXT did not reach HUD settings.");
-Send(menu,"NEXT");
-Check(menu.Page==6,"NEXT did not reach player profile.");
+Send(menu,"BACK");
+Send(menu,"HUD");
+Check(menu.Page==12,"HUD did not open from settings.");
+Send(menu,"BACK");
+Send(menu,"PROFILE");
+Check(menu.Page==6,"PROFILE did not open from settings.");
 Send(menu,"NAME RED BEAN");
 Check(menu.PlayerName=="RED BEAN","NAME command did not change the player name.");
 Send(menu,"BACK");
@@ -90,8 +131,20 @@ Send(menu,"DEVELOPER");
 Check(menu.View==DebugMenu.MenuView.Categories,"DEVELOPER command did not open advanced pages.");
 Send(menu,"RENDER");
 Check(menu.Page==1,"RENDER command did not open detailed renderer settings.");
-Send(menu,"MORE");
-Check(menu.ScrollRow>0,"MORE did not scroll long settings pages.");
+Check(menu.TerminalHistory.Any(line=>line.StartsWith("RENDER MODE <")) &&
+    menu.TerminalHistory.Any(line=>line.StartsWith("DIRECT SAMPLES ")),
+    "Long settings page did not print every item.");
+Check(menu.TerminalScroll>0,"Long settings page did not start at its first items.");
+int firstItemsScroll=menu.TerminalScroll;
+menu.ScrollTerminal(-100);
+Check(menu.TerminalScroll==0,"Long settings page cannot scroll to its final items.");
+menu.ScrollTerminal(firstItemsScroll);
+menu.Samples=256;
+menu.RefreshSettingLines();
+ClickLine(menu,"PATH SAMPLES ");
+Check(menu.Samples==16,"Named sample choices did not cycle from last to first.");
+Send(menu,"NEXT");
+Check(menu.CommandFeedback=="TYPE A SETTING NAME OR BACK","Removed NEXT command is still active.");
 Send(menu,"RESET");
 Check(menu.CommandFeedback=="DEFAULTS RESTORED","RESET did not confirm defaults.");
 menu.SetPage(2);
@@ -103,7 +156,7 @@ Check(menu.Page==1,"Removed flicker settings are still reachable.");
 Send(menu,"BACK");
 Send(menu,"DIAGNOSTICS");
 Check(menu.Page==10,"DIAGNOSTICS command did not open the debug page.");
-Send(menu,"4");
+Send(menu,"SYSTEM INFO");
 Check(menu.ShowDebugOverlay,"Diagnostics command did not enable system info.");
 Send(menu,"BACK");
 Send(menu,"BACK");
@@ -113,12 +166,14 @@ Send(menu,"LEAVE");
 Check(sessionChoice==1,"LEAVE did not route to the session exit.");
 menu.ShowTitle();
 Send(menu,"GIBBERISH");
-Check(menu.CommandFeedback.StartsWith("UNKNOWN"),"Unknown command gave no feedback.");
+Check(menu.CommandFeedback.StartsWith("TYPE SOLO"),"Unknown command gave no feedback.");
+Send(menu,"1");
+Check(menu.CommandFeedback.StartsWith("TYPE SOLO"),"Numeric menu selection is still accepted.");
 using(var frame=menu.Draw())
     Check(frame.Width==320 && frame.Height==240,"Terminal rendering size changed.");
 menu.LeaveTitle();menu.Open=true;menu.SetPage(9);menu.FlushTerminal();
 using(var pauseFrame=menu.Draw())
-    Check(pauseFrame.Pixels[3] is >0 and <255,"Gameplay terminal is not translucent.");
+    Check(pauseFrame.Pixels[3] is >200 and <255,"Gameplay terminal should be dark and translucent.");
 if(args.Length==2 && args[0]=="--menu-preview")
 {
     Directory.CreateDirectory(args[1]);
@@ -129,6 +184,10 @@ if(args.Length==2 && args[0]=="--menu-preview")
     Send(menu,"DISPLAY");
     menu.FlushTerminal();
     using(var display=menu.Draw()) File.WriteAllBytes(Path.Combine(args[1],"display.bgra"),display.Pixels);
+    Send(menu,"BACK");
+    Send(menu,"IMAGE");
+    menu.FlushTerminal();
+    using(var imageMenu=menu.Draw()) File.WriteAllBytes(Path.Combine(args[1],"image.bgra"),imageMenu.Pixels);
     menu.LeaveTitle();menu.Open=true;menu.SetPage(9);
     menu.FlushTerminal();
     using(var pause=menu.Draw()) File.WriteAllBytes(Path.Combine(args[1],"pause.bgra"),pause.Pixels);
@@ -140,6 +199,10 @@ if(args.Length==2 && args[0]=="--menu-preview")
     Send(menu,"DIAGNOSTICS");
     menu.FlushTerminal();
     using(var diagnostics=menu.Draw()) File.WriteAllBytes(Path.Combine(args[1],"diagnostics.bgra"),diagnostics.Pixels);
+    Send(menu,"BACK");
+    Send(menu,"RENDER");
+    menu.FlushTerminal();
+    using(var render=menu.Draw()) File.WriteAllBytes(Path.Combine(args[1],"render.bgra"),render.Pixels);
 }var layout=WorldLayout.Generate(82317);
 Check(layout.Walls.Count>0,"Procedural layout has no walls.");
 Vector2 spawn=WorldLayout.FindClearSpawn(layout.Walls,new Vector2(96,96),.4f);

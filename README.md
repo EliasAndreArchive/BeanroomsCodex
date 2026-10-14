@@ -12,7 +12,7 @@ Install the .NET 8 SDK and run:
 dotnet run --project Beanrooms.Silk/Beanrooms.Silk.csproj -c Release
 ```
 
-The game starts fullscreen at a white-on-black command menu without a player or world camera. Type a displayed command or number and press **Enter**. Each screen prints into scrollback, so **Page Up/Page Down** or the mouse wheel can revisit earlier prompts; the current path stays on the input line. During play, **Tab** opens a translucent terminal over the room, **Escape** goes back, and **F11** toggles fullscreen. Type **SPAWN** from the pause menu, then a command such as `CUBE 1 WHITE 2` or `GLOWCUBE 1 BLUE 2` to create objects in solo or online play. A GPU driver with OpenGL 4.3 support is required.
+The game starts fullscreen at a white-on-black command menu without a player or world camera. Click an option or type its name and press **Enter**. Named settings show `<CURRENT VALUE>` and cycle when clicked; numeric settings have draggable sliders. Long pages print every item and scroll with **Page Up/Page Down** or the mouse wheel. The current path stays on the input line, and earlier prompts remain in scrollback. During play, **Tab** opens a dark translucent terminal over the room, **Escape** goes back, and **F11** toggles fullscreen. Type **SPAWN** from the pause menu, then a command such as `CUBE 1 WHITE 2` or `GLOWCUBE 1 BLUE 2` to create objects in solo or online play. Every typed and printed character triggers its own terminal sound. A GPU driver with OpenGL 4.3 support is required.
 
 To make a standalone Windows build:
 
@@ -28,7 +28,7 @@ Every push to `main` builds self-contained Windows and Linux archives and publis
 
 ## Online rooms
 
-Choose **JOIN ONLINE**, enter the same room name as the other players, then connect. The client uses the configured Photon App ID; set `BEANROOMS_PHOTON_APP_ID` to override it for another Photon application. The old dedicated server and Render bridge have been removed.
+Choose **ONLINE**, then type `CONNECT BEAN` to connect to the room named BEAN. The client uses the configured Photon App ID; set `BEANROOMS_PHOTON_APP_ID` to override it for another Photon application. The old dedicated server and Render bridge have been removed.
 
 ## Checks
 

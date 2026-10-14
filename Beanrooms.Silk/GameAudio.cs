@@ -10,6 +10,8 @@ internal sealed class GameAudio : IDisposable
     AudioSystem? system;
     AudioClip? spawnClip,clickClip,hoverClip,lampClip;
     AudioVoice? spawn,click,hover;
+    AudioVoice[] terminalInputs=[],terminalOutputs=[];
+    int nextTerminalInput,nextTerminalOutput;
     LoopingSound[]? lamps;
     LoopingSound? monster;
     PhysicalSounds? physical;
@@ -26,6 +28,10 @@ internal sealed class GameAudio : IDisposable
             spawnClip=system.Load("spawn-boom.mp3");spawn=new AudioVoice(spawnClip);spawn.Set(0.8);
             clickClip=system.Load("ui-click.wav");click=new AudioVoice(clickClip);click.Set(0.55);
             hoverClip=system.Load("ui-hover.wav");hover=new AudioVoice(hoverClip);hover.Set(0.35);
+            terminalInputs=Enumerable.Range(0,4).Select(_=>new AudioVoice(clickClip)).ToArray();
+            terminalOutputs=Enumerable.Range(0,48).Select(_=>new AudioVoice(hoverClip)).ToArray();
+            foreach(AudioVoice voice in terminalInputs) voice.Set(0.25);
+            foreach(AudioVoice voice in terminalOutputs) voice.Set(0.035);
             AudioClip loadedLamp=system.Load("lamp-buzz.mp3");
             lampClip=loadedLamp;
             lamps=Enumerable.Range(0,4).Select(_=>new LoopingSound(loadedLamp)).ToArray();
@@ -63,6 +69,18 @@ internal sealed class GameAudio : IDisposable
         if(!available || now-lastHover<0.055) return;
         lastHover=now;
         hover!.Play();
+    }
+
+    internal void PlayTerminalInput()
+    {
+        if(!available) return;
+        terminalInputs[nextTerminalInput++%terminalInputs.Length].Play();
+    }
+
+    internal void PlayTerminalOutput()
+    {
+        if(!available) return;
+        terminalOutputs[nextTerminalOutput++%terminalOutputs.Length].Play();
     }
 
     internal void SetWorld(IReadOnlyList<RectangleF> walls)
@@ -155,6 +173,8 @@ internal sealed class GameAudio : IDisposable
     {
         acoustics?.Dispose();acoustics=null;
         spawn?.Dispose();click?.Dispose();hover?.Dispose();
+        foreach(AudioVoice voice in terminalInputs) voice.Dispose();
+        foreach(AudioVoice voice in terminalOutputs) voice.Dispose();
         if(lamps!=null) foreach(LoopingSound lamp in lamps) lamp.Dispose();
         monster?.Dispose();physical?.Dispose();
         lampClip?.Dispose();spawnClip?.Dispose();clickClip?.Dispose();hoverClip?.Dispose();system?.Dispose();

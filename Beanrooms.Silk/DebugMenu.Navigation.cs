@@ -16,7 +16,7 @@ internal sealed partial class DebugMenu
         {
             View=MenuView.Pause;Page=9;Selected=0;
             ResetTerminal();
-            PrintLine("TYPE COMMAND OR NUMBER, THEN ENTER");
+            PrintLine("CLICK OR TYPE OPTION NAME, THEN ENTER");
             PrintLine("PAGE UP / PAGE DOWN / WHEEL SCROLL");
             PrintCurrentView();
         }
@@ -66,7 +66,7 @@ internal sealed partial class DebugMenu
         {
             ResetTerminal();
             PrintLine("BEANROOMS COMMAND TERMINAL READY");
-            PrintLine("TYPE COMMAND OR NUMBER, THEN ENTER");
+            PrintLine("CLICK OR TYPE OPTION NAME, THEN ENTER");
             PrintLine("PAGE UP / PAGE DOWN / WHEEL SCROLL");
         }
         FinishEditing(); Open=true;TitleScreen=true;SettingsFromTitle=false;
@@ -94,16 +94,10 @@ internal sealed partial class DebugMenu
         ClearCommand();
         if(page!=9 && View!=MenuView.Settings)
             settingsReturn=View==MenuView.Pause?MenuView.Pause:MenuView.Categories;
-        FinishEditing(); Page=Math.Clamp(page,0,12); Selected=0;ScrollRow=0;
+        FinishEditing(); Page=Math.Clamp(page,0,12); Selected=0;
         View=Page==9?MenuView.Pause:MenuView.Settings;
         Dirty=true;InteractionSound?.Invoke();
         PrintCurrentView();
-    }
-    internal void CyclePage(int step)
-    {
-        if(View!=MenuView.Settings) return;
-        int index=Array.FindIndex(Tabs,tab=>tab.Page==Page);
-        SetPage(Tabs[(index+step+Tabs.Length)%Tabs.Length].Page);
     }
     internal void ResetDefaults()
     {
@@ -160,11 +154,4 @@ internal sealed partial class DebugMenu
         FinishEditing();Dirty=true;
     }
     internal void FinishEditing() { JoinKey=JoinKey.Trim(); }
-    void EnsureVisible()
-    {
-        if(View!=MenuView.Settings) return;
-        if(Selected<ScrollRow) ScrollRow=Selected;
-        else if(Selected>=ScrollRow+VisibleRows) ScrollRow=Selected-VisibleRows+1;
-    }
-    const int VisibleRows=10;
 }

@@ -30,21 +30,21 @@ internal sealed partial class DebugMenu
                 case 0: RenderMode = RenderMode == 1 ? 2 : 1; break;
                 case 1:
                     int sampleIndex = Array.IndexOf(SampleChoices, Samples);
-                    Samples = SampleChoices[Math.Clamp(sampleIndex + direction, 0, SampleChoices.Length - 1)];
+                    Samples = SampleChoices[(sampleIndex + direction + SampleChoices.Length) % SampleChoices.Length];
                     break;
                 case 2: Bounces = Math.Clamp(Bounces + direction, 1, 3); break;
                 case 3: BounceStrength = Math.Clamp(BounceStrength + direction * 0.01f, 0f, 3f); break;
                 case 4: AO = Math.Clamp(AO + direction * 0.01f, 0f, 1.5f); break;
                 case 5: LightIntensity = Math.Clamp(LightIntensity + direction * 0.01f, 0.1f, 2f); break;
                 case 6: LightDensity = Math.Clamp(LightDensity + direction * 0.01f, 0f, 1f); break;
-                case 7: ResolutionIndex = Math.Clamp(ResolutionIndex + direction, 0, 2); break;
+                case 7: ResolutionIndex = (ResolutionIndex + direction + 3) % 3; break;
                 case 8: Lights = !Lights; break;
                 case 9: FpsLimit = FpsLimit == 0 ? (direction < 0 ? 240 : 15) : FpsLimit >= 240 && direction > 0 ? 0 : Math.Clamp(FpsLimit + direction,15,240); break;
                 case 10: Vsync = !Vsync; break;
                 case 11: Volumetrics = !Volumetrics; break;
                 case 12: FogDensity = Math.Clamp(FogDensity + direction * 0.001f, 0f, 0.1f); break;
                 case 13: FogSteps = Math.Clamp(FogSteps + direction, 2, 8); break;
-                case 14: ProbeQuality = Math.Clamp(ProbeQuality + direction, 0, 3); break;
+                case 14: ProbeQuality = (ProbeQuality + direction + 4) % 4; break;
                 case 15: ProbeBounces = Math.Clamp(ProbeBounces + direction, 1, 6); break;
                 case 16: HybridDirectSamples = Math.Clamp(HybridDirectSamples + direction, 1, 8); break;
             }
