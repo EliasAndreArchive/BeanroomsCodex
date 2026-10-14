@@ -5,7 +5,7 @@ namespace Beanrooms;
 
 internal sealed partial class DebugMenu
 {
-    internal enum MenuView { Pause, Categories, Settings, Help }
+    internal enum MenuView { Pause, Categories, Settings, Help, Network }
     internal MenuView View = MenuView.Pause;
     MenuView settingsReturn=MenuView.Categories;
     internal int CategorySelected;
@@ -40,6 +40,8 @@ internal sealed partial class DebugMenu
     internal bool NetworkConnected;
     internal string JoinKey = "", NetworkStatus = "OFFLINE";
     internal int NetworkId, NetworkHost, NetworkPlayers;
+    internal string NetworkRoomCode="";
+    internal Func<string,bool>? ChatAction;
     internal (PointF A,PointF B,Color Ink)[] MonsterSegments = [];
     internal (PointF At,string Label,Color Ink)[] MonsterPoints = [];
     internal (PointF At,string Label,Color Ink)[] PlayerTags = [];
@@ -101,6 +103,8 @@ internal sealed partial class DebugMenu
         ['[']=[14,8,8,8,8,8,14], [']']=[14,2,2,2,2,2,14],
         ['.']=[0,0,0,0,0,12,12], ['-']=[0,0,0,31,0,0,0],
         [',']=[0,0,0,0,0,4,8],
+        ['!']=[4,4,4,4,4,0,4], ['?']=[14,17,1,2,4,0,4],
+        ['\'']=[4,4,8,0,0,0,0], ['(']=[2,4,8,8,8,4,2], [')']=[8,4,2,2,2,4,8],
         ['+']=[0,4,4,31,4,4,0], [':']=[0,4,4,0,4,4,0],
         ['_']=[0,0,0,0,0,0,31], ['=']=[0,0,31,0,31,0,0]
     };

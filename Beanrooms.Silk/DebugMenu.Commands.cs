@@ -58,6 +58,11 @@ internal sealed partial class DebugMenu
             PrintCurrentView();
             return;
         }
+        if(!TitleScreen && View==MenuView.Network && upper is not ("BACK" or "ESC"))
+        {
+            RunChatCommand(command);
+            return;
+        }
         FlushTerminal();
         bool scrolling=upper is "SCROLL UP" or "PAGE UP" or "SCROLL DOWN" or "PAGE DOWN" or "TOP" or "BOTTOM";
         if(!scrolling) ScrollTerminal(-1000);
@@ -155,6 +160,7 @@ internal sealed partial class DebugMenu
             "PROFILE"=>1,
             "SETTINGS" or "OPTIONS"=>2,
             "DEVELOPER" or "DEBUG"=>3,
+            "NETWORK" when NetworkConnected=>7,
             "HELP" or "CONTROLS"=>4,
             "LEAVE" or "LEAVE SESSION" or "MENU"=>5,
             "QUIT" or "EXIT"=>6,
@@ -163,7 +169,24 @@ internal sealed partial class DebugMenu
         if(row<0) { CommandFailed("COMMAND NOT RECOGNIZED");return; }
         Selected=row;
         Page=9;
-        Adjust(row,1);
+        if(row==7) OpenNetwork();
+        else Adjust(row,1);
+    }
+
+    void RunChatCommand(string command)
+    {
+        if(command.Equals("PLAYERS",StringComparison.OrdinalIgnoreCase))
+        { OpenNetworkPlayers();return; }
+        if(networkPlayersOpen)
+        { CommandFailed("COMMAND NOT RECOGNIZED");PrintLine("ERROR: "+CommandFeedback,error:true);return; }
+        string text=command.StartsWith("CHAT ",StringComparison.OrdinalIgnoreCase)
+            ?command[5..]:command;
+        text=CleanChatText(text);
+        if(text.Length==0) CommandFailed("MESSAGE REQUIRED");
+        else if(text.Length>34) CommandFailed("MESSAGE TOO LONG");
+        else if(ChatAction?.Invoke(text)!=true) CommandFailed("CHAT UNAVAILABLE");
+        if(commandError) PrintLine("ERROR: "+CommandFeedback,error:true);
+        Dirty=true;
     }
 
     void RunSpawnCommand(string command)

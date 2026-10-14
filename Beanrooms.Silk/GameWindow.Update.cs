@@ -93,6 +93,11 @@ internal sealed partial class GameWindow
             int count=snapshot.Players.Length;
             if(!menu.NetworkConnected || menu.NetworkId!=network.Id || menu.NetworkHost!=hostId || menu.NetworkPlayers!=count)
             { menu.NetworkConnected=true;menu.NetworkId=network.Id;menu.NetworkHost=hostId;menu.NetworkPlayers=count;menu.Dirty=true; }
+            if(network is PhotonNetClient photon)
+            {
+                menu.UpdateNetworkRoom(photon.RoomCode,snapshot.Players,hostId,network.Id);
+                foreach(var chat in photon.ConsumeChat()) menu.ReceiveNetworkChat(chat.Sender,chat.Text);
+            }
             bool writable=hostId==network.Id;
             if(menu.MonsterControlsWritable!=writable) { menu.MonsterControlsWritable=writable;menu.Dirty=true; }
             if(!writable&&snapshot.MonsterTuning!=null&&menu.MonsterSettings.CopyFrom(snapshot.MonsterTuning))

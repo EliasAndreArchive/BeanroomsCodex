@@ -12,7 +12,7 @@ Beanrooms is a .NET 8 desktop game. The main client uses Silk.NET/GLFW, OpenGL 4
 | `Beanrooms.Silk/GameWindow.Update.cs` | Solo and online simulation updates |
 | `Beanrooms.Silk/GameWindow.Rendering.cs` | Render targets, textures, object data, and GI probes |
 | `Beanrooms.Silk/GameWindow.Presentation.cs` | Scene draw, post processing, and overlay projection |
-| `Beanrooms.Silk/DebugMenu.cs`, `DebugMenu.Navigation.cs`, `DebugMenu.Settings.cs`, `DebugMenu.Controls.cs`, `DebugMenu.Terminal.cs` | Menu state, terminal, pointer controls, and settings behavior |
+| `Beanrooms.Silk/DebugMenu.cs`, `DebugMenu.Navigation.cs`, `DebugMenu.Settings.cs`, `DebugMenu.Controls.cs`, `DebugMenu.Terminal.cs`, `DebugMenu.Network.cs` | Menu state, terminal, pointer controls, settings, and network chat view |
 | `Beanrooms.Silk/DebugMenu.Rendering.cs`, `DebugMenu.MenuRendering.cs` | HUD and menu drawing |
 | `Beanrooms.Silk/PhotonNetClient.cs` | Photon transport and snapshot buffering |
 | `Beanrooms.Silk/PhotonAuthority.cs` | Room master physics, monster, and flicker authority |

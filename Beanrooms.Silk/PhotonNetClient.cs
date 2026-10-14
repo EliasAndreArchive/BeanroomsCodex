@@ -9,13 +9,14 @@ namespace Beanrooms;
 internal sealed class PhotonNetClient : INetClient, IConnectionCallbacks, IMatchmakingCallbacks,
     IInRoomCallbacks, IOnEventCallback
 {
-    const byte CommandEvent=41,ServerEvent=42;
+    const byte CommandEvent=41,ServerEvent=42,ChatEvent=43;
     const string DefaultAppId="1d8bf519-89af-4f1b-bff2-f8af50c192e2";
     readonly RealtimeClient client=new();
     readonly string room;
     readonly object stateLock=new();
     NetMessage? pendingWorld,pendingRespawn,pendingPickupResult,pendingFlicker;
     readonly Queue<CubeImpactEvent> pendingCubeImpacts=[];
+    readonly Queue<(int Sender,string Text)> pendingChat=[];
     PlayerState[] players=[]; CubeState[] cubes=[]; MonsterState? monster;
     MonsterTuning? monsterTuning;
     PhotonAuthority? authority;
@@ -33,6 +34,29 @@ internal sealed class PhotonNetClient : INetClient, IConnectionCallbacks, IMatch
     public string Status => status;
     public int Id => id;
     public int ProtocolVersion => protocolVersion;
+    internal string RoomCode => room;
+
+    internal bool SendChat(string text)
+    {
+        if(!Connected || id==0 || text.Length is 0 or >34) return false;
+        bool sent=client.OpRaiseEvent(ChatEvent,text,
+            new RaiseEventArgs { Receivers=ReceiverGroup.Others },new SendOptions { Reliability=true });
+        if(sent) QueueChat(id,text);
+        return sent;
+    }
+
+    void QueueChat(int sender,string text)
+    {
+        if(sender<=0 || text.Length is 0 or >34) return;
+        lock(stateLock)
+        {
+            pendingChat.Enqueue((sender,text));
+            while(pendingChat.Count>100) pendingChat.Dequeue();
+        }
+    }
+
+    internal (int Sender,string Text)[] ConsumeChat()
+    { lock(stateLock) { var result=pendingChat.ToArray();pendingChat.Clear();return result; } }
 
     public void Start()
     {
@@ -116,6 +140,13 @@ internal sealed class PhotonNetClient : INetClient, IConnectionCallbacks, IMatch
 
     public void OnEvent(EventData photonEvent)
     {
+        if(photonEvent.Code==ChatEvent)
+        {
+            if(photonEvent.CustomData is string chat &&
+                client.CurrentRoom?.Players.ContainsKey(photonEvent.Sender)==true)
+                QueueChat(photonEvent.Sender,chat);
+            return;
+        }
         if(photonEvent.CustomData is not string encoded) return;
         NetMessage? message;
         try { message=JsonSerializer.Deserialize<NetMessage>(encoded); }

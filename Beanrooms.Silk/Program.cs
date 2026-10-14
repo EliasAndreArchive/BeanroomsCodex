@@ -103,6 +103,7 @@ internal sealed partial class GameWindow : SilkForm
         menu.ConnectAction=ConnectOnline;
         menu.CancelJoinAction=CancelJoin;
         menu.SpawnAction=SpawnCubes;
+        menu.ChatAction=text=>network is PhotonNetClient photon && photon.SendChat(text);
         menu.TitleAction=choice=>
         {
             if(choice==0) StartSoloSession();
@@ -141,8 +142,10 @@ internal sealed partial class GameWindow : SilkForm
                 else if(e.KeyCode==Keys.Enter)
                 { menu.SubmitCommand();if(!menu.Open) CloseSettings(); }
                 else if(e.KeyCode==Keys.Back) menu.BackspaceCommand();
-                else if(e.KeyCode==Keys.PageUp) menu.ScrollTerminal(10);
-                else if(e.KeyCode==Keys.PageDown) menu.ScrollTerminal(-10);
+                else if(e.KeyCode==Keys.PageUp)
+                { if(menu.View==DebugMenu.MenuView.Network) menu.ScrollNetworkChat(5); else menu.ScrollTerminal(10); }
+                else if(e.KeyCode==Keys.PageDown)
+                { if(menu.View==DebugMenu.MenuView.Network) menu.ScrollNetworkChat(-5); else menu.ScrollTerminal(-10); }
                 else if(e.Control && e.KeyCode==Keys.V && !string.IsNullOrEmpty(ClipboardText))
                     menu.PasteCommand(ClipboardText);
                 else if(e.Control && e.KeyCode==Keys.A) menu.ClearCommand();
@@ -196,7 +199,7 @@ internal sealed partial class GameWindow : SilkForm
             if(menu.Open && MenuPixel(e.Location) is Point point)
                 menu.DragTerminalSlider(point.X);
         };
-        MouseWheel += (_, e) => { if(e.Delta==0) return; if(menu.Open) { menu.ScrollTerminal(Math.Sign(e.Delta)*3); return; } if(!HasPlayer) return; int step=Math.Sign(e.Delta); if(network.Connected) { if(networkHolding || networkCubes.Any(cube=>cube.HolderId==network.Id && network.Id!=0)) network.Send(new NetMessage { Type="grab_scroll",Action=step }); } else physics.NudgeGrabDistance(0,step*0.2f); };
+        MouseWheel += (_, e) => { if(e.Delta==0) return; if(menu.Open) { if(menu.View==DebugMenu.MenuView.Network) menu.ScrollNetworkChat(Math.Sign(e.Delta)*3); else menu.ScrollTerminal(Math.Sign(e.Delta)*3); return; } if(!HasPlayer) return; int step=Math.Sign(e.Delta); if(network.Connected) { if(networkHolding || networkCubes.Any(cube=>cube.HolderId==network.Id && network.Id!=0)) network.Send(new NetMessage { Type="grab_scroll",Action=step }); } else physics.NudgeGrabDistance(0,step*0.2f); };
         MouseUp += (_, e) => { if(menu.Open) { if(e.Button==MouseButtons.Left) menu.ReleaseTerminalSlider();return; } if(!HasPlayer) return; if(e.Button==MouseButtons.Right) rotatingHeld=false; if(e.Button==MouseButtons.Left) { if(network.Connected) network.Send(new NetMessage { Type="release" }); else physics.Release(); networkHolding=false;networkHeldId=0;grabYaw=grabPitch=0f; } };
         Activated += (_, _) => { if(ready && wantsCapture) BeginInvoke(new Action(CaptureMouse)); };
         Deactivate += (_, _) => { networkHolding=false;rotatingHeld=false; network.Send(new NetMessage { Type="release" }); physics.Release(); SuspendMouse(); };

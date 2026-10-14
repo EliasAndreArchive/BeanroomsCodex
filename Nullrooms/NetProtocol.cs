@@ -6,7 +6,7 @@ internal static class NetProtocol
 {
     // Bump when a server changes a feature whose absence would otherwise look like
     // a valid, but ignored, client command.
-    internal const int Version=7;
+    internal const int Version=8;
 }
 
 internal sealed class NetMessage

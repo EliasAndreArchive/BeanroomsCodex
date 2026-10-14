@@ -249,6 +249,7 @@ internal sealed partial class GameWindow
         menu.NetworkHost=0;
         menu.NetworkPlayers=1;
         menu.NetworkStatus="OFFLINE";
+        menu.ResetNetwork();
         menu.Dirty=true;
     }
 }

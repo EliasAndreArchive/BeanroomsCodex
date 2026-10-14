@@ -126,6 +126,57 @@ ClickWideRow(menu,"SETTINGS");
 Check(menu.View==DebugMenu.MenuView.Categories,
     "Repeated SETTINGS clicks did not show the menu.");
 Send(menu,"BACK");
+Send(menu,"NETWORK");
+Check(menu.View==DebugMenu.MenuView.Pause && menu.CommandFeedback=="COMMAND NOT RECOGNIZED",
+    "Network tab appeared in a solo session.");
+menu.NetworkConnected=true;menu.NetworkId=1;menu.NetworkHost=1;menu.NetworkPlayers=2;
+menu.UpdateNetworkRoom("BEAN",[
+    new PlayerState { Id=1,Name="HOST BEAN",R=.9f,G=.8f,B=.7f },
+    new PlayerState { Id=2,Name="BLUE BEAN",R=.2f,G=.4f,B=1f }
+],1,1);
+menu.PrintCurrentView();
+ClickWideRow(menu,"NETWORK");
+Check(menu.View==DebugMenu.MenuView.Network &&
+    menu.TerminalHistory.Any(line=>line=="ROOM      BEAN") &&
+    menu.TerminalHistory.Any(line=>line.StartsWith("HOST      HOST BEAN") && line.Contains("PLAYERS 2/4")) &&
+    menu.TerminalHistory.Any(line=>line=="PLAYERS"),
+    "Network tab did not show room code, player count, host and players command.");
+Send(menu,"PLAYERS");
+Check(menu.TerminalHistory.Any(line=>line=="P2  BLUE BEAN") &&
+    menu.TerminalHistory.Any(line=>line=="P1  HOST BEAN  HOST  YOU"),
+    "PLAYERS did not show the room roster.");
+Send(menu,"BACK");
+Check(menu.View==DebugMenu.MenuView.Network &&
+    menu.TerminalHistory.Last(line=>line.Contains("DIR")).Contains("/BEANROOMS/NETWORK>"),
+    "BACK from players did not return to chat.");
+string sentChat="";
+menu.ChatAction=text=>{ sentChat=text;return true; };
+Send(menu,"hello, bean!");
+Check(sentChat=="HELLO, BEAN!","Network input did not send a chat message.");
+Send(menu,new string('A',35));
+Check(menu.CommandFeedback=="MESSAGE TOO LONG" && sentChat=="HELLO, BEAN!",
+    "Oversized chat was sent or silently truncated.");
+menu.ReceiveNetworkChat(2,"hello, host!");
+Check(menu.TerminalHistory.Any(line=>line=="BLUE BEAN> HELLO, HOST!"),
+    "Chat did not show the sender name and message.");
+menu.FlushTerminal();
+using(var networkFrame=menu.Draw())
+{
+    bool playerBlue=false;
+    for(int pixel=0;pixel<networkFrame.Pixels.Length;pixel+=4)
+        playerBlue|=networkFrame.Pixels[pixel]>230 && networkFrame.Pixels[pixel+2]<100;
+    Check(playerBlue,"Chat player name was not rendered in the player's color.");
+}
+for(int i=0;i<14;i++) menu.ReceiveNetworkChat(2,$"MESSAGE {i}");
+Check(menu.TerminalHistory.Any(line=>line=="BLUE BEAN> MESSAGE 13") &&
+    !menu.TerminalHistory.Any(line=>line=="BLUE BEAN> MESSAGE 0"),
+    "Network chat did not show its newest messages.");
+menu.ScrollNetworkChat(8);
+Check(menu.TerminalHistory.Any(line=>line=="BLUE BEAN> MESSAGE 0"),
+    "Network chat could not scroll to older messages.");
+Send(menu,"BACK");
+Check(menu.View==DebugMenu.MenuView.Pause,"Network tab did not return to pause.");
+menu.NetworkConnected=false;menu.ResetNetwork();
 CubeSpawnSpec? spawnRequest=null;
 menu.SpawnAction=spec=>{ spawnRequest=spec;return "SPAWNED"; };
 Send(menu,"SPAWN CUBE 1 WHITE 2");
@@ -232,6 +283,22 @@ if(args.Length==2 && args[0]=="--menu-preview")
     menu.LeaveTitle();menu.Open=true;menu.SetPage(9);
     menu.FlushTerminal();
     using(var pause=menu.Draw()) File.WriteAllBytes(Path.Combine(args[1],"pause.bgra"),pause.Pixels);
+    menu.NetworkConnected=true;menu.NetworkId=1;menu.NetworkHost=1;menu.NetworkPlayers=2;
+    menu.UpdateNetworkRoom("BEAN",[
+        new PlayerState { Id=1,Name="HOST BEAN",R=.9f,G=.8f,B=.7f },
+        new PlayerState { Id=2,Name="BLUE BEAN",R=.2f,G=.4f,B=1f }
+    ],1,1);
+    Send(menu,"NETWORK");
+    menu.ReceiveNetworkChat(2,"HELLO, HOST!");
+    menu.ReceiveNetworkChat(1,"WELCOME TO BEANROOMS.");
+    menu.FlushTerminal();
+    using(var network=menu.Draw()) File.WriteAllBytes(Path.Combine(args[1],"network.bgra"),network.Pixels);
+    Send(menu,"PLAYERS");
+    menu.FlushTerminal();
+    using(var players=menu.Draw()) File.WriteAllBytes(Path.Combine(args[1],"players.bgra"),players.Pixels);
+    Send(menu,"BACK");
+    Send(menu,"BACK");
+    menu.NetworkConnected=false;menu.ResetNetwork();
     Send(menu,"DEVELOPER");
     Send(menu,"DIAGNOSTICS");
     menu.FlushTerminal();

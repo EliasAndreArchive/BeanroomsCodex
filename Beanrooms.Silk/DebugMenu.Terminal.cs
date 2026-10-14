@@ -13,6 +13,7 @@ internal sealed partial class DebugMenu
         internal int SliderStart=-1, SliderEnd=-1;
         internal bool Error;
         internal int InputStart=-1;
+        internal List<(int Start,int Length,Color Ink)>? ColorSpans;
         internal TerminalLine(string text) { Text=text; }
     }
 
@@ -30,6 +31,7 @@ internal sealed partial class DebugMenu
         View==MenuView.Pause?"/BEANROOMS/PAUSE":
         View==MenuView.Categories?developerCategories?"/BEANROOMS/DEVELOPER":"/BEANROOMS/SETTINGS":
         View==MenuView.Help?"/BEANROOMS/HELP":
+        View==MenuView.Network?networkPlayersOpen?"/BEANROOMS/NETWORK/PLAYERS":"/BEANROOMS/NETWORK":
         "/BEANROOMS/"+Tabs.First(tab=>tab.Page==Page).Name.Replace(' ','_');
 
     internal void ResetTerminal()
@@ -90,7 +92,7 @@ internal sealed partial class DebugMenu
         PrintLine();
         currentMenuStart=terminalLines.Count;
         PrintLine(MenuPath+"> DIR");
-        PrintLine();
+        if(View!=MenuView.Network) PrintLine();
         if(TitleScreen)
         {
             if(TitlePage==0)
@@ -110,9 +112,12 @@ internal sealed partial class DebugMenu
         }
         else if(View==MenuView.Pause)
         {
-            string[] options=["RESUME","PROFILE","SETTINGS","DEVELOPER","HELP","LEAVE","QUIT"];
+            string[] options=NetworkConnected
+                ?["RESUME","PROFILE","NETWORK","SETTINGS","DEVELOPER","HELP","LEAVE","QUIT"]
+                :["RESUME","PROFILE","SETTINGS","DEVELOPER","HELP","LEAVE","QUIT"];
             foreach(string option in options) PrintLine(option,action:option);
         }
+        else if(View==MenuView.Network) PrintNetworkContents();
         else if(View==MenuView.Categories)
         {
             foreach(var tab in Tabs) PrintLine(tab.Name,action:tab.Name);
@@ -266,7 +271,7 @@ internal sealed partial class DebugMenu
             int h=(last-first)*TerminalRowHeight+5;
             int longest=terminalLines.Skip(currentMenuStart).Take(currentMenuEnd-currentMenuStart)
                 .Max(line=>Math.Max(line.Text.Length,line.SliderEnd+1));
-            int width=Math.Clamp(longest*6+14,80,310);
+            int width=View==MenuView.Network?310:Math.Clamp(longest*6+14,80,310);
             using var shade=new SolidBrush(Color.FromArgb(85,0,0,0));
             using var border=new SolidBrush(Color.FromArgb(125,105,105,105));
             g.FillRectangle(shade,5,y,width,h);
@@ -300,6 +305,22 @@ internal sealed partial class DebugMenu
                     g.FillRectangle(white,handle-1,y+7,3,1);
                 }
                 if(line.Error) PixelText(g,line.Text[..line.Visible],error,10,y);
+                else if(line.ColorSpans is { Count: > 0 } spans)
+                {
+                    int cursor=0;
+                    foreach(var span in spans)
+                    {
+                        if(span.Start>=line.Visible) break;
+                        if(span.Start>cursor)
+                            PixelText(g,line.Text[cursor..span.Start],white,10+cursor*6,y);
+                        int end=Math.Min(line.Visible,span.Start+span.Length);
+                        using var colored=new SolidBrush(span.Ink);
+                        PixelText(g,line.Text[span.Start..end],colored,10+span.Start*6,y);
+                        cursor=end;
+                    }
+                    if(cursor<line.Visible)
+                        PixelText(g,line.Text[cursor..line.Visible],white,10+cursor*6,y);
+                }
                 else if(line.InputStart>=0 && line.InputStart<line.Visible)
                 {
                     if(line.InputStart>0) PixelText(g,line.Text[..line.InputStart],white,10,y);

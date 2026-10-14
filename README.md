@@ -28,7 +28,7 @@ Every push to `main` builds self-contained Windows and Linux archives and publis
 
 ## Online rooms
 
-Choose **ONLINE**, then type `CONNECT BEAN` to connect to the room named BEAN. The client uses the configured Photon App ID; set `BEANROOMS_PHOTON_APP_ID` to override it for another Photon application. The old dedicated server and Render bridge have been removed.
+Choose **ONLINE**, then type `CONNECT BEAN` to connect to the room named BEAN. While in an online room, open the pause terminal and choose **NETWORK** to see the room code, player count, host, and chat. Type a message at the network prompt and press **Enter**. Type **PLAYERS** to see everyone in the room, then **BACK** to return to chat. Player names use their in-game colors; the mouse wheel or Page Up/Page Down browses older messages. The client uses the configured Photon App ID; set `BEANROOMS_PHOTON_APP_ID` to override it for another Photon application. The old dedicated server and Render bridge have been removed.
 
 ## Checks
 

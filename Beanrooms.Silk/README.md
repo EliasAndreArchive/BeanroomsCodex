@@ -30,6 +30,8 @@ From any in-game terminal page, type `SPAWN CUBE 1 WHITE 2` or `SPAWN GLOWCUBE 1
 
 Choose **ONLINE** on the title screen, then type `CONNECT BEAN` for a room named BEAN. `BEANROOMS_PHOTON_APP_ID` can override the included Photon App ID. The room master simulates online cubes and monster behavior; guests display its snapshots.
 
+In an online session, open the pause terminal and choose **NETWORK**. This view lists the room code, player count, host, and chat. Type directly at its prompt to chat; names use each player's game color. Type **PLAYERS** to see the full roster, then **BACK** to return to chat. Use the mouse wheel or Page Up/Page Down to browse older chat messages. The network view is only shown while connected to an online room.
+
 Two fixed cubes appear in each room before players spawn more. Pallets, the sandbox browser, devices, cables, welding, copy/place tools, and Ponder guide have been removed.
 
 ## Builds and checks

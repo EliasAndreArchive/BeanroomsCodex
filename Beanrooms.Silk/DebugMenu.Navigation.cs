@@ -32,7 +32,8 @@ internal sealed partial class DebugMenu
             PrintCurrentView();
             Dirty=true;return;
         }
-        if(View is MenuView.Categories or MenuView.Help)
+        if(View==MenuView.Network && BackFromNetworkPlayers()) return;
+        if(View is MenuView.Categories or MenuView.Help or MenuView.Network)
         { if(SettingsFromTitle) ShowTitle(resetHistory:false); else { View=MenuView.Pause;Page=9;Selected=0;PrintCurrentView();Dirty=true; } return; }
         Toggle();
     }
@@ -49,6 +50,17 @@ internal sealed partial class DebugMenu
         ClearCommand();
         TitleScreen=false;View=MenuView.Help;Dirty=true;InteractionSound?.Invoke();
         PrintCurrentView();
+    }
+    internal void OpenNetwork()
+    {
+        if(!NetworkConnected || SettingsFromTitle) return;
+        FinishEditing();
+        ClearCommand();
+        View=MenuView.Network;
+        networkPlayersOpen=false;
+        networkChatOffset=0;
+        PrintCurrentView();
+        InteractionSound?.Invoke();
     }
     internal void ShowTitle(bool resetHistory=true)
     {
