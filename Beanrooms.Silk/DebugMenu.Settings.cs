@@ -96,10 +96,9 @@ internal sealed partial class DebugMenu
             else if(row==1) SetPage(6);
             else if(row==2) OpenCategories();
             else if(row==3) OpenCategories(developer:true);
-            else if(row==4) OpenSpawn();
-            else if(row==5) OpenHelp();
-            else if(row==6) SessionAction?.Invoke(1);
-            else if(row==7) SessionAction?.Invoke(2);
+            else if(row==4) OpenHelp();
+            else if(row==5) SessionAction?.Invoke(1);
+            else if(row==6) SessionAction?.Invoke(2);
             else return;
         }
         else if(Page == 7)

@@ -16,8 +16,6 @@ internal sealed partial class DebugMenu
         {
             View=MenuView.Pause;Page=9;Selected=0;
             ResetTerminal();
-            PrintLine("CLICK OR TYPE OPTION NAME, THEN ENTER");
-            PrintLine("PAGE UP / PAGE DOWN / WHEEL SCROLL");
             PrintCurrentView();
         }
         Dirty=true;InteractionSound?.Invoke();
@@ -30,10 +28,11 @@ internal sealed partial class DebugMenu
         if(View==MenuView.Settings)
         {
             View=settingsReturn;
+            if(View==MenuView.Pause) Page=9;
             PrintCurrentView();
             Dirty=true;return;
         }
-        if(View is MenuView.Categories or MenuView.Help or MenuView.Spawn)
+        if(View is MenuView.Categories or MenuView.Help)
         { if(SettingsFromTitle) ShowTitle(resetHistory:false); else { View=MenuView.Pause;Page=9;Selected=0;PrintCurrentView();Dirty=true; } return; }
         Toggle();
     }
@@ -51,13 +50,6 @@ internal sealed partial class DebugMenu
         TitleScreen=false;View=MenuView.Help;Dirty=true;InteractionSound?.Invoke();
         PrintCurrentView();
     }
-    internal void OpenSpawn()
-    {
-        FinishEditing();
-        ClearCommand();
-        TitleScreen=false;View=MenuView.Spawn;Dirty=true;InteractionSound?.Invoke();
-        PrintCurrentView();
-    }
     internal void ShowTitle(bool resetHistory=true)
     {
         if(TitleScreen && TitlePage==1) CancelJoinAction?.Invoke();
@@ -66,8 +58,6 @@ internal sealed partial class DebugMenu
         {
             ResetTerminal();
             PrintLine("BEANROOMS COMMAND TERMINAL READY");
-            PrintLine("CLICK OR TYPE OPTION NAME, THEN ENTER");
-            PrintLine("PAGE UP / PAGE DOWN / WHEEL SCROLL");
         }
         FinishEditing(); Open=true;TitleScreen=true;SettingsFromTitle=false;
         TitlePage=0;Dirty=true;

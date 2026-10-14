@@ -69,20 +69,20 @@ Check(menu.TerminalScroll>0,"Terminal scrollback cannot reach the main menu.");
 menu.ScrollTerminal(-100);
 Send(menu,"DISPLAY");
 Check(menu.Page==11,"DISPLAY did not open player display settings.");
-Check(menu.TerminalHistory.Any(line=>line.StartsWith("LIGHTING <PATH TRACED>")),
+Check(menu.TerminalHistory.Any(line=>line.StartsWith("LIGHTING") && line.Contains("<PATH TRACED>")),
     "Renderer did not show its current choice.");
 ClickLine(menu,"LIGHTING");
 Check(menu.RenderMode==1,"Renderer command did not select realtime lighting.");
-Check(menu.TerminalHistory.Any(line=>line.StartsWith("LIGHTING <REALTIME>")),
+Check(menu.TerminalHistory.Any(line=>line.StartsWith("LIGHTING") && line.Contains("<REALTIME>")),
     "Clicked choice did not update the displayed value.");
 Send(menu,"BACK");
 Send(menu,"IMAGE");
 Check(menu.Page==7,"IMAGE did not open image settings.");
 int tonemapBefore=menu.TonemapMode;
 string exposureLine=menu.TerminalHistory.Last(line=>line.StartsWith("EXPOSURE "));
-int slider=exposureLine.IndexOf('[')+1;
-ClickLine(menu,"EXPOSURE ",slider);
-menu.DragTerminalSlider(10+(slider+6)*6+2);
+Check(!exposureLine.Contains('['),"Exposure should use a drawn slider rather than text art.");
+ClickLine(menu,"EXPOSURE ",DebugMenu.SliderStartColumn);
+menu.DragTerminalSlider(10+DebugMenu.SliderEndColumn*6+2);
 menu.ReleaseTerminalSlider();
 Check(Math.Abs(menu.Exposure-3f)<.01f,"Exposure slider did not drag to maximum.");
 Send(menu,"SET EXPOSURE 2.25");
@@ -113,25 +113,35 @@ Check(titleChoice==0,"SOLO command did not start local play.");
 menu.LeaveTitle();
 menu.Open=true;
 menu.SetPage(9);
+Send(menu,"PROFILE");
+Check(menu.View==DebugMenu.MenuView.Settings,"PROFILE did not open from pause.");
+Send(menu,"BACK");
+Check(menu.View==DebugMenu.MenuView.Pause && menu.Page==9,
+    "Returning from profile left the pause menu on a settings page.");
+ClickWideRow(menu,"SETTINGS");
+Check(menu.View==DebugMenu.MenuView.Categories,
+    "Clicking SETTINGS after profile did not open the settings menu.");
+Send(menu,"BACK");
+ClickWideRow(menu,"SETTINGS");
+Check(menu.View==DebugMenu.MenuView.Categories,
+    "Repeated SETTINGS clicks did not show the menu.");
+Send(menu,"BACK");
 CubeSpawnSpec? spawnRequest=null;
 menu.SpawnAction=spec=>{ spawnRequest=spec;return "SPAWNED"; };
-Send(menu,"SPAWN");
-Check(menu.View==DebugMenu.MenuView.Spawn,"SPAWN did not open the object command menu.");
-Send(menu,"CUBE 1 WHITE 2");
+Send(menu,"SPAWN CUBE 1 WHITE 2");
 Check(spawnRequest is { Emissive:false, Size:1f, Amount:2 },
-    "CUBE size color amount command was not parsed.");
-Send(menu,"GLOWCUBE 0.5 BLUE 1");
+    "Global cube spawn command was not parsed.");
+Check(menu.View==DebugMenu.MenuView.Pause,"Spawning unexpectedly opened a separate menu.");
+Send(menu,"SPAWN GLOWCUBE 0.5 BLUE 1");
 Check(spawnRequest is { Emissive:true, Size:0.5f, Amount:1 },
-    "GLOWCUBE command was not parsed.");
-Send(menu,"CUBE 9 WHITE 2");
+    "Global glowcube spawn command was not parsed.");
+Send(menu,"SPAWN CUBE 9 WHITE 2");
 Check(menu.CommandFeedback.StartsWith("SIZE MUST"),"Invalid cube size was accepted.");
-Send(menu,"BACK");
-Check(menu.View==DebugMenu.MenuView.Pause,"BACK did not return from spawn.");
 Send(menu,"DEVELOPER");
 Check(menu.View==DebugMenu.MenuView.Categories,"DEVELOPER command did not open advanced pages.");
 Send(menu,"RENDER");
 Check(menu.Page==1,"RENDER command did not open detailed renderer settings.");
-Check(menu.TerminalHistory.Any(line=>line.StartsWith("RENDER MODE <")) &&
+Check(menu.TerminalHistory.Any(line=>line.StartsWith("RENDER MODE") && line.Contains('<')) &&
     menu.TerminalHistory.Any(line=>line.StartsWith("DIRECT SAMPLES ")),
     "Long settings page did not print every item.");
 Check(menu.TerminalScroll>0,"Long settings page did not start at its first items.");
@@ -143,8 +153,11 @@ menu.Samples=256;
 menu.RefreshSettingLines();
 ClickLine(menu,"PATH SAMPLES ");
 Check(menu.Samples==16,"Named sample choices did not cycle from last to first.");
+Send(menu,"SPAWN CUBE 1 WHITE 1");
+Check(spawnRequest is { Emissive:false, Amount:1 } && menu.Page==1,
+    "Spawn command did not work from a settings page.");
 Send(menu,"NEXT");
-Check(menu.CommandFeedback=="TYPE A SETTING NAME OR BACK","Removed NEXT command is still active.");
+Check(menu.CommandFeedback=="COMMAND NOT RECOGNIZED","Removed NEXT command is still active.");
 Send(menu,"RESET");
 Check(menu.CommandFeedback=="DEFAULTS RESTORED","RESET did not confirm defaults.");
 menu.SetPage(2);
@@ -166,9 +179,33 @@ Send(menu,"LEAVE");
 Check(sessionChoice==1,"LEAVE did not route to the session exit.");
 menu.ShowTitle();
 Send(menu,"GIBBERISH");
-Check(menu.CommandFeedback.StartsWith("TYPE SOLO"),"Unknown command gave no feedback.");
+Check(menu.CommandFeedback=="COMMAND NOT RECOGNIZED" &&
+    menu.TerminalHistory.Any(line=>line=="ERROR: COMMAND NOT RECOGNIZED"),
+    "Unknown command did not print an error.");
+menu.FlushTerminal();
+using(var errorFrame=menu.Draw())
+{
+    bool red=false,yellow=false;
+    for(int pixel=0;pixel<errorFrame.Pixels.Length;pixel+=4)
+    {
+        byte blue=errorFrame.Pixels[pixel],green=errorFrame.Pixels[pixel+1],r=errorFrame.Pixels[pixel+2];
+        red|=r>220 && green<140 && blue<140;
+        yellow|=r>220 && green>180 && green<245 && blue<190;
+    }
+    Check(red && yellow,"Error and player input do not have distinct colors.");
+}
 Send(menu,"1");
-Check(menu.CommandFeedback.StartsWith("TYPE SOLO"),"Numeric menu selection is still accepted.");
+Check(menu.CommandFeedback=="COMMAND NOT RECOGNIZED","Numeric menu selection is still accepted.");
+Send(menu,"CLS");
+Check(!menu.TerminalHistory.Any(line=>line.Contains("GIBBERISH")) &&
+    menu.TerminalHistory.Any(line=>line=="SETTINGS"),
+    "CLS did not clear history and redraw the current menu.");
+ClickWideRow(menu,"SETTINGS");
+Check(menu.View==DebugMenu.MenuView.Categories,"CLS left redrawn menu items unclickable.");
+Send(menu,"CLEAR");
+Check(menu.TerminalHistory.All(line=>!line.Contains("MAINMENU")),
+    "CLEAR did not remove older menu transcript lines.");
+Send(menu,"BACK");
 using(var frame=menu.Draw())
     Check(frame.Width==320 && frame.Height==240,"Terminal rendering size changed.");
 menu.LeaveTitle();menu.Open=true;menu.SetPage(9);menu.FlushTerminal();
@@ -180,6 +217,10 @@ if(args.Length==2 && args[0]=="--menu-preview")
     menu.ShowTitle();
     menu.FlushTerminal();
     using(var title=menu.Draw()) File.WriteAllBytes(Path.Combine(args[1],"title.bgra"),title.Pixels);
+    Send(menu,"GIBBERISH");
+    menu.FlushTerminal();
+    using(var errorMenu=menu.Draw()) File.WriteAllBytes(Path.Combine(args[1],"error.bgra"),errorMenu.Pixels);
+    menu.ShowTitle();
     Send(menu,"SETTINGS");
     Send(menu,"DISPLAY");
     menu.FlushTerminal();
@@ -191,10 +232,6 @@ if(args.Length==2 && args[0]=="--menu-preview")
     menu.LeaveTitle();menu.Open=true;menu.SetPage(9);
     menu.FlushTerminal();
     using(var pause=menu.Draw()) File.WriteAllBytes(Path.Combine(args[1],"pause.bgra"),pause.Pixels);
-    Send(menu,"SPAWN");
-    menu.FlushTerminal();
-    using(var spawnMenu=menu.Draw()) File.WriteAllBytes(Path.Combine(args[1],"spawn.bgra"),spawnMenu.Pixels);
-    Send(menu,"BACK");
     Send(menu,"DEVELOPER");
     Send(menu,"DIAGNOSTICS");
     menu.FlushTerminal();

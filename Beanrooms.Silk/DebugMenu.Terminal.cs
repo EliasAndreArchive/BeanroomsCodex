@@ -11,12 +11,15 @@ internal sealed partial class DebugMenu
         internal string Action="";
         internal int SettingPage=-1, SettingRow=-1;
         internal int SliderStart=-1, SliderEnd=-1;
+        internal bool Error;
+        internal int InputStart=-1;
         internal TerminalLine(string text) { Text=text; }
     }
 
     const int TerminalVisibleRows=17;
     const int TerminalRowHeight=12, TerminalTop=10;
     readonly List<TerminalLine> terminalLines=[];
+    int currentMenuStart,currentMenuEnd;
     int terminalScroll;
     float revealBudget;
     internal IReadOnlyList<string> TerminalHistory => terminalLines.Select(line=>line.Text).ToArray();
@@ -27,18 +30,19 @@ internal sealed partial class DebugMenu
         View==MenuView.Pause?"/BEANROOMS/PAUSE":
         View==MenuView.Categories?developerCategories?"/BEANROOMS/DEVELOPER":"/BEANROOMS/SETTINGS":
         View==MenuView.Help?"/BEANROOMS/HELP":
-        View==MenuView.Spawn?"/BEANROOMS/SPAWN":
         "/BEANROOMS/"+Tabs.First(tab=>tab.Page==Page).Name.Replace(' ','_');
 
     internal void ResetTerminal()
     {
         terminalLines.Clear();
+        currentMenuStart=currentMenuEnd=0;
         terminalScroll=0;
         revealBudget=0;
         Dirty=true;
     }
 
-    void PrintLine(string line="",string action="",int settingRow=-1,int sliderStart=-1,int sliderEnd=-1)
+    void PrintLine(string line="",string action="",int settingRow=-1,int sliderStart=-1,int sliderEnd=-1,
+        bool error=false,int inputStart=-1)
     {
         if(line.Length==0)
         {
@@ -50,6 +54,9 @@ internal sealed partial class DebugMenu
             for(int start=0;start<line.Length;start+=49)
             {
                 var entry=new TerminalLine(line.Substring(start,Math.Min(49,line.Length-start)));
+                entry.Error=error;
+                if(inputStart>=0 && inputStart<start+entry.Text.Length)
+                    entry.InputStart=Math.Max(0,inputStart-start);
                 if(start==0)
                 {
                     entry.Action=action;
@@ -67,6 +74,8 @@ internal sealed partial class DebugMenu
             int excess=terminalLines.Count-500;
             terminalLines.RemoveRange(0,excess);
             terminalScroll=Math.Max(0,terminalScroll-excess);
+            currentMenuStart=Math.Max(0,currentMenuStart-excess);
+            currentMenuEnd=Math.Max(0,currentMenuEnd-excess);
         }
         Dirty=true;
     }
@@ -79,6 +88,7 @@ internal sealed partial class DebugMenu
         { line.Action="";line.SettingPage=-1;line.SettingRow=-1; }
         int viewStart=terminalLines.Count;
         PrintLine();
+        currentMenuStart=terminalLines.Count;
         PrintLine(MenuPath+"> DIR");
         PrintLine();
         if(TitleScreen)
@@ -100,7 +110,7 @@ internal sealed partial class DebugMenu
         }
         else if(View==MenuView.Pause)
         {
-            string[] options=["RESUME","PROFILE","SETTINGS","DEVELOPER","SPAWN","HELP","LEAVE","QUIT"];
+            string[] options=["RESUME","PROFILE","SETTINGS","DEVELOPER","HELP","LEAVE","QUIT"];
             foreach(string option in options) PrintLine(option,action:option);
         }
         else if(View==MenuView.Categories)
@@ -123,17 +133,6 @@ internal sealed partial class DebugMenu
             foreach(string line in help) PrintLine(line);
             terminalLines[^1].Action="BACK";
         }
-        else if(View==MenuView.Spawn)
-        {
-            PrintLine("CUBE SIZE COLOR AMOUNT");
-            PrintLine("GLOWCUBE SIZE COLOR AMOUNT");
-            PrintLine();
-            PrintLine("EXAMPLE  CUBE 1 WHITE 2");
-            PrintLine("SIZE 0.25 TO 2.5  /  AMOUNT 1 TO 8");
-            PrintLine("WHITE RED GREEN BLUE YELLOW");
-            PrintLine("ORANGE PURPLE CYAN AMBER");
-            PrintLine("BACK",action:"BACK");
-        }
         else
         {
             for(int i=0;i<Labels[Page].Length;i++)
@@ -141,10 +140,10 @@ internal sealed partial class DebugMenu
                 var (line,start,end)=SettingLine(i);
                 PrintLine(line,settingRow:i,sliderStart:start,sliderEnd:end);
             }
-            PrintLine("CLICK VALUE TO CYCLE / DRAG SLIDER");
             PrintLine("RESET",action:"RESET");
             PrintLine("BACK",action:"BACK");
         }
+        currentMenuEnd=terminalLines.Count;
         PrintLine();
         terminalScroll=Math.Max(0,terminalLines.Count-TerminalVisibleRows-viewStart);
         Dirty=true;
@@ -181,7 +180,7 @@ internal sealed partial class DebugMenu
         int column=(x-10)/6;
         if(line.SettingRow>=0 && line.SettingPage==Page && View==MenuView.Settings)
         {
-            if(Page==5 && !MonsterControlsWritable) { PrintLine("HOST ONLY");return; }
+            if(Page==5 && !MonsterControlsWritable) { PrintLine("ERROR: HOST ONLY",error:true);return; }
             if(Page==6 && line.SettingRow==0)
             { CommandLine="NAME ";Dirty=true;return; }
             Selected=line.SettingRow;
@@ -249,22 +248,64 @@ internal sealed partial class DebugMenu
         }
     }
 
-    string PromptText()
+    string PromptInput()
     {
         int available=Math.Max(5,49-MenuPath.Length-2);
-        string visible=CommandLine.Length>available?"<"+CommandLine[^(available-1)..]:CommandLine;
-        return MenuPath+">"+visible+"_";
+        return (CommandLine.Length>available?"<"+CommandLine[^(available-1)..]:CommandLine)+"_";
     }
 
     void DrawTerminal(Graphics g,Brush white)
     {
+        using var input=new SolidBrush(Color.FromArgb(255,222,158));
+        using var error=new SolidBrush(Color.FromArgb(255,105,105));
         int top=Math.Max(0,terminalLines.Count-TerminalVisibleRows-terminalScroll);
+        int first=Math.Max(top,currentMenuStart),last=Math.Min(top+TerminalVisibleRows,currentMenuEnd);
+        if(last>first)
+        {
+            int y=TerminalTop+(first-top)*TerminalRowHeight-3;
+            int h=(last-first)*TerminalRowHeight+5;
+            int longest=terminalLines.Skip(currentMenuStart).Take(currentMenuEnd-currentMenuStart)
+                .Max(line=>Math.Max(line.Text.Length,line.SliderEnd+1));
+            int width=Math.Clamp(longest*6+14,80,310);
+            using var shade=new SolidBrush(Color.FromArgb(85,0,0,0));
+            using var border=new SolidBrush(Color.FromArgb(125,105,105,105));
+            g.FillRectangle(shade,5,y,width,h);
+            g.FillRectangle(border,5,y,width,1);
+            g.FillRectangle(border,5,y+h-1,width,1);
+            g.FillRectangle(border,5,y,1,h);
+            g.FillRectangle(border,5+width-1,y,1,h);
+        }
         for(int i=0;i<TerminalVisibleRows && top+i<terminalLines.Count;i++)
         {
             TerminalLine line=terminalLines[top+i];
             if(line.Visible>0)
-                PixelText(g,line.Text[..line.Visible],white,10,TerminalTop+i*TerminalRowHeight);
+            {
+                int y=TerminalTop+i*TerminalRowHeight;
+                if(line.SettingPage==Page && line.SettingRow>=0 && line.SliderStart>=0 &&
+                   View==MenuView.Settings && TryNumericControl(line.SettingRow,out NumericControl numeric))
+                {
+                    int left=10+line.SliderStart*6,right=10+line.SliderEnd*6;
+                    float fraction=Math.Clamp((numeric.Current-numeric.Min)/(numeric.Max-numeric.Min),0,1);
+                    int handle=left+(int)MathF.Round((right-left)*fraction);
+                    using var track=new SolidBrush(Color.FromArgb(175,95,95,95));
+                    using var fill=new SolidBrush(Color.FromArgb(230,200,200,200));
+                    using var knob=new SolidBrush(Color.FromArgb(255,222,158));
+                    g.FillRectangle(track,left,y+3,right-left+1,3);
+                    g.FillRectangle(fill,left,y+3,handle-left+1,3);
+                    g.FillRectangle(Brushes.Black,handle-2,y,6,9);
+                    g.FillRectangle(knob,handle-2,y,5,8);
+                }
+                if(line.Error) PixelText(g,line.Text[..line.Visible],error,10,y);
+                else if(line.InputStart>=0 && line.InputStart<line.Visible)
+                {
+                    if(line.InputStart>0) PixelText(g,line.Text[..line.InputStart],white,10,y);
+                    PixelText(g,line.Text[line.InputStart..line.Visible],input,10+line.InputStart*6,y);
+                }
+                else PixelText(g,line.Text[..line.Visible],white,10,y);
+            }
         }
-        PixelText(g,PromptText(),white,10,220);
+        string path=MenuPath+">";
+        PixelText(g,path,white,10,220);
+        PixelText(g,PromptInput(),input,10+path.Length*6,220);
     }
 }

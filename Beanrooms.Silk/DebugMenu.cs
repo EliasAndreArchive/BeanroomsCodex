@@ -5,7 +5,7 @@ namespace Beanrooms;
 
 internal sealed partial class DebugMenu
 {
-    internal enum MenuView { Pause, Categories, Settings, Help, Spawn }
+    internal enum MenuView { Pause, Categories, Settings, Help }
     internal MenuView View = MenuView.Pause;
     MenuView settingsReturn=MenuView.Categories;
     internal int CategorySelected;
@@ -100,6 +100,7 @@ internal sealed partial class DebugMenu
         ['<']=[2,4,8,16,8,4,2], ['>']=[8,4,2,1,2,4,8],
         ['[']=[14,8,8,8,8,8,14], [']']=[14,2,2,2,2,2,14],
         ['.']=[0,0,0,0,0,12,12], ['-']=[0,0,0,31,0,0,0],
+        [',']=[0,0,0,0,0,4,8],
         ['+']=[0,4,4,31,4,4,0], [':']=[0,4,4,0,4,4,0],
         ['_']=[0,0,0,0,0,0,31], ['=']=[0,0,31,0,31,0,0]
     };
@@ -114,7 +115,7 @@ internal sealed partial class DebugMenu
         new[] { "PLAYER NAME", "BEAN COLOR" },
         new[] { "POST FX", "EXPOSURE", "AUTO EXPOSURE", "BLOOM", "BLOOM STRENGTH", "BLOOM THRESHOLD", "BLOOM RADIUS", "DITHER", "POSTERIZATION" },
         Array.Empty<string>(),
-        new[] { "RESUME", "PROFILE", "SETTINGS", "DEVELOPER", "SPAWN", "HELP", "LEAVE SESSION", "QUIT GAME" },
+        new[] { "RESUME", "PROFILE", "SETTINGS", "DEVELOPER", "HELP", "LEAVE SESSION", "QUIT GAME" },
         new[] { "FRAME RATE", "OBJECT OUTLINES", "PLAYER NAMES", "SYSTEM INFO", "MONSTER VECTORS" },
         new[] { "LIGHTING", "RESOLUTION", "FPS LIMIT", "VSYNC" },
         new[] { "FPS COUNTER", "OBJECT BRACKETS", "PLAYER NAMES" }

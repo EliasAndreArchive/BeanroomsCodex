@@ -1,24 +1,16 @@
-using System.Globalization;
-
 namespace Beanrooms;
 
 internal sealed partial class DebugMenu
 {
     readonly record struct NumericControl(float Min,float Max,float Step,float Current);
+    internal const int SliderStartColumn=31, SliderEndColumn=47;
 
     (string Text,int Start,int End) SettingLine(int row)
     {
-        string label=Labels[Page][row];
-        if(TryNumericControl(row,out NumericControl numeric))
+        string label=Labels[Page][row].PadRight(18);
+        if(TryNumericControl(row,out _))
         {
-            string min=numeric.Min.ToString("0.###",CultureInfo.InvariantCulture);
-            string max=numeric.Max.ToString("0.###",CultureInfo.InvariantCulture);
-            int position=(int)MathF.Round(Math.Clamp((numeric.Current-numeric.Min)/(numeric.Max-numeric.Min),0,1)*6);
-            char[] track="-------".ToCharArray();
-            track[position]='X';
-            string prefix=$"{label} {min} [";
-            string text=$"{prefix}{new string(track)}] {max} {Value(row)}";
-            return (text,prefix.Length,prefix.Length+6);
+            return ($"{label} {Value(row)}",SliderStartColumn,SliderEndColumn);
         }
         return ($"{label} <{Value(row)}>",-1,-1);
     }

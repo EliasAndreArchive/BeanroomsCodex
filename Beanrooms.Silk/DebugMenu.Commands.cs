@@ -4,10 +4,18 @@ namespace Beanrooms;
 
 internal sealed partial class DebugMenu
 {
+    bool commandError;
+    void CommandFailed(string reason)
+    {
+        CommandFeedback=reason;
+        commandError=true;
+    }
+
     internal void ClearCommand()
     {
         CommandLine="";
         CommandFeedback="";
+        commandError=false;
         Dirty=true;
     }
 
@@ -43,10 +51,17 @@ internal sealed partial class DebugMenu
         InputSound?.Invoke();
         string upper=command.ToUpperInvariant();
         CommandFeedback="";
+        commandError=false;
+        if(upper is "CLS" or "CLEAR")
+        {
+            ResetTerminal();
+            PrintCurrentView();
+            return;
+        }
         FlushTerminal();
         bool scrolling=upper is "SCROLL UP" or "PAGE UP" or "SCROLL DOWN" or "PAGE DOWN" or "TOP" or "BOTTOM";
         if(!scrolling) ScrollTerminal(-1000);
-        PrintLine(MenuPath+"> "+upper);
+        PrintLine(MenuPath+"> "+upper,inputStart:MenuPath.Length+2);
         int previousLines=terminalLines.Count;
         if(upper is "SCROLL UP" or "PAGE UP")
         { ScrollTerminal(10);return; }
@@ -57,7 +72,7 @@ internal sealed partial class DebugMenu
         if(upper is "BACK" or "ESC")
         {
             Back();
-            if(terminalLines.Count==previousLines) PrintLine("ALREADY AT MAIN MENU");
+            if(terminalLines.Count==previousLines) PrintLine("ERROR: ALREADY AT MAIN MENU",error:true);
             Dirty=true;
             return;
         }
@@ -67,13 +82,17 @@ internal sealed partial class DebugMenu
             if(TitlePage==0) RunTitleCommand(upper);
             else RunJoinCommand(command,upper);
         }
+        else if(!SettingsFromTitle && (upper=="SPAWN" || upper.StartsWith("SPAWN ",StringComparison.Ordinal)))
+            RunSpawnCommand(upper.Length>6?upper[6..]:"");
         else if(View==MenuView.Pause) RunPauseCommand(upper);
         else if(View==MenuView.Categories) RunCategoryCommand(upper);
-        else if(View==MenuView.Help) CommandFeedback="TYPE BACK TO RETURN";
-        else if(View==MenuView.Spawn) RunSpawnCommand(upper);
+        else if(View==MenuView.Help) CommandFailed("COMMAND NOT RECOGNIZED");
         else RunSettingCommand(command,upper);
-        if(terminalLines.Count==previousLines && CommandFeedback.Length>0)
-            PrintLine(CommandFeedback);
+        if(terminalLines.Count==previousLines && Open)
+        {
+            if(CommandFeedback.Length==0) CommandFailed("COMMAND NOT RECOGNIZED");
+            PrintLine((commandError?"ERROR: ":"")+CommandFeedback,error:commandError);
+        }
         if(View==MenuView.Settings) RefreshSettingLines();
         Dirty=true;
     }
@@ -90,7 +109,7 @@ internal sealed partial class DebugMenu
                 ShowSettingsFromTitle();break;
             case "QUIT": case "EXIT":
                 TitleAction?.Invoke(3);break;
-            default: CommandFeedback="TYPE SOLO, ONLINE, SETTINGS OR QUIT";break;
+            default: CommandFailed("COMMAND NOT RECOGNIZED");break;
         }
     }
 
@@ -100,14 +119,15 @@ internal sealed partial class DebugMenu
         {
             int space=command.IndexOf(' ');
             JoinKey=command[(space+1)..].Trim();
-            CommandFeedback=JoinKey.Length==0?"ROOM NAME REQUIRED":"ROOM SET  /  TYPE CONNECT";
+            if(JoinKey.Length==0) CommandFailed("ROOM NAME REQUIRED");
+            else CommandFeedback="ROOM SET  /  TYPE CONNECT";
             if(JoinKey.Length>0) PrintCurrentView();
             return;
         }
         switch(upper)
         {
             case "ROOM":
-                CommandFeedback="TYPE ROOM <NAME>";break;
+                CommandFailed("ROOM NAME REQUIRED");break;
             case "CONNECT": case "JOIN":
                 ConnectAction?.Invoke();
                 CommandFeedback=NetworkStatus;
@@ -117,12 +137,12 @@ internal sealed partial class DebugMenu
                 if(upper.StartsWith("CONNECT ",StringComparison.Ordinal))
                 {
                     JoinKey=command[8..].Trim();
-                    if(JoinKey.Length==0) { CommandFeedback="ROOM NAME REQUIRED";break; }
+                    if(JoinKey.Length==0) { CommandFailed("ROOM NAME REQUIRED");break; }
                     PrintCurrentView();
                     ConnectAction?.Invoke();
                     CommandFeedback=NetworkStatus;
                 }
-                else CommandFeedback="TYPE CONNECT <ROOM NAME>";
+                else CommandFailed("COMMAND NOT RECOGNIZED");
                 break;
         }
     }
@@ -135,23 +155,26 @@ internal sealed partial class DebugMenu
             "PROFILE"=>1,
             "SETTINGS" or "OPTIONS"=>2,
             "DEVELOPER" or "DEBUG"=>3,
-            "SPAWN"=>4,
-            "HELP" or "CONTROLS"=>5,
-            "LEAVE" or "LEAVE SESSION" or "MENU"=>6,
-            "QUIT" or "EXIT"=>7,
+            "HELP" or "CONTROLS"=>4,
+            "LEAVE" or "LEAVE SESSION" or "MENU"=>5,
+            "QUIT" or "EXIT"=>6,
             _=>-1
         };
-        if(row<0) { CommandFeedback="TYPE AN OPTION NAME";return; }
+        if(row<0) { CommandFailed("COMMAND NOT RECOGNIZED");return; }
         Selected=row;
+        Page=9;
         Adjust(row,1);
     }
 
     void RunSpawnCommand(string command)
     {
-        if(command=="HELP") { PrintCurrentView();return; }
+        if(command.Length==0) { CommandFailed("SPAWN REQUIRES TYPE SIZE COLOR AMOUNT");return; }
         if(!CubeSpawner.TryParse(command,out CubeSpawnSpec spec,out string error))
-        { CommandFeedback=error;return; }
-        CommandFeedback=SpawnAction?.Invoke(spec)??"SPAWN UNAVAILABLE";
+        { CommandFailed(error);return; }
+        string result=SpawnAction?.Invoke(spec)??"SPAWN UNAVAILABLE";
+        if(result=="SPAWN REQUEST SENT" || result=="SPAWNED" ||
+           result.StartsWith("SPAWNED ",StringComparison.Ordinal)) CommandFeedback=result;
+        else CommandFailed(result);
     }
 
     void RunCategoryCommand(string command)
@@ -159,7 +182,7 @@ internal sealed partial class DebugMenu
         int row=Array.FindIndex(Tabs,tab=>tab.Name==command ||
             tab.Name.Replace(" TUNING","",StringComparison.Ordinal)==command);
         if(row<0 || row>=Tabs.Length)
-        { CommandFeedback="TYPE A PAGE NAME";return; }
+        { CommandFailed("COMMAND NOT RECOGNIZED");return; }
         CategorySelected=row;
         SetPage(Tabs[row].Page);
     }
@@ -185,14 +208,14 @@ internal sealed partial class DebugMenu
         }
         if(row<0)
         {
-            CommandFeedback="TYPE A SETTING NAME OR BACK";
+            CommandFailed("COMMAND NOT RECOGNIZED");
             return;
         }
         Selected=row;
         if(value.Length==0 || value=="+")
         {
             if(Page==6 && row==0)
-            { CommandFeedback="TYPE NAME <TEXT>";return; }
+            { CommandFailed("NAME REQUIRED");return; }
             Adjust(row,1);
             CommandFeedback=$"{Labels[Page][row]}  {Value(row)}";
         }
@@ -202,17 +225,17 @@ internal sealed partial class DebugMenu
             CommandFeedback=$"{Labels[Page][row]}  {Value(row)}";
         }
         else if(Page==6 && row==0) SetPlayerName(value);
-        else if(Page==5 && !MonsterControlsWritable) CommandFeedback="HOST ONLY";
+        else if(Page==5 && !MonsterControlsWritable) CommandFailed("HOST ONLY");
         else if(TrySetValue(row,value))
             CommandFeedback=$"{Labels[Page][row]}  {Value(row)}";
-        else CommandFeedback="VALUE NOT AVAILABLE";
+        else CommandFailed("VALUE NOT AVAILABLE");
     }
 
     void SetPlayerName(string name)
     {
         string cleaned=new(name.Trim().ToUpperInvariant()
             .Where(c=>char.IsAsciiLetterOrDigit(c)||c is ' ' or '-').Take(12).ToArray());
-        if(cleaned.Length==0) { CommandFeedback="NAME REQUIRED";return; }
+        if(cleaned.Length==0) { CommandFailed("NAME REQUIRED");return; }
         PlayerName=cleaned;
         CommandFeedback="PLAYER NAME  "+PlayerName;
     }
