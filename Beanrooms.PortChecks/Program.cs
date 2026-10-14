@@ -321,12 +321,25 @@ if(args.Length==2 && args[0]=="--menu-preview")
     using(var render=menu.Draw()) File.WriteAllBytes(Path.Combine(args[1],"render.bgra"),render.Pixels);
 }var layout=WorldLayout.Generate(82317);
 Check(layout.Walls.Count>0,"Procedural layout has no walls.");
-Vector2 spawn=WorldLayout.FindClearSpawn(layout.Walls,new Vector2(96,96),.4f);
+Check(layout.Grid.Length==WorldLayout.GridSize*WorldLayout.GridSize*4 &&
+    layout.RaisedRooms.Count(room=>room.Ceiling==WorldLayout.HighCeiling)==3 &&
+    layout.RaisedRooms.Count(room=>room.Ceiling==WorldLayout.MediumCeiling)==7,
+    "Expanded world or raised room tiers are missing.");
+Check(layout.WallHeights.Count==layout.Walls.Count &&
+    layout.WallHeights.Any(height=>height>WorldLayout.NormalCeiling && height<WorldLayout.HighCeiling) &&
+    layout.WallHeights.Any(height=>height==WorldLayout.HighCeiling),
+    "Raised rooms need both short partitions and full-height walls.");
+Check(layout.Pits.Count>=30 && WorldLayout.PitAt(layout,layout.Pits[0].Left+1f,layout.Pits[0].Top+1f) &&
+    WorldLayout.FloorSlabs(layout).All(slab=>!WorldLayout.PitAt(layout,slab.Left+slab.Width*0.5f,
+        slab.Top+slab.Height*0.5f)),"Pit floor cutouts are missing.");
+Vector2 spawn=WorldLayout.FindClearSpawn(layout,new Vector2(WorldLayout.Center,WorldLayout.Center),.4f);
 Check(!layout.Walls.Any(wall=>spawn.X>wall.Left-.4f && spawn.X<wall.Right+.4f &&
-    spawn.Y>wall.Top-.4f && spawn.Y<wall.Bottom+.4f),"Player spawn overlaps a wall.");
+    spawn.Y>wall.Top-.4f && spawn.Y<wall.Bottom+.4f) &&
+    !WorldLayout.NearPit(layout,spawn,.4f),"Player spawn overlaps a wall or pit.");
 
 using(var physics=new PhysicsBodies())
 {
+    physics.ConfigureLayout(layout);
     Vector3 eye=new(spawn.X,1.68f,spawn.Y);
     bool created=physics.Spawn(eye,Vector3.UnitZ,false,layout.Walls,eye,new Vector3(.92f),PhysicsMaterial.Wood);
     Check(created && physics.Bodies.Count==1,"Cube spawn failed.");

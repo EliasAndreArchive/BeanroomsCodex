@@ -2,6 +2,8 @@
 in vec2 uv;
 out vec4 fragColor;
 uniform sampler2D worldGrid;
+uniform sampler2D heightGrid;
+uniform sampler2D pitMap;
 uniform sampler2D wallTex;
 uniform sampler2D floorTex;
 uniform sampler2D ceilingTex;
@@ -42,10 +44,21 @@ uniform vec4 monsterData;
 
 const float PI = 3.141592653589793;
 const float CELL = 4.0;
-const int GRID = 48;
-const int FIXTURE_GRID = 25;
-const float CEILING = 3.4;
+const int GRID = 64;
+const int FIXTURE_GRID = 33;
+const float WORLD = 256.0;
 const float SPACING = 8.0;
+
+float ceilingAt(vec2 p) {
+    ivec2 cell=clamp(ivec2(floor(p/CELL)),ivec2(0),ivec2(GRID-1));
+    return texelFetch(heightGrid,cell,0).r;
+}
+bool pitAt(vec2 p) {
+    ivec2 size=textureSize(pitMap,0);
+    ivec2 cell=ivec2(floor(p*2.0));
+    return all(greaterThanEqual(cell,ivec2(0))) && all(lessThan(cell,size)) &&
+        texelFetch(pitMap,cell,0).r>0.5;
+}
 
 uint state;
 int pathSampleOrdinal;
@@ -103,10 +116,25 @@ Hit trace(vec3 ro, vec3 rd, float limit) {
     Hit h; h.t = limit; h.material = 0; h.normal = vec3(0.0); h.baseColor = vec3(1.0); h.pos = ro + rd * limit;
     if (rd.y < -0.00001) {
         float t = -ro.y / rd.y;
-        if (t > 0.001 && t < h.t) { h.t=t; h.material=2; h.normal=vec3(0,1,0); }
+        if (t > 0.001 && t < h.t && !pitAt(ro.xz+rd.xz*t))
+        { h.t=t; h.material=2; h.normal=vec3(0,1,0); }
+        else if(t>0.001 && pitAt(ro.xz+rd.xz*t)) {
+            float bottom=(-5.0-ro.y)/rd.y;
+            if(bottom>t && bottom<h.t) { h.t=bottom;h.material=12;h.normal=vec3(0,1,0); }
+            for(int step=1;step<=32;step++) {
+                float sideT=mix(t,bottom,float(step)/32.0);
+                if(sideT>=h.t) break;
+                if(!pitAt(ro.xz+rd.xz*sideT))
+                { h.t=sideT;h.material=13;h.normal=normalize(vec3(-rd.x,0,-rd.z));break; }
+            }
+        }
     } else if (rd.y > 0.00001) {
-        float t = (CEILING - ro.y) / rd.y;
-        if (t > 0.001 && t < h.t) { h.t=t; h.material=3; h.normal=vec3(0,-1,0); }
+        for(int tier=0;tier<3;tier++) {
+            float ceiling=tier==0?3.4:tier==1?4.9:7.2;
+            float t=(ceiling-ro.y)/rd.y;
+            if(t>0.001&&t<h.t&&abs(ceilingAt(ro.xz+rd.xz*t)-ceiling)<0.05)
+            { h.t=t;h.material=3;h.normal=vec3(0,-1,0); }
+        }
     }
     for(int object=0;object<objectCount;object++) {
         vec4 data=objectData(object);
@@ -231,9 +259,10 @@ Hit trace(vec3 ro, vec3 rd, float limit) {
     vec2 delta = CELL * inv;
     vec2 edge = (vec2(cell) + vec2(rd.x >= 0.0 ? 1.0 : 0.0, rd.z >= 0.0 ? 1.0 : 0.0)) * CELL;
     vec2 side = abs(edge - ro.xz) * inv;
-    for (int i=0; i<110; i++) {
+    for (int i=0; i<150; i++) {
         if (any(lessThan(cell, ivec2(0))) || any(greaterThanEqual(cell, ivec2(GRID)))) break;
         vec4 b = texelFetch(worldGrid, cell, 0);
+        float wallHeight=texelFetch(heightGrid,cell,0).g;
         if (b.x >= 0.0) {
             vec2 near2 = (b.xy - ro.xz) / safeDir;
             vec2 far2 = (b.zw - ro.xz) / safeDir;
@@ -241,13 +270,33 @@ Hit trace(vec3 ro, vec3 rd, float limit) {
             vec2 hi = max(near2, far2);
             float entry = max(lo.x, lo.y);
             float leave = min(hi.x, hi.y);
-            if (entry > 0.001 && entry < limit && entry <= h.t + 0.002 && entry <= leave + 0.0001 && entry <= min(side.x,side.y)+0.002 && ro.y + entry*rd.y >= -0.002 && ro.y + entry*rd.y <= CEILING+0.002) {
+            if (entry > 0.001 && entry < limit && entry <= h.t + 0.002 && entry <= leave + 0.0001 && entry <= min(side.x,side.y)+0.002 && ro.y + entry*rd.y >= -0.002 && ro.y + entry*rd.y <= wallHeight+0.002) {
                 h.t = entry; h.material = 1;
                 h.normal = lo.x > lo.y ? vec3(-sign(rd.x),0,0) : vec3(0,0,-sign(rd.z));
                 break;
             }
+            if(rd.y< -0.00001) {
+                float topT=(wallHeight-ro.y)/rd.y;
+                vec2 topPoint=ro.xz+rd.xz*topT;
+                if(topT>0.001&&topT<h.t&&topT<min(side.x,side.y)+0.002&&
+                    all(greaterThanEqual(topPoint,b.xy))&&all(lessThanEqual(topPoint,b.zw)))
+                { h.t=topT;h.material=1;h.normal=vec3(0,1,0);break; }
+            }
         }
         if (min(side.x,side.y) > h.t) break;
+        float crossing=min(side.x,side.y);
+        ivec2 nextCell=cell+(side.x<side.y?ivec2(stepDir.x,0):ivec2(0,stepDir.y));
+        if(all(greaterThanEqual(nextCell,ivec2(0)))&&all(lessThan(nextCell,ivec2(GRID)))) {
+            float oldCeiling=texelFetch(heightGrid,cell,0).r;
+            float newCeiling=texelFetch(heightGrid,nextCell,0).r;
+            float y=ro.y+crossing*rd.y;
+            if(abs(oldCeiling-newCeiling)>0.05&&crossing>0.001&&crossing<h.t&&
+                y>min(oldCeiling,newCeiling)&&y<max(oldCeiling,newCeiling)) {
+                h.t=crossing;h.material=1;
+                h.normal=side.x<side.y?vec3(-stepDir.x,0,0):vec3(0,0,-stepDir.y);
+                break;
+            }
+        }
         if (side.x < side.y) { cell.x += stepDir.x; side.x += delta.x; }
         else { cell.y += stepDir.y; side.y += delta.y; }
     }
@@ -256,6 +305,8 @@ Hit trace(vec3 ro, vec3 rd, float limit) {
 }
 
 vec3 materialColor(Hit h) {
+    if(h.material==12) return vec3(0.055,0.050,0.040);
+    if(h.material==13) return vec3(0.22,0.20,0.13);
     if(h.material==10) return max(h.baseColor,vec3(0.003));
     if(h.material==11) return h.baseColor;
     if(h.material==4) return h.baseColor;
@@ -292,6 +343,26 @@ vec3 cosineDirection(vec3 n) {
     return normalize(t * (r*cos(a)) + b * (r*sin(a)) + n * sqrt(1.0-r*r));
 }
 
+// Ceilings see broad patches of illuminated carpet. Sampling those patches
+// explicitly avoids relying on a few random paths to find the floor.
+vec3 ceilingBounce(Hit h,vec3 albedo) {
+    if(lightsEnabled==0 || h.material!=3) return vec3(0.0);
+    ivec2 base=ivec2(floor(h.pos.xz/SPACING));
+    vec3 bounced=vec3(0.0);
+    for(int z=0;z<2;z++) for(int x=0;x<2;x++) {
+        ivec2 id=base+ivec2(x,z);
+        if(!fixtureOn(id)) continue;
+        vec2 center=fixtureCenter(id);
+        if(abs(ceilingAt(center)-h.pos.y)>0.05 || pitAt(center)) continue;
+        vec2 toward=center-h.pos.xz;
+        float distanceSquared=dot(toward,toward)+h.pos.y*h.pos.y;
+        float heightWeight=0.45+0.55*smoothstep(3.4,7.2,h.pos.y);
+        bounced+=fixtureEmission(id)*lightIntensity*
+            (0.40*1.2*heightWeight)/(distanceSquared+4.0);
+    }
+    return albedo*bounced;
+}
+
 vec3 directLight(Hit h, vec3 albedo, int samples) {
     vec3 cubeLight = vec3(0);
     for(int object=0;object<objectCount;object++) {
@@ -312,17 +383,18 @@ vec3 directLight(Hit h, vec3 albedo, int samples) {
     }
     // Ceiling panels face downward. Their own plane cannot receive their area
     // light because the sampled light direction has a negative Y component.
-    if(lightsEnabled==0 || h.material==3) return cubeLight;
+    if(lightsEnabled==0 || h.material==3) return cubeLight+ceilingBounce(h,albedo);
     vec3 total = vec3(0);
     ivec2 base = ivec2(floor(h.pos.xz / SPACING + 0.5));
     float weights[25];
     float weightSum = 0.0;
-    float verticalDistance = CEILING - h.pos.y;
     for (int j=0; j<25; j++) {
         ivec2 id = base + ivec2(j % 5 - 2, j / 5 - 2);
         float weight = 0.0;
         if(fixtureOn(id)) {
-            vec2 horizontal = fixtureCenter(id)-h.pos.xz;
+            vec2 center=fixtureCenter(id);
+            vec2 horizontal = center-h.pos.xz;
+            float verticalDistance=ceilingAt(center)-h.pos.y;
             float distanceSquared=dot(horizontal,horizontal)+verticalDistance*verticalDistance;
             if(distanceSquared<576.0) {
                 float fade=smoothLightRange(sqrt(distanceSquared),8.0,24.0);
@@ -347,7 +419,8 @@ vec3 directLight(Hit h, vec3 albedo, int samples) {
         }
         ivec2 id = base + ivec2(choice % 5 - 2, choice / 5 - 2);
         vec2 center = fixtureCenter(id);
-        vec3 lp = vec3(center.x + (rand()-0.5)*2.0, CEILING-0.012, center.y + (rand()-0.5)*2.0);
+        vec3 lp = vec3(center.x + (rand()-0.5)*2.0,
+            ceilingAt(center)-0.012, center.y + (rand()-0.5)*2.0);
         vec3 v = lp - h.pos;
         float dist2 = dot(v,v);
         float dist = sqrt(dist2);
@@ -358,6 +431,7 @@ vec3 directLight(Hit h, vec3 albedo, int samples) {
         if (blocker.material != 0) continue;
         vec3 emission = fixtureEmission(id) * lightIntensity;
         vec2 horizontal=center-h.pos.xz;
+        float verticalDistance=ceilingAt(center)-h.pos.y;
         float centerDistanceSquared=dot(horizontal,horizontal)+verticalDistance*verticalDistance;
         // The selected weight already contains the falloff. Cancel it against the PDF.
         float weightedFalloff=weightSum*(centerDistanceSquared+verticalDistance*verticalDistance+2.0);
@@ -402,16 +476,17 @@ vec3 hybridDirectLight(Hit h,vec3 albedo) {
         cubeLight+=albedo*objectColor(object)*vec3(8.0,9.5,13.5)*facing*fade*
             (cube.w*cube.w*4.0)/(distanceSquared+0.6);
     }
-    if(lightsEnabled==0 || h.material==3) return cubeLight;
+    if(lightsEnabled==0 || h.material==3) return cubeLight+ceilingBounce(h,albedo);
     float scores[8];
     ivec2 ids[8];
     for(int i=0;i<8;i++) { scores[i]=0.0;ids[i]=ivec2(-1); }
     ivec2 base=ivec2(floor(h.pos.xz/SPACING+0.5));
-    float vertical=CEILING-h.pos.y;
     for(int z=-2;z<=2;z++) for(int x=-2;x<=2;x++) {
         ivec2 id=base+ivec2(x,z);
         if(!fixtureOn(id)) continue;
-        vec2 horizontal=fixtureCenter(id)-h.pos.xz;
+        vec2 center=fixtureCenter(id);
+        vec2 horizontal=center-h.pos.xz;
+        float vertical=ceilingAt(center)-h.pos.y;
         float d2=dot(horizontal,horizontal)+vertical*vertical;
         if(d2>=576.0) continue;
         float fade=smoothLightRange(sqrt(d2),8.0,24.0);
@@ -432,7 +507,7 @@ vec3 hybridDirectLight(Hit h,vec3 albedo) {
         for(int sampleIndex=0;sampleIndex<8;sampleIndex++) {
             if(sampleIndex>=hybridDirectSamples) break;
             vec2 offset=hybridPanelOffset(sampleIndex,hybridDirectSamples);
-            vec3 lp=vec3(center.x+offset.x,CEILING-0.012,center.y+offset.y);
+            vec3 lp=vec3(center.x+offset.x,ceilingAt(center)-0.012,center.y+offset.y);
             vec3 toward=lp-h.pos;
             float distanceSquared=dot(toward,toward);
             float distance=sqrt(distanceSquared);
@@ -454,7 +529,7 @@ float ambientOcclusion(Hit h) {
     if (h.material >= 4) return 1.0;
     if (h.material == 1) {
         float floorContact = exp(-max(h.pos.y,0.0) / 0.48);
-        float ceilingContact = exp(-max(CEILING-h.pos.y,0.0) / 0.48);
+        float ceilingContact = exp(-max(ceilingAt(h.pos.xz)-h.pos.y,0.0) / 0.48);
         return clamp(1.0 - aoStrength * (0.46*floorContact + 0.38*ceilingContact),0.2,1.0);
     }
     ivec2 base = ivec2(floor(h.pos.xz / CELL));
@@ -464,6 +539,7 @@ float ambientOcclusion(Hit h) {
         if (any(lessThan(cell,ivec2(0))) || any(greaterThanEqual(cell,ivec2(GRID)))) continue;
         vec4 box = texelFetch(worldGrid,cell,0);
         if (box.x < 0.0) continue;
+        if (h.material == 3 && texelFetch(heightGrid,cell,0).g < h.pos.y-0.05) continue;
         vec2 outside = max(max(box.xy-h.pos.xz,h.pos.xz-box.zw),vec2(0.0));
         nearestWall = min(nearestWall,length(outside));
     }
@@ -502,7 +578,7 @@ bool probeBlocked(vec2 a,vec2 b) {
 
 vec3 probeIndirect(Hit h) {
     vec2 p=h.pos.xz+h.normal.xz*0.07;
-    vec2 gridPos=p*(float(probeSize)/192.0)-0.5;
+    vec2 gridPos=p*(float(probeSize)/WORLD)-0.5;
     ivec2 base=ivec2(floor(gridPos));
     vec2 fraction=fract(gridPos);
     vec3 sum=vec3(0.0);
@@ -512,7 +588,7 @@ vec3 probeIndirect(Hit h) {
         if(any(lessThan(id,ivec2(0))) || any(greaterThanEqual(id,ivec2(probeSize)))) continue;
         vec4 bounce=texelFetch(probeBounceTex,id,0);
         if(bounce.a<0.5) continue;
-        vec2 center=(vec2(id)+0.5)*(192.0/float(probeSize));
+        vec2 center=(vec2(id)+0.5)*(WORLD/float(probeSize));
         if(probeBlocked(p,center)) continue;
         vec3 direct=texelFetch(probeDirectTex,id,0).rgb;
         float weight=(x==0?1.0-fraction.x:fraction.x)*(z==0?1.0-fraction.y:fraction.y);
@@ -546,7 +622,7 @@ vec4 volumetricLight(vec3 origin,vec3 direction,float surfaceDistance) {
             ivec2 id=base+ivec2(x,z);
             if(!fixtureOn(id)) continue;
             vec2 center=fixtureCenter(id);
-            vec3 toLight=vec3(center.x,CEILING-0.07,center.y)-samplePosition;
+            vec3 toLight=vec3(center.x,ceilingAt(center)-0.07,center.y)-samplePosition;
             float distanceSquared=dot(toLight,toLight);
             if(distanceSquared<nearestDistance[0]) {
                 nearestDistance[1]=nearestDistance[0];nearestId[1]=nearestId[0];
@@ -560,7 +636,7 @@ vec4 volumetricLight(vec3 origin,vec3 direction,float surfaceDistance) {
             if(distanceSquared>18.0*18.0 || distanceSquared<0.03) continue;
             ivec2 id=nearestId[light];
             vec2 center=fixtureCenter(id);
-            vec3 toLight=vec3(center.x,CEILING-0.07,center.y)-samplePosition;
+            vec3 toLight=vec3(center.x,ceilingAt(center)-0.07,center.y)-samplePosition;
             float distance=sqrt(distanceSquared);
             vec3 toward=toLight/distance;
             float fade=smoothLightRange(distance,2.5,11.0);

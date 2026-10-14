@@ -218,7 +218,7 @@ internal sealed partial class DebugMenu
             11 => Volumetrics ? "ON" : "OFF",
             12 => $"{FogDensity:0.000}",
             13 => FogSteps.ToString(),
-            14 => ProbeQuality switch { 0 => "48", 1 => "96", 2 => "144", _ => "192" },
+            14 => ProbeQuality switch { 0 => "64", 1 => "128", 2 => "192", _ => "256" },
             15 => ProbeBounces.ToString(),
             16 => HybridDirectSamples.ToString(),
             _ => ""

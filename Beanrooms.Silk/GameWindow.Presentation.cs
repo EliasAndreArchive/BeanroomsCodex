@@ -1,6 +1,5 @@
 using System.Drawing;
 using System.Numerics;
-using System.Runtime.InteropServices;
 
 namespace Beanrooms;
 
@@ -290,12 +289,15 @@ internal sealed partial class GameWindow
         Gl.UseProgram(pathProgram);
         Bind(0,worldTexture); Bind(1,wallTexture); Bind(2,floorTexture); Bind(3,ceilingTexture); Bind(4,fixtureTexture); Bind(5,faceTexture); Bind(6,eyeTexture);
         Bind(7,probeDirect);Bind(8,probeResult);
+        Bind(10,heightTexture);Bind(11,pitTexture);
         Uniform1(pathProgram,"worldGrid",0); Uniform1(pathProgram,"wallTex",1); Uniform1(pathProgram,"floorTex",2); Uniform1(pathProgram,"ceilingTex",3);
         Uniform1(pathProgram,"fixtureMap",4);
         Uniform1(pathProgram,"faceTex",5);
         Uniform1(pathProgram,"eyeTex",6);
         Uniform1(pathProgram,"probeDirectTex",7);
         Uniform1(pathProgram,"probeBounceTex",8);
+        Uniform1(pathProgram,"heightGrid",10);
+        Uniform1(pathProgram,"pitMap",11);
         MonsterState? monster=visibleMonster;
         Gl.Uniform4fv(Gl.GetUniformLocation(pathProgram,"monsterData"),1,
             [menu.MonsterSettings.Enabled ? monster?.X??-100f : -100f,

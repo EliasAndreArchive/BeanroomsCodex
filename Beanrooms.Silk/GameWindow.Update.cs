@@ -76,6 +76,7 @@ internal sealed partial class GameWindow
         bool crouching=crouchToggle || keys.Contains(Keys.ControlKey) || keys.Contains(Keys.LControlKey) || keys.Contains(Keys.RControlKey);
         bool sprinting=keys.Contains(Keys.ShiftKey) || keys.Contains(Keys.LShiftKey) || keys.Contains(Keys.RShiftKey);
         motion.Update(dt,input,sprinting,crouching,mouseYawDelta,yaw,menu,ref camera,Collides,active);
+        UpdatePitfall(dt);
         mouseYawDelta=0f;
         if(!lookInitialized) { smoothYaw=yaw; smoothPitch=pitch; lookInitialized=true; }
         float lookBlend=1f-MathF.Exp(-MathF.Max(menu.CameraSmooth,0.1f)*dt);

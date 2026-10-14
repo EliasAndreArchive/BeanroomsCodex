@@ -22,8 +22,8 @@ internal enum GameSessionPhase { MainMenu, JoiningRoom, PlayingSolo, PlayingOnli
 
 internal sealed partial class GameWindow : SilkForm
 {
-    const int Grid = 48;
-    const int FixtureGrid = 25;
+    const int Grid = WorldLayout.GridSize;
+    const int FixtureGrid = WorldLayout.GridSize/2+1;
     const float Cell = 4f;
     const float Radius = 0.4f;
     readonly Stopwatch watch = Stopwatch.StartNew();
@@ -34,13 +34,17 @@ internal sealed partial class GameWindow : SilkForm
     readonly bool[] fixtureBase = new bool[FixtureGrid*FixtureGrid];
     readonly LightFlicker flicker;
     float[] grid = new float[Grid * Grid * 4];
-    Vector3 camera = new(96, 1.68f, 96);
+    float[] heightGrid = new float[Grid * Grid * 4];
+    float[] pitPixels = new float[(int)WorldLayout.WorldSize*WorldLayout.PitPixelsPerMeter*
+        (int)WorldLayout.WorldSize*WorldLayout.PitPixelsPerMeter];
+    WorldLayoutData? worldLayout;
+    Vector3 camera = new(WorldLayout.Center, 1.68f, WorldLayout.Center);
     float yaw = 0.63f, pitch;
     float smoothYaw, smoothPitch;
     bool lookInitialized;
     int seed = 82317;
     int width = 320, height = 240;
-    int frames, worldTexture, fixtureTexture, objectTexture, wallTexture, floorTexture, ceilingTexture, faceTexture, eyeTexture, overlayTexture;
+    int frames, worldTexture, heightTexture, pitTexture, fixtureTexture, objectTexture, wallTexture, floorTexture, ceilingTexture, faceTexture, eyeTexture, overlayTexture;
     int pathProgram, probeProgram, displayProgram, menuBackgroundProgram, exposureProgram, bloomExtractProgram, bloomBlurProgram, framebuffer;
     int renderTexture, sceneTexture, bloomA, bloomB, exposureA, exposureB, exposureCurrent;
     int probeDirect, probeA, probeB, probeResult, probeSize;
@@ -82,6 +86,8 @@ internal sealed partial class GameWindow : SilkForm
     int respawnId;
     double localRespawnProtectedUntil;
     bool chaseLocked;
+    bool pitFalling;
+    float pitFallSpeed,pitFallDistance;
     float chaseBlend;
     bool crouchToggle;
     float mouseYawDelta;
@@ -267,6 +273,8 @@ internal sealed partial class GameWindow : SilkForm
             bloomBlurProgram = Compile("screen.vert", "bloom_blur.frag");
             framebuffer = Gl.GenFramebuffer();
             worldTexture = Gl.GenTexture();
+            heightTexture = Gl.GenTexture();
+            pitTexture = Gl.GenTexture();
             fixtureTexture = Gl.GenTexture();
             objectTexture = Gl.GenTexture();
             overlayTexture = Gl.GenTexture();

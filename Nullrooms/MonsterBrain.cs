@@ -6,7 +6,7 @@ namespace Beanrooms;
 // Runs on the server for multiplayer and on the client when playing alone.
 internal sealed class MonsterBrain
 {
-    const int Size = 192;
+    const int Size = (int)WorldLayout.WorldSize;
     const float Cell = 1f;
     const float Radius = 0.48f;
     readonly bool[] staticBlocked = new bool[Size * Size];
@@ -29,7 +29,8 @@ internal sealed class MonsterBrain
 
     internal MonsterState State => state;
 
-    internal MonsterBrain(int seed, List<RectangleF> walls, MonsterTuning? settings = null)
+    internal MonsterBrain(int seed, List<RectangleF> walls, MonsterTuning? settings = null,
+        WorldLayoutData? layout=null)
     {
         this.walls = walls;
         tuning = settings ?? new MonsterTuning();
@@ -48,12 +49,29 @@ internal sealed class MonsterBrain
                     staticBlocked[z*Size+x]=true;
             }
         }
+        if(layout!=null)
+        foreach(RectangleF pit in layout.Pits)
+        {
+            int x0=Math.Clamp((int)MathF.Floor((pit.Left-Radius)/Cell),0,Size-1);
+            int x1=Math.Clamp((int)MathF.Ceiling((pit.Right+Radius)/Cell),0,Size-1);
+            int z0=Math.Clamp((int)MathF.Floor((pit.Top-Radius)/Cell),0,Size-1);
+            int z1=Math.Clamp((int)MathF.Ceiling((pit.Bottom+Radius)/Cell),0,Size-1);
+            for(int z=z0;z<=z1;z++) for(int x=x0;x<=x1;x++)
+            {
+                Vector2 center=Center(z*Size+x);
+                if(center.X>pit.Left-Radius&&center.X<pit.Right+Radius&&
+                   center.Y>pit.Top-Radius&&center.Y<pit.Bottom+Radius)
+                    staticBlocked[z*Size+x]=true;
+            }
+        }
         Array.Copy(staticBlocked,blocked,blocked.Length);
-        Vector2 clearSpawn=WorldLayout.FindClearSpawn(walls,new Vector2(108f,98f),Radius);
+        Vector2 clearSpawn=layout==null?
+            WorldLayout.FindClearSpawn(walls,new Vector2(WorldLayout.Center+12f,WorldLayout.Center+2f),Radius):
+            WorldLayout.FindClearSpawn(layout,new Vector2(WorldLayout.Center+12f,WorldLayout.Center+2f),Radius);
         int spawn = NearestFree(Index(clearSpawn.X,clearSpawn.Y));
         Vector2 start = WorldLayout.FindClearSpawn(walls,Center(spawn),Radius);
         state.X=start.X; state.Y=1.5f; state.Z=start.Y;
-        state.Yaw=MathF.Atan2(96f-start.X,96f-start.Y);
+        state.Yaw=MathF.Atan2(WorldLayout.Center-start.X,WorldLayout.Center-start.Y);
         SelectRoamGoal();
         PublishDebug();
     }

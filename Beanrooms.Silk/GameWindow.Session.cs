@@ -14,12 +14,16 @@ internal sealed partial class GameWindow
         probeDirty=true;
         physics.Clear();
         var layout=WorldLayout.Generate(seed);
+        worldLayout=layout;
+        pitFalling=false;pitFallSpeed=pitFallDistance=0f;
+        physics.ConfigureLayout(layout);
         grid=layout.Grid;
+        heightGrid=layout.Heights;
         boxes.Clear();
         boxes.AddRange(layout.Walls);
         WorldProps.Place(physics,boxes);
-        audio?.SetWorld(boxes);
-        localMonster = new MonsterBrain(seed,boxes,menu.MonsterSettings);
+        audio?.SetWorld(layout);
+        localMonster = new MonsterBrain(seed,boxes,menu.MonsterSettings,layout);
         visibleMonster = localMonster.State;
         Gl.BindTexture(0x0DE1,worldTexture);
         Gl.TexParameteri(0x0DE1,0x2801,0x2600); Gl.TexParameteri(0x0DE1,0x2800,0x2600);
@@ -27,8 +31,25 @@ internal sealed partial class GameWindow
         var handle = GCHandle.Alloc(grid,GCHandleType.Pinned);
         try { Gl.TexImage2D(0x0DE1,0,0x8814,Grid,Grid,0,0x1908,0x1406,handle.AddrOfPinnedObject()); }
         finally { handle.Free(); }
+        Gl.BindTexture(0x0DE1,heightTexture);
+        Gl.TexParameteri(0x0DE1,0x2801,0x2600); Gl.TexParameteri(0x0DE1,0x2800,0x2600);
+        Gl.TexParameteri(0x0DE1,0x2802,0x812F); Gl.TexParameteri(0x0DE1,0x2803,0x812F);
+        var heightHandle=GCHandle.Alloc(heightGrid,GCHandleType.Pinned);
+        try { Gl.TexImage2D(0x0DE1,0,0x8814,Grid,Grid,0,0x1908,0x1406,heightHandle.AddrOfPinnedObject()); }
+        finally { heightHandle.Free(); }
+        int pitSize=(int)WorldLayout.WorldSize*WorldLayout.PitPixelsPerMeter;
+        Array.Clear(pitPixels);
+        for(int z=0;z<pitSize;z++) for(int x=0;x<pitSize;x++)
+            if(WorldLayout.PitAt(layout,(x+0.5f)/WorldLayout.PitPixelsPerMeter,
+                (z+0.5f)/WorldLayout.PitPixelsPerMeter)) pitPixels[z*pitSize+x]=1f;
+        Gl.BindTexture(0x0DE1,pitTexture);
+        Gl.TexParameteri(0x0DE1,0x2801,0x2600); Gl.TexParameteri(0x0DE1,0x2800,0x2600);
+        Gl.TexParameteri(0x0DE1,0x2802,0x812F); Gl.TexParameteri(0x0DE1,0x2803,0x812F);
+        var pitHandle=GCHandle.Alloc(pitPixels,GCHandleType.Pinned);
+        try { Gl.TexImage2D(0x0DE1,0,0x822E,pitSize,pitSize,0,0x1903,0x1406,pitHandle.AddrOfPinnedObject()); }
+        finally { pitHandle.Free(); }
         RebuildFixtureMap();
-        Vector2 clearSpawn=WorldLayout.FindClearSpawn(boxes,new Vector2(96f,96f),Radius);
+        Vector2 clearSpawn=WorldLayout.FindClearSpawn(layout,new Vector2(WorldLayout.Center,WorldLayout.Center),Radius);
         camera = new Vector3(clearSpawn.X,1.68f,clearSpawn.Y);
         smoothYaw = yaw;
         smoothPitch = pitch;
@@ -49,6 +70,14 @@ internal sealed partial class GameWindow
     bool FixtureClear(int x,int z)
     {
         float cx=x*8f, cz=z*8f, minX=cx-1f, minZ=cz-1f, maxX=cx+1f, maxZ=cz+1f;
+        if(worldLayout!=null)
+        {
+            float ceiling=WorldLayout.CeilingAt(worldLayout,cx,cz);
+            if(WorldLayout.CeilingAt(worldLayout,minX,minZ)!=ceiling ||
+               WorldLayout.CeilingAt(worldLayout,maxX,minZ)!=ceiling ||
+               WorldLayout.CeilingAt(worldLayout,minX,maxZ)!=ceiling ||
+               WorldLayout.CeilingAt(worldLayout,maxX,maxZ)!=ceiling) return false;
+        }
         int x0=Math.Clamp((int)MathF.Floor(minX/Cell),0,Grid-1);
         int z0=Math.Clamp((int)MathF.Floor(minZ/Cell),0,Grid-1);
         int x1=Math.Clamp((int)MathF.Floor(maxX/Cell),0,Grid-1);
@@ -68,7 +97,10 @@ internal sealed partial class GameWindow
         activeFixtures.Clear();
         for(int z=0;z<FixtureGrid;z++) for(int x=0;x<FixtureGrid;x++)
         {
-            bool enabled=(x==12 && z==12) ||
+            bool raised=worldLayout!=null &&
+                WorldLayout.CeilingAt(worldLayout,x*8f,z*8f)>WorldLayout.NormalCeiling;
+            bool enabled=(x==FixtureGrid/2 && z==FixtureGrid/2) ||
+                (raised && FixtureHash(x,z,seed)<0.85f) ||
                 (FixtureHash(x/3+47,z/3-29,seed)>=0.26f &&
                  FixtureHash(x,z,seed)>1f-menu.LightDensity);
             int offset=(z*FixtureGrid+x)*4;
@@ -77,7 +109,7 @@ internal sealed partial class GameWindow
             fixturePixels[offset]=active ? 1f : 0f;
             fixturePixels[offset+2]=active ? 1f : 0f;
             if(active) activeFixtures.Add(new Vector2(x*8f,z*8f));
-            fixturePixels[offset+1]=FixtureHash(x+91,z-37,seed)<0.08f ? 1f : 0f;
+            fixturePixels[offset+1]=!raised && FixtureHash(x+91,z-37,seed)<0.08f ? 1f : 0f;
         }
         Bind(4,fixtureTexture);
         Gl.TexParameteri(0x0DE1,0x2801,0x2600); Gl.TexParameteri(0x0DE1,0x2800,0x2600);
@@ -101,7 +133,9 @@ internal sealed partial class GameWindow
             int index=z*FixtureGrid+x;
             float on=fixtureBase[index] && flicker.IsOn(x,z,seed,now) ? 1f : 0f;
             if(fixturePixels[index*4]!=on) { fixturePixels[index*4]=on;changed=true; }
-            float red=FixtureHash(x+91,z-37,seed)<redChance ? 1f : 0f;
+            bool raised=worldLayout!=null &&
+                WorldLayout.CeilingAt(worldLayout,x*8f,z*8f)>WorldLayout.NormalCeiling;
+            float red=!raised && FixtureHash(x+91,z-37,seed)<redChance ? 1f : 0f;
             if(fixturePixels[index*4+1]!=red) { fixturePixels[index*4+1]=red;changed=true; }
         }
         if(!changed) return;
@@ -154,6 +188,8 @@ internal sealed partial class GameWindow
         if(network.Connected) network.Send(new NetMessage { Type="release" });
         physics.Release();
         physics.Clear();
+        worldLayout=null;
+        pitFalling=false;pitFallSpeed=pitFallDistance=0f;
         DisconnectNetwork();
         sessionPhase=GameSessionPhase.MainMenu;
         localMonster=null;
@@ -184,15 +220,29 @@ internal sealed partial class GameWindow
 
     void RespawnLocal()
     {
-        if(visibleMonster==null) return;
-        Vector2 point=WorldLayout.FindSafeRespawn(boxes,
-            new Vector2(visibleMonster.X,visibleMonster.Z),Radius,Random.Shared);
+        Vector2 threat=visibleMonster==null?new Vector2(camera.X,camera.Z):
+            new Vector2(visibleMonster.X,visibleMonster.Z);
+        Vector2 point=worldLayout==null?WorldLayout.FindSafeRespawn(boxes,threat,Radius,Random.Shared):
+            WorldLayout.FindSafeRespawn(worldLayout,threat,Radius,Random.Shared);
         physics.Release();
         camera=new Vector3(point.X,1.68f,point.Y);
+        pitFalling=false;pitFallSpeed=pitFallDistance=0f;
         motion.Reset();
         crouchToggle=false;
         localRespawnProtectedUntil=watch.Elapsed.TotalSeconds+2.5;
         BeginSpawn(true);
+    }
+
+    void UpdatePitfall(float dt)
+    {
+        if(worldLayout==null) return;
+        if(!pitFalling && WorldLayout.PitAt(worldLayout,camera.X,camera.Z))
+        { pitFalling=true;pitFallSpeed=0f;pitFallDistance=0f;physics.Release(); }
+        if(!pitFalling) return;
+        pitFallSpeed+=9.81f*dt;
+        pitFallDistance+=pitFallSpeed*dt;
+        camera.Y-=pitFallDistance;
+        if(pitFallDistance>4.8f) RespawnLocal();
     }
 
     void CaptureMouse() { if (ready && wantsCapture && !active && Focused) { active=true; CaptureCursor(); } }

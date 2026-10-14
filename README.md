@@ -2,6 +2,8 @@
 
 Beanrooms is a low resolution 4:3 desktop game with procedural rooms, path traced and hybrid lighting, Bepu physics, and online multiplayer. The client uses Silk.NET/GLFW, OpenGL 4.3, OpenAL Soft for playback, Vercidium Audio v1.10.1 for raytraced source filtering and EAX room reverb, and Photon Realtime for online rooms. Nearby spatial sounds use Vercidium's grouped room effects; local, UI, and untracked distant sounds use the listener room. The Photon room master runs authoritative cube and monster simulation and broadcasts snapshots. Photon v5.1.20 and its license are in `Beanrooms.Silk/ThirdParty/PhotonRealtime/`; Vercidium's DLL, API XML, and license are in `Beanrooms.Silk/ThirdParty/VercidiumAudio/`.
 
+The 256 m procedural map has mostly low ceilings, scattered rooms roughly 1.5 m higher, and rarer tall rooms with both full-height and shorter walls. Rare pit rooms contain either one large opening or a grid of smaller holes. Falling into a pit returns the player to a safe floor position. Ceiling height, lamps, collisions, sound occlusion, and the monster's route use the same generated layout.
+
 Varied concrete footsteps play for the local and online players. Physics objects use the original wood impact and concrete scrape sounds. Each object corner is tracked against the floor, walls, and other objects, so a landing corner clicks while a resting object stays quiet. Online scraping uses authority-measured contact slip speed. Nearby ceiling lights each emit a spatial hum. Sound source licenses are in `Nullrooms/assets/SFX-LICENSES.md`. The Photon room master simulates online object grabs and throws, and clients display its snapshots. Each room has two fixed cubes; pallets have been removed.
 
 ## Run the client

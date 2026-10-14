@@ -143,12 +143,13 @@ internal sealed class PhysicsBodies : IDisposable
     internal float RotateYaw=0f,RotatePitch=0f;
 
     const float Step = 1f / 120f;
-    const float Ceiling = 3.4f;
-    const float RoomMin = 4f, RoomMax = 188f;
+    const float Ceiling = WorldLayout.NormalCeiling;
+    const float RoomMin = WorldLayout.CellSize, RoomMax = WorldLayout.WorldSize-WorldLayout.CellSize;
     readonly BufferPool pool = new();
     Simulation simulation = null!;
     double accumulator;
     bool environmentReady;
+    WorldLayoutData? layout;
     int nextBodyId = 1;
 
     internal PhysicsBodies() => ResetSimulation();
@@ -171,7 +172,12 @@ internal sealed class PhysicsBodies : IDisposable
         Bodies.Clear();
         cubeImpacts.Clear();
         ResetSimulation();
+        layout=null;
     }
+
+    internal void ConfigureLayout(WorldLayoutData world) => layout=world;
+
+    float CeilingAt(float x,float z) => layout==null?Ceiling:WorldLayout.CeilingAt(layout,x,z);
 
     public void Dispose()
     {
@@ -182,11 +188,60 @@ internal sealed class PhysicsBodies : IDisposable
     void EnsureEnvironment(IReadOnlyList<RectangleF> walls)
     {
         if (environmentReady) return;
-        AddStaticBox(96f, -0.05f, 96f, 192f, 0.1f, 192f);
-        AddStaticBox(96f, Ceiling + 0.05f, 96f, 192f, 0.1f, 192f);
-        foreach (RectangleF wall in walls)
-            AddStaticBox((wall.Left + wall.Right) * 0.5f, Ceiling * 0.5f,
-                (wall.Top + wall.Bottom) * 0.5f, MathF.Max(wall.Width, 0.05f), Ceiling, MathF.Max(wall.Height, 0.05f));
+        if(layout==null)
+        {
+            AddStaticBox(WorldLayout.Center,-0.05f,WorldLayout.Center,WorldLayout.WorldSize,0.1f,WorldLayout.WorldSize);
+            AddStaticBox(WorldLayout.Center,Ceiling+0.05f,WorldLayout.Center,WorldLayout.WorldSize,0.1f,WorldLayout.WorldSize);
+        }
+        else
+        {
+            foreach(RectangleF floor in WorldLayout.FloorSlabs(layout))
+                AddStaticBox(floor.Left+floor.Width*0.5f,-0.05f,floor.Top+floor.Height*0.5f,
+                    floor.Width,0.1f,floor.Height);
+            AddStaticBox(WorldLayout.Center,-5.05f,WorldLayout.Center,WorldLayout.WorldSize,0.1f,WorldLayout.WorldSize);
+            foreach(RectangleF pit in layout.Pits)
+            {
+                AddStaticBox(pit.Left,-2.5f,pit.Top+pit.Height*0.5f,0.1f,5f,pit.Height);
+                AddStaticBox(pit.Right,-2.5f,pit.Top+pit.Height*0.5f,0.1f,5f,pit.Height);
+                AddStaticBox(pit.Left+pit.Width*0.5f,-2.5f,pit.Top,pit.Width,5f,0.1f);
+                AddStaticBox(pit.Left+pit.Width*0.5f,-2.5f,pit.Bottom,pit.Width,5f,0.1f);
+            }
+            for(int z=0;z<WorldLayout.GridSize;z++)
+            {
+                for(int x=0;x<WorldLayout.GridSize;)
+                {
+                    float height=layout.Heights[(z*WorldLayout.GridSize+x)*4];
+                    int start=x++;
+                    while(x<WorldLayout.GridSize&&layout.Heights[(z*WorldLayout.GridSize+x)*4]==height) x++;
+                    AddStaticBox((start+x)*2f,height+0.05f,z*4f+2f,(x-start)*4f,0.1f,4f);
+                }
+                for(int x=0;x<WorldLayout.GridSize;x++)
+                {
+                    float height=layout.Heights[(z*WorldLayout.GridSize+x)*4];
+                    if(x+1<WorldLayout.GridSize)
+                    {
+                        float neighbor=layout.Heights[(z*WorldLayout.GridSize+x+1)*4];
+                        if(height!=neighbor)
+                            AddStaticBox((x+1)*4f,(height+neighbor)*0.5f,z*4f+2f,
+                                0.1f,MathF.Abs(height-neighbor),4f);
+                    }
+                    if(z+1<WorldLayout.GridSize)
+                    {
+                        float neighbor=layout.Heights[((z+1)*WorldLayout.GridSize+x)*4];
+                        if(height!=neighbor)
+                            AddStaticBox(x*4f+2f,(height+neighbor)*0.5f,(z+1)*4f,
+                                4f,MathF.Abs(height-neighbor),0.1f);
+                    }
+                }
+            }
+        }
+        for(int i=0;i<walls.Count;i++)
+        {
+            RectangleF wall=walls[i];
+            float height=layout==null?Ceiling:layout.WallHeights[i];
+            AddStaticBox((wall.Left + wall.Right) * 0.5f,height * 0.5f,
+                (wall.Top + wall.Bottom) * 0.5f,MathF.Max(wall.Width,0.05f),height,MathF.Max(wall.Height,0.05f));
+        }
         environmentReady = true;
     }
 
@@ -263,7 +318,8 @@ internal sealed class PhysicsBodies : IDisposable
     {
         if (center.X - extents.X < RoomMin || center.X + extents.X > RoomMax ||
             center.Z - extents.Z < RoomMin || center.Z + extents.Z > RoomMax ||
-            center.Y - extents.Y < 0.01f || center.Y + extents.Y > Ceiling - 0.01f) return true;
+            center.Y - extents.Y < 0.01f || center.Y + extents.Y > CeilingAt(center.X,center.Z) - 0.01f ||
+            layout!=null&&WorldLayout.NearPit(layout,new Vector2(center.X,center.Z),MathF.Max(extents.X,extents.Z))) return true;
         foreach (RectangleF wall in walls)
             if (center.X + extents.X > wall.Left && center.X - extents.X < wall.Right &&
                 center.Z + extents.Z > wall.Top && center.Z - extents.Z < wall.Bottom) return true;
@@ -288,7 +344,7 @@ internal sealed class PhysicsBodies : IDisposable
     {
         EnsureEnvironment(walls);
         float half = size>0f ? Math.Clamp(size,0.25f,2.5f)*0.5f : emissive ? 0.38f : 0.43f;
-        position.Y = Math.Clamp(position.Y, half + 0.08f, Ceiling - half - 0.08f);
+        position.Y = Math.Clamp(position.Y, half + 0.08f, CeilingAt(position.X,position.Z) - half - 0.08f);
         if (SpawnBlocked(position, half, walls, player)) return false;
 
         var shape = new Box(half * 2, half * 2, half * 2);
@@ -442,7 +498,8 @@ internal sealed class PhysicsBodies : IDisposable
                 Vector3 desiredTarget=current.Eye+current.Forward*MathF.Max(0f,current.HoldDistance+grab.DistanceOffset);
                 Vector3 worldGrabOffset=Vector3.Transform(grab.LocalPoint,desiredOrientation);
                 float halfHeight=RotatedExtents(LocalExtents(cube),desiredOrientation).Y;
-                float centerY=Math.Clamp(desiredTarget.Y-worldGrabOffset.Y,halfHeight+0.005f,Ceiling-halfHeight-0.005f);
+                float centerY=Math.Clamp(desiredTarget.Y-worldGrabOffset.Y,halfHeight+0.005f,
+                    CeilingAt(desiredTarget.X,desiredTarget.Z)-halfHeight-0.005f);
                 desiredTarget.Y=centerY+worldGrabOffset.Y;
                 Vector3 center=desiredTarget-worldGrabOffset;
                 Vector3 extents=RotatedExtents(LocalExtents(cube),desiredOrientation);

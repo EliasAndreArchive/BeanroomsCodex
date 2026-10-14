@@ -10,7 +10,8 @@ internal readonly record struct AcousticSource(int Id,Vector3 Position);
 internal static class AcousticSourceIds
 {
     internal const int Monster=1;
-    internal static int Lamp(Vector2 position) => 1000+(int)(position.X/8f)+25*(int)(position.Y/8f);
+    internal static int Lamp(Vector2 position) => 1000+(int)(position.X/8f)+
+        (WorldLayout.GridSize/2+1)*(int)(position.Y/8f);
     internal static int Player(int id) => 10000+id;
     internal static int Cube(int id) => 100000+id;
 }
@@ -46,18 +47,45 @@ internal sealed class VercidiumAcoustics : IDisposable
     internal IReadOnlyList<ReverbGroup> Groups => groups;
     internal bool HasRaytracedRoom => listener.EAX!=null;
 
-    internal VercidiumAcoustics(IReadOnlyList<RectangleF> walls,int groupLimit=MaximumReverbGroups)
+    internal VercidiumAcoustics(WorldLayoutData layout,int groupLimit=MaximumReverbGroups)
+        :this(layout.Walls,groupLimit,layout) { }
+
+    internal VercidiumAcoustics(IReadOnlyList<RectangleF> walls,int groupLimit=MaximumReverbGroups,
+        WorldLayoutData? layout=null)
     {
         this.groupLimit=Math.Clamp(groupLimit,1,MaximumReverbGroups);
-        world.Position=new AudioVector(0,-1,0);
-        world.Size=new AudioVector(192,6,192);
+        world.Position=new AudioVector(0,-5,0);
+        world.Size=new AudioVector(WorldLayout.WorldSize,13,WorldLayout.WorldSize);
         world.MaximumConcurrencyLevel=2;
         world.MaximumGroupedEAXCount=this.groupLimit;
-        foreach(RectangleF wall in walls)
-            AddBox((wall.Left+wall.Right)*0.5f,1.7f,(wall.Top+wall.Bottom)*0.5f,
-                MathF.Max(0.05f,wall.Width),3.4f,MathF.Max(0.05f,wall.Height),MaterialType.Gyprock);
-        AddBox(96f,-0.05f,96f,192f,0.1f,192f,MaterialType.Concrete);
-        AddBox(96f,3.45f,96f,192f,0.1f,192f,MaterialType.Gyprock);
+        for(int i=0;i<walls.Count;i++)
+        {
+            RectangleF wall=walls[i];
+            float height=layout==null?WorldLayout.NormalCeiling:layout.WallHeights[i];
+            AddBox((wall.Left+wall.Right)*0.5f,height*0.5f,(wall.Top+wall.Bottom)*0.5f,
+                MathF.Max(0.05f,wall.Width),height,MathF.Max(0.05f,wall.Height),MaterialType.Gyprock);
+        }
+        if(layout==null)
+        {
+            AddBox(WorldLayout.Center,-0.05f,WorldLayout.Center,WorldLayout.WorldSize,0.1f,WorldLayout.WorldSize,MaterialType.Concrete);
+            AddBox(WorldLayout.Center,WorldLayout.NormalCeiling+0.05f,WorldLayout.Center,
+                WorldLayout.WorldSize,0.1f,WorldLayout.WorldSize,MaterialType.Gyprock);
+        }
+        else
+        {
+            foreach(RectangleF floor in WorldLayout.FloorSlabs(layout))
+                AddBox(floor.Left+floor.Width*0.5f,-0.05f,floor.Top+floor.Height*0.5f,
+                    floor.Width,0.1f,floor.Height,MaterialType.Concrete);
+            AddBox(WorldLayout.Center,-5.05f,WorldLayout.Center,WorldLayout.WorldSize,0.1f,WorldLayout.WorldSize,MaterialType.Concrete);
+            for(int z=0;z<WorldLayout.GridSize;z++)
+            for(int x=0;x<WorldLayout.GridSize;)
+            {
+                float height=layout.Heights[(z*WorldLayout.GridSize+x)*4];
+                int start=x++;
+                while(x<WorldLayout.GridSize&&layout.Heights[(z*WorldLayout.GridSize+x)*4]==height) x++;
+                AddBox((start+x)*2f,height+0.05f,z*4f+2f,(x-start)*4f,0.1f,4f,MaterialType.Gyprock);
+            }
+        }
         world.AddEmitter(listener);
         foreach(SourceSlot slot in slots)
         {

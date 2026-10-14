@@ -91,6 +91,14 @@ internal sealed class GameAudio : IDisposable
         catch(Exception ex) { Console.Error.WriteLine($"Vercidium audio unavailable: {ex.Message}"); }
     }
 
+    internal void SetWorld(WorldLayoutData layout)
+    {
+        acoustics?.Dispose();
+        acoustics=null;
+        try { acoustics=new VercidiumAcoustics(layout,Math.Max(1,system?.Reverb?.GroupCapacity??1)); }
+        catch(Exception ex) { Console.Error.WriteLine($"Vercidium audio unavailable: {ex.Message}"); }
+    }
+
     internal void UpdateMenu(float dt)
     {
         if(!available) return;

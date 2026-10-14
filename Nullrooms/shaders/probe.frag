@@ -3,6 +3,8 @@
 in vec2 uv;
 out vec4 fragColor;
 uniform sampler2D worldGrid;
+uniform sampler2D heightGrid;
+uniform sampler2D pitMap;
 uniform sampler2D fixtureMap;
 uniform sampler2D directTex;
 uniform sampler2D previousTex;
@@ -20,15 +22,27 @@ vec3 objectColor(int index) { return texelFetch(objectMap,ivec2(2,index),0).rgb;
 bool objectEmissive(int index) { float code=texelFetch(objectMap,ivec2(2,index),0).a; return code>0.5 && code<1.5 || code>10.25 && code<10.75; }
 
 const float PI=3.141592653589793;
-const float WORLD=192.0;
+const float WORLD=256.0;
 const float CELL=4.0;
-const float CEILING=3.4;
+const int GRID=64;
+const int FIXTURE_GRID=33;
+
+float ceilingAt(vec2 p) {
+    ivec2 cell=clamp(ivec2(floor(p/CELL)),ivec2(0),ivec2(GRID-1));
+    return texelFetch(heightGrid,cell,0).r;
+}
+bool pitAt(vec2 p) {
+    ivec2 cell=ivec2(floor(p*2.0));
+    ivec2 size=textureSize(pitMap,0);
+    return all(greaterThanEqual(cell,ivec2(0)))&&all(lessThan(cell,size))&&
+        texelFetch(pitMap,cell,0).r>0.5;
+}
 
 bool inWall(vec2 p) {
     ivec2 cell=ivec2(floor(p/CELL));
-    if(any(lessThan(cell,ivec2(0))) || any(greaterThanEqual(cell,ivec2(48)))) return true;
+    if(any(lessThan(cell,ivec2(0))) || any(greaterThanEqual(cell,ivec2(GRID)))) return true;
     vec4 box=texelFetch(worldGrid,cell,0);
-    return box.x>=0.0 && all(greaterThan(p,box.xy)) && all(lessThan(p,box.zw));
+    return pitAt(p) || box.x>=0.0 && all(greaterThan(p,box.xy)) && all(lessThan(p,box.zw));
 }
 
 // The layout texture stores full wall rectangles in every covered 4 m cell.
@@ -47,7 +61,7 @@ bool blocked(vec2 a,vec2 b) {
     vec2 side=(edge-a)/safe;
     vec2 stepLength=CELL/abs(safe);
     for(int i=0;i<24;i++) {
-        if(any(lessThan(cell,ivec2(0))) || any(greaterThanEqual(cell,ivec2(48)))) return true;
+        if(any(lessThan(cell,ivec2(0))) || any(greaterThanEqual(cell,ivec2(GRID)))) return true;
         vec4 box=texelFetch(worldGrid,cell,0);
         if(box.x>=0.0) {
             vec2 t0=(box.xy-a)/safe, t1=(box.zw-a)/safe;
@@ -68,7 +82,7 @@ vec3 fixtureLight(vec2 p) {
     vec3 total=vec3(0.0);
     for(int z=-2;z<=2;z++) for(int x=-2;x<=2;x++) {
         ivec2 id=base+ivec2(x,z);
-        if(any(lessThan(id,ivec2(0))) || any(greaterThanEqual(id,ivec2(25)))) continue;
+        if(any(lessThan(id,ivec2(0))) || any(greaterThanEqual(id,ivec2(FIXTURE_GRID)))) continue;
         vec4 lamp=texelFetch(fixtureMap,id,0);
         if(lamp.r<0.5) continue;
         vec2 center=vec2(id)*8.0;
@@ -79,7 +93,7 @@ vec3 fixtureLight(vec2 p) {
                 vec2((sampleIndex&1)==0?-0.5:0.5,(sampleIndex&2)==0?-0.5:0.5);
             if(probeLightSamples==2 && sampleIndex==1) offset=vec2(0.5,0.5);
             vec2 point=center+offset;
-            vec3 toLight=vec3(point.x-p.x,CEILING-1.45,point.y-p.y);
+            vec3 toLight=vec3(point.x-p.x,ceilingAt(point)-1.45,point.y-p.y);
             float distanceSquared=dot(toLight,toLight);
             float distance=sqrt(distanceSquared);
             if(distance>24.0 || blocked(p,point)) continue;

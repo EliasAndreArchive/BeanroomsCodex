@@ -87,7 +87,7 @@ internal sealed partial class GameWindow
 
     void CreateProbeTargets()
     {
-        int wanted=menu.ProbeQuality switch { 0=>48, 1=>96, 2=>144, _=>192 };
+        int wanted=menu.ProbeQuality switch { 0=>64, 1=>128, 2=>192, _=>256 };
         if(probeSize==wanted && probeDirect!=0) return;
         if(probeDirect!=0) Gl.DeleteTexture(probeDirect);
         if(probeA!=0) Gl.DeleteTexture(probeA);
@@ -208,9 +208,12 @@ internal sealed partial class GameWindow
         Gl.Viewport(0,0,probeSize,probeSize);
         Gl.UseProgram(probeProgram);
         Bind(0,worldTexture);Bind(1,fixtureTexture);
+        Bind(5,heightTexture);Bind(6,pitTexture);
         Bind(2,0);Bind(3,0);
         Uniform1(probeProgram,"worldGrid",0);
         Uniform1(probeProgram,"fixtureMap",1);
+        Uniform1(probeProgram,"heightGrid",5);
+        Uniform1(probeProgram,"pitMap",6);
         Uniform1(probeProgram,"directTex",2);
         Uniform1(probeProgram,"previousTex",3);
         Uniform1(probeProgram,"probeSize",probeSize);
