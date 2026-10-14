@@ -53,7 +53,7 @@ internal sealed partial class DebugMenu
     }
     internal void OpenNetwork()
     {
-        if(!NetworkConnected || SettingsFromTitle) return;
+        if(SettingsFromTitle) return;
         FinishEditing();
         ClearCommand();
         View=MenuView.Network;

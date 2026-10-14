@@ -112,9 +112,7 @@ internal sealed partial class DebugMenu
         }
         else if(View==MenuView.Pause)
         {
-            string[] options=NetworkConnected
-                ?["RESUME","PROFILE","NETWORK","SETTINGS","DEVELOPER","HELP","LEAVE","QUIT"]
-                :["RESUME","PROFILE","SETTINGS","DEVELOPER","HELP","LEAVE","QUIT"];
+            string[] options=["RESUME","PROFILE","NETWORK","SETTINGS","DEVELOPER","HELP","LEAVE","QUIT"];
             foreach(string option in options) PrintLine(option,action:option);
         }
         else if(View==MenuView.Network) PrintNetworkContents();
@@ -264,6 +262,22 @@ internal sealed partial class DebugMenu
         using var input=new SolidBrush(Color.FromArgb(255,222,158));
         using var error=new SolidBrush(Color.FromArgb(255,105,105));
         int top=Math.Max(0,terminalLines.Count-TerminalVisibleRows-terminalScroll);
+        int first=Math.Max(top,currentMenuStart),last=Math.Min(top+TerminalVisibleRows,currentMenuEnd);
+        if(last>first)
+        {
+            int y=TerminalTop+(first-top)*TerminalRowHeight-3;
+            int h=(last-first)*TerminalRowHeight+5;
+            int longest=terminalLines.Skip(currentMenuStart).Take(currentMenuEnd-currentMenuStart)
+                .Max(line=>Math.Max(line.Text.Length,line.SliderEnd+1));
+            int width=View==MenuView.Network?310:Math.Clamp(longest*6+14,80,310);
+            using var shade=new SolidBrush(Color.FromArgb(70,0,0,0));
+            using var border=new SolidBrush(Color.FromArgb(140,105,105,105));
+            g.FillRectangle(shade,5,y,width,h);
+            g.FillRectangle(border,5,y,width,1);
+            g.FillRectangle(border,5,y+h-1,width,1);
+            g.FillRectangle(border,5,y,1,h);
+            g.FillRectangle(border,5+width-1,y,1,h);
+        }
         for(int i=0;i<TerminalVisibleRows && top+i<terminalLines.Count;i++)
         {
             TerminalLine line=terminalLines[top+i];

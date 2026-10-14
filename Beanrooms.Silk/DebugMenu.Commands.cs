@@ -160,7 +160,7 @@ internal sealed partial class DebugMenu
             "PROFILE"=>1,
             "SETTINGS" or "OPTIONS"=>2,
             "DEVELOPER" or "DEBUG"=>3,
-            "NETWORK" when NetworkConnected=>7,
+            "NETWORK"=>7,
             "HELP" or "CONTROLS"=>4,
             "LEAVE" or "LEAVE SESSION" or "MENU"=>5,
             "QUIT" or "EXIT"=>6,
@@ -175,6 +175,8 @@ internal sealed partial class DebugMenu
 
     void RunChatCommand(string command)
     {
+        if(!NetworkConnected)
+        { CommandFailed("OFFLINE");PrintLine("ERROR: "+CommandFeedback,error:true);return; }
         if(command.Equals("PLAYERS",StringComparison.OrdinalIgnoreCase))
         { OpenNetworkPlayers();return; }
         if(networkPlayersOpen)

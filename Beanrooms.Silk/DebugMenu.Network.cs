@@ -77,6 +77,12 @@ internal sealed partial class DebugMenu
 
     void PrintNetworkContents()
     {
+        if(!NetworkConnected)
+        {
+            PrintLine("STATUS    OFFLINE");
+            PrintLine("BACK",action:"BACK");
+            return;
+        }
         if(networkPlayersOpen)
         {
             PrintLine("ROOM      "+NetworkRoomCode);

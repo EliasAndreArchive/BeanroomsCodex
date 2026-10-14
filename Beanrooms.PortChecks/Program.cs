@@ -127,8 +127,11 @@ Check(menu.View==DebugMenu.MenuView.Categories,
     "Repeated SETTINGS clicks did not show the menu.");
 Send(menu,"BACK");
 Send(menu,"NETWORK");
-Check(menu.View==DebugMenu.MenuView.Pause && menu.CommandFeedback=="COMMAND NOT RECOGNIZED",
-    "Network tab appeared in a solo session.");
+Check(menu.View==DebugMenu.MenuView.Network && menu.TerminalHistory.Any(line=>line=="STATUS    OFFLINE"),
+    "Network tab did not show its offline state in a solo session.");
+Send(menu,"PLAYERS");
+Check(menu.CommandFeedback=="OFFLINE","Offline network tab accepted a room command.");
+Send(menu,"BACK");
 menu.NetworkConnected=true;menu.NetworkId=1;menu.NetworkHost=1;menu.NetworkPlayers=2;
 menu.UpdateNetworkRoom("BEAN",[
     new PlayerState { Id=1,Name="HOST BEAN",R=.9f,G=.8f,B=.7f },
@@ -265,7 +268,11 @@ using(var frame=menu.Draw())
     Check(frame.Width==320 && frame.Height==240,"Terminal rendering size changed.");
 menu.LeaveTitle();menu.Open=true;menu.SetPage(9);menu.FlushTerminal();
 using(var pauseFrame=menu.Draw())
+{
     Check(pauseFrame.Pixels[3]==0,"Gameplay terminal should leave the scene clear for background blur.");
+    bool framed=Enumerable.Range(7,198).Any(y=>pauseFrame.Pixels[(y*320+5)*4+3]>0);
+    Check(framed,"Current menu items lost their translucent frame.");
+}
 if(args.Length==2 && args[0]=="--menu-preview")
 {
     Directory.CreateDirectory(args[1]);
