@@ -287,13 +287,17 @@ internal sealed partial class DebugMenu
                     int left=10+line.SliderStart*6,right=10+line.SliderEnd*6;
                     float fraction=Math.Clamp((numeric.Current-numeric.Min)/(numeric.Max-numeric.Min),0,1);
                     int handle=left+(int)MathF.Round((right-left)*fraction);
-                    using var track=new SolidBrush(Color.FromArgb(175,95,95,95));
-                    using var fill=new SolidBrush(Color.FromArgb(230,200,200,200));
-                    using var knob=new SolidBrush(Color.FromArgb(255,222,158));
-                    g.FillRectangle(track,left,y+3,right-left+1,3);
-                    g.FillRectangle(fill,left,y+3,handle-left+1,3);
-                    g.FillRectangle(Brushes.Black,handle-2,y,6,9);
-                    g.FillRectangle(knob,handle-2,y,5,8);
+                    using var track=new SolidBrush(Color.FromArgb(145,145,145,145));
+                    using var fill=new SolidBrush(Color.FromArgb(210,210,210,210));
+                    g.FillRectangle(Brushes.Black,left+1,y+5,right-left+1,1);
+                    g.FillRectangle(track,left,y+4,right-left+1,1);
+                    g.FillRectangle(fill,left,y+4,handle-left+1,1);
+                    g.FillRectangle(Brushes.Black,handle+1,y+2,1,7);
+                    g.FillRectangle(Brushes.Black,handle,y+2,4,1);
+                    g.FillRectangle(Brushes.Black,handle,y+8,4,1);
+                    g.FillRectangle(white,handle,y+1,1,7);
+                    g.FillRectangle(white,handle-1,y+1,3,1);
+                    g.FillRectangle(white,handle-1,y+7,3,1);
                 }
                 if(line.Error) PixelText(g,line.Text[..line.Visible],error,10,y);
                 else if(line.InputStart>=0 && line.InputStart<line.Visible)
