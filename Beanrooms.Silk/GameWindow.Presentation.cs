@@ -243,14 +243,23 @@ internal sealed partial class GameWindow
     {
         if(!HasPlayer)
         {
-            // Main menu and room joining have no camera, world render, or gameplay HUD.
+            // The separate Bepu scene never creates or controls a gameplay player.
+            Gl.BindFramebuffer(0x8D40,framebuffer);
+            Gl.FramebufferTexture2D(0x8D40,0x8CE0,0x0DE1,renderTexture,0);
+            Gl.Viewport(0,0,width,height);
+            Gl.UseProgram(menuBackgroundProgram);
+            menuBeans.Upload(menuBackgroundProgram);
+            Gl.DrawArrays(0x0004,0,3);
             if(menu.Dirty) UploadOverlay();
             Gl.BindFramebuffer(0x8D40,0);
             Gl.Viewport(0,0,FramebufferSize.Width,FramebufferSize.Height);
             Gl.UseProgram(displayProgram);
+            Bind(0,renderTexture);
+            Uniform1(displayProgram,"accumulation",0);
             Bind(1,overlayTexture);
             Uniform1(displayProgram,"overlayTexture",1);
             Uniform1(displayProgram,"menuMode",1);
+            Uniform1(displayProgram,"menuBlur",1);
             Uniform2(displayProgram,"windowSize",FramebufferSize.Width,FramebufferSize.Height);
             Gl.DrawArrays(0x0004,0,3);
             return;
@@ -348,6 +357,7 @@ internal sealed partial class GameWindow
         Gl.Viewport(0,0,FramebufferSize.Width,FramebufferSize.Height);
         Gl.UseProgram(displayProgram);
         Uniform1(displayProgram,"menuMode",0);
+        Uniform1(displayProgram,"menuBlur",menu.Open?1:0);
         Bind(0,sceneTexture); Uniform1(displayProgram,"accumulation",0);
         Bind(1,overlayTexture); Uniform1(displayProgram,"overlayTexture",1);
         Bind(2,bloomA);Uniform1(displayProgram,"bloomTexture",2);

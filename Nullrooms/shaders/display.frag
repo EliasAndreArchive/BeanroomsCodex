@@ -18,6 +18,7 @@ uniform float exposure;
 uniform float transitionDark;
 uniform float transitionFlash;
 uniform int menuMode;
+uniform int menuBlur;
 const int bayer8[64] = int[64](
      0,48,12,60, 3,51,15,63,
     32,16,44,28,35,19,47,31,
@@ -48,6 +49,17 @@ vec3 neutralTonemap(vec3 color) {
     float g=1.0-1.0/(0.15*(peak-newPeak)+1.0);
     return mix(color,vec3(newPeak),g);
 }
+vec3 scenePixel(ivec2 pixel,ivec2 size) {
+    return texelFetch(accumulation,clamp(pixel,ivec2(0),size-1),0).rgb;
+}
+vec3 blurredScene(ivec2 pixel,ivec2 size) {
+    vec3 color=scenePixel(pixel,size)*0.16;
+    color+=(scenePixel(pixel+ivec2(2,0),size)+scenePixel(pixel+ivec2(-2,0),size)+
+        scenePixel(pixel+ivec2(0,2),size)+scenePixel(pixel+ivec2(0,-2),size))*0.12;
+    color+=(scenePixel(pixel+ivec2(2,2),size)+scenePixel(pixel+ivec2(-2,2),size)+
+        scenePixel(pixel+ivec2(2,-2),size)+scenePixel(pixel+ivec2(-2,-2),size))*0.09;
+    return color;
+}
 void main() {
     vec2 contentSize = windowSize;
     if (windowSize.x * 3.0 > windowSize.y * 4.0) contentSize.x = windowSize.y * (4.0/3.0);
@@ -59,16 +71,19 @@ void main() {
     }
     vec2 imageUv = contentPosition/contentSize;
     if(menuMode != 0) {
+        ivec2 sceneSize=textureSize(accumulation,0);
+        ivec2 sceneCoord=clamp(ivec2(imageUv*vec2(sceneSize)),ivec2(0),sceneSize-1);
+        vec3 background=blurredScene(sceneCoord,sceneSize)*0.82;
         ivec2 overlaySize = textureSize(overlayTexture,0);
         ivec2 overlayPixel = clamp(ivec2(imageUv.x*float(overlaySize.x),
             (1.0-imageUv.y)*float(overlaySize.y)),ivec2(0),overlaySize-1);
         vec4 hud=texelFetch(overlayTexture,overlayPixel,0);
-        fragColor=vec4(mix(vec3(0.025,0.055,0.05),hud.rgb,hud.a),1.0);
+        fragColor=vec4(mix(background,hud.rgb,hud.a),1.0);
         return;
     }
     ivec2 size = textureSize(accumulation,0);
     ivec2 pixel = clamp(ivec2(imageUv * vec2(size)),ivec2(0),size-1);
-    vec3 c = texelFetch(accumulation,pixel,0).rgb;
+    vec3 c = menuBlur != 0 ? blurredScene(pixel,size) : scenePixel(pixel,size);
     float exposureScale = postEnabled != 0 ? exposure * (autoExposure != 0 ? texelFetch(exposureTexture,ivec2(0),0).r : 1.0) : 1.0;
     c *= exposureScale;
     // Sample bloom once per game pixel so its smooth filter cannot vary inside an enlarged pixel.
@@ -87,6 +102,7 @@ void main() {
     }
     c *= 1.0-clamp(transitionDark,0.0,1.0);
     c = mix(c,vec3(1.0),clamp(transitionFlash,0.0,1.0));
+    if(menuBlur != 0) c*=0.72;
     ivec2 overlaySize = textureSize(overlayTexture,0);
     ivec2 overlayPixel = clamp(ivec2(imageUv.x*float(overlaySize.x),
         (1.0-imageUv.y)*float(overlaySize.y)),ivec2(0),overlaySize-1);

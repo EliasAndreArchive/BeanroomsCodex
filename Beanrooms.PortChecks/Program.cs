@@ -265,7 +265,7 @@ using(var frame=menu.Draw())
     Check(frame.Width==320 && frame.Height==240,"Terminal rendering size changed.");
 menu.LeaveTitle();menu.Open=true;menu.SetPage(9);menu.FlushTerminal();
 using(var pauseFrame=menu.Draw())
-    Check(pauseFrame.Pixels[3] is >200 and <255,"Gameplay terminal should be dark and translucent.");
+    Check(pauseFrame.Pixels[3]==0,"Gameplay terminal should leave the scene clear for background blur.");
 if(args.Length==2 && args[0]=="--menu-preview")
 {
     Directory.CreateDirectory(args[1]);
