@@ -6,6 +6,7 @@ internal sealed partial class DebugMenu
 {
     readonly record struct NetworkMember(int Id,string Name,Color Ink);
     readonly record struct ChatEntry(int Sender,string Name,Color Ink,string Text,bool Resolved);
+    readonly record struct ChatRow(string Text,Color? NameInk,int NameLength);
     NetworkMember[] networkMembers=[];
     readonly List<ChatEntry> networkChat=[];
     int networkChatOffset;
@@ -51,20 +52,24 @@ internal sealed partial class DebugMenu
     internal void ReceiveNetworkChat(int sender,string text)
     {
         string cleaned=CleanChatText(text);
-        if(cleaned.Length is 0 or >34) return;
+        if(cleaned.Length is 0 or >100) return;
+        int previousRows=ChatRows().Count;
         NetworkMember member=networkMembers.FirstOrDefault(player=>player.Id==sender);
         string name=member.Id==0?$"BEAN{sender}":member.Name;
         Color ink=member.Id==0?Color.FromArgb(210,210,210):member.Ink;
         networkChat.Add(new ChatEntry(sender,name,ink,cleaned,member.Id!=0));
         if(networkChat.Count>100) networkChat.RemoveAt(0);
-        if(networkChatOffset>0) networkChatOffset=Math.Min(networkChatOffset+1,Math.Max(0,networkChat.Count-ChatWindow));
+        int rows=ChatRows().Count;
+        if(networkChatOffset>0)
+            networkChatOffset=Math.Min(networkChatOffset+Math.Max(0,rows-previousRows),
+                Math.Max(0,rows-ChatWindow));
         RefreshNetworkView();
     }
 
     internal void ScrollNetworkChat(int direction)
     {
         if(networkPlayersOpen) return;
-        int offset=Math.Clamp(networkChatOffset+direction,0,Math.Max(0,networkChat.Count-ChatWindow));
+        int offset=Math.Clamp(networkChatOffset+direction,0,Math.Max(0,ChatRows().Count-ChatWindow));
         if(offset==networkChatOffset) return;
         networkChatOffset=offset;
         RefreshNetworkView();
@@ -92,13 +97,14 @@ internal sealed partial class DebugMenu
         if(host.Id!=0)
             terminalLines[^1].ColorSpans=[(10,host.Name.Length,host.Ink)];
         PrintLine("CHAT");
-        int end=Math.Max(0,networkChat.Count-networkChatOffset);
+        List<ChatRow> rows=ChatRows();
+        int end=Math.Max(0,rows.Count-networkChatOffset);
         for(int i=Math.Max(0,end-ChatWindow);i<end;i++)
         {
-            ChatEntry entry=networkChat[i];
-            PrintLine(entry.Name+"> "+entry.Text);
-            TerminalLine line=terminalLines[^1];
-            line.ColorSpans=[(0,entry.Name.Length,entry.Ink)];
+            ChatRow row=rows[i];
+            PrintLine(row.Text);
+            if(row.NameInk is Color ink)
+                terminalLines[^1].ColorSpans=[(0,row.NameLength,ink)];
         }
         PrintLine("PLAYERS",action:"PLAYERS");
         PrintLine("BACK",action:"BACK");
@@ -152,4 +158,31 @@ internal sealed partial class DebugMenu
 
     static string CleanChatText(string text)
         => new string((text??"").ToUpperInvariant().Where(c=>Glyphs.ContainsKey(c)).ToArray()).Trim();
+
+    List<ChatRow> ChatRows()
+    {
+        var rows=new List<ChatRow>();
+        foreach(ChatEntry entry in networkChat)
+        {
+            string remaining=entry.Text;
+            string prefix=entry.Name+"> ";
+            bool first=true;
+            while(remaining.Length>0)
+            {
+                int capacity=49-prefix.Length;
+                int length=Math.Min(remaining.Length,capacity);
+                if(length<remaining.Length)
+                {
+                    int space=remaining.LastIndexOf(' ',length-1,length);
+                    if(space>=capacity/2) length=space;
+                }
+                string chunk=remaining[..length].TrimEnd();
+                rows.Add(new ChatRow(prefix+chunk,first?entry.Ink:null,first?entry.Name.Length:0));
+                remaining=remaining[length..].TrimStart();
+                prefix="  ";
+                first=false;
+            }
+        }
+        return rows;
+    }
 }

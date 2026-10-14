@@ -38,7 +38,7 @@ internal sealed class PhotonNetClient : INetClient, IConnectionCallbacks, IMatch
 
     internal bool SendChat(string text)
     {
-        if(!Connected || id==0 || text.Length is 0 or >34) return false;
+        if(!Connected || id==0 || text.Length is 0 or >100) return false;
         bool sent=client.OpRaiseEvent(ChatEvent,text,
             new RaiseEventArgs { Receivers=ReceiverGroup.Others },new SendOptions { Reliability=true });
         if(sent) QueueChat(id,text);
@@ -47,7 +47,7 @@ internal sealed class PhotonNetClient : INetClient, IConnectionCallbacks, IMatch
 
     void QueueChat(int sender,string text)
     {
-        if(sender<=0 || text.Length is 0 or >34) return;
+        if(sender<=0 || text.Length is 0 or >100) return;
         lock(stateLock)
         {
             pendingChat.Enqueue((sender,text));

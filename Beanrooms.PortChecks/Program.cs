@@ -153,12 +153,16 @@ string sentChat="";
 menu.ChatAction=text=>{ sentChat=text;return true; };
 Send(menu,"hello, bean!");
 Check(sentChat=="HELLO, BEAN!","Network input did not send a chat message.");
-Send(menu,new string('A',35));
+Send(menu,new string('A',101));
 Check(menu.CommandFeedback=="MESSAGE TOO LONG" && sentChat=="HELLO, BEAN!",
     "Oversized chat was sent or silently truncated.");
 menu.ReceiveNetworkChat(2,"hello, host!");
 Check(menu.TerminalHistory.Any(line=>line=="BLUE BEAN> HELLO, HOST!"),
     "Chat did not show the sender name and message.");
+menu.ReceiveNetworkChat(2,"THIS LONG MESSAGE CONTINUES ACROSS MULTIPLE ROWS SO THE CHAT CAN SHOW THE REST OF THE TEXT.");
+Check(menu.TerminalHistory.Any(line=>line.StartsWith("BLUE BEAN> THIS LONG MESSAGE")) &&
+    menu.TerminalHistory.Any(line=>line.StartsWith("  ") && line.Contains("THE TEXT.")),
+    "Long chat messages did not wrap into readable rows.");
 menu.FlushTerminal();
 using(var networkFrame=menu.Draw())
 {
@@ -291,6 +295,7 @@ if(args.Length==2 && args[0]=="--menu-preview")
     Send(menu,"NETWORK");
     menu.ReceiveNetworkChat(2,"HELLO, HOST!");
     menu.ReceiveNetworkChat(1,"WELCOME TO BEANROOMS.");
+    menu.ReceiveNetworkChat(2,"THIS MESSAGE WRAPS ACROSS CHAT ROWS SO THERE IS MORE ROOM TO TALK.");
     menu.FlushTerminal();
     using(var network=menu.Draw()) File.WriteAllBytes(Path.Combine(args[1],"network.bgra"),network.Pixels);
     Send(menu,"PLAYERS");

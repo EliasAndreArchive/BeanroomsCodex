@@ -183,7 +183,7 @@ internal sealed partial class DebugMenu
             ?command[5..]:command;
         text=CleanChatText(text);
         if(text.Length==0) CommandFailed("MESSAGE REQUIRED");
-        else if(text.Length>34) CommandFailed("MESSAGE TOO LONG");
+        else if(text.Length>100) CommandFailed("MESSAGE TOO LONG");
         else if(ChatAction?.Invoke(text)!=true) CommandFailed("CHAT UNAVAILABLE");
         if(commandError) PrintLine("ERROR: "+CommandFeedback,error:true);
         Dirty=true;
