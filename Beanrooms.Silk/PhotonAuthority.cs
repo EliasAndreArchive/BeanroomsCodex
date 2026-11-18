@@ -26,15 +26,12 @@ internal sealed class PhotonAuthority : IDisposable
     void ResetWorld()
     {
         physics.Clear();
-        WorldLayoutData layout=WorldLayout.Generate(seed);
-        walls=layout.Walls;
-        physics.ConfigureLayout(layout);
+        walls=WorldLayout.Generate(seed).Walls;
         WorldProps.Place(physics,walls);
-        monster=new MonsterBrain(seed,walls,monsterSettings,layout);
+        monster=new MonsterBrain(seed,walls,monsterSettings);
     }
 
-    Vector2 SpawnForSlot(int slot) => WorldLayout.FindClearSpawn(walls,
-        new Vector2(WorldLayout.Center+slot*1.5f,WorldLayout.Center),.4f);
+    Vector2 SpawnForSlot(int slot) => WorldLayout.FindClearSpawn(walls,new Vector2(96f+slot*1.5f,96f),.4f);
 
     internal void AddPlayer(int id)
     {
@@ -74,7 +71,7 @@ internal sealed class PhotonAuthority : IDisposable
             foreach(PhotonPeer peer in peers.Values)
                 if(physics.HeldBy(peer.Id)) { physics.SlideResistance=peer.SlideResistance; break; }
             if(physics.Bodies.Count>0)
-                physics.Update(Step,new Vector3(WorldLayout.Center,1.68f,WorldLayout.Center),Vector3.UnitZ,Quaternion.Identity,walls,new Vector3(WorldLayout.Center,1.68f,WorldLayout.Center),
+                physics.Update(Step,new Vector3(96f,1.68f,96f),Vector3.UnitZ,Quaternion.Identity,walls,new Vector3(96f,1.68f,96f),
                     id=>peers.TryGetValue(id,out PhotonPeer? peer)
                         ? new GrabInput(new Vector3(peer.X,peer.Y,peer.Z),Look(peer.Yaw,peer.Pitch),
                             CameraOrientation.FromAngles(peer.Yaw,peer.Pitch),peer.HoldDistance,
@@ -100,7 +97,7 @@ internal sealed class PhotonAuthority : IDisposable
             {
                 case "state":
                     if(float.IsFinite(message.X)&&float.IsFinite(message.Y)&&float.IsFinite(message.Z)&&message.RespawnId==peer.RespawnId)
-                    { peer.X=Math.Clamp(message.X,4.3f,WorldLayout.WorldSize-4.3f);peer.Y=Math.Clamp(message.Y,.8f,1.9f);peer.Z=Math.Clamp(message.Z,4.3f,WorldLayout.WorldSize-4.3f); }
+                    { peer.X=Math.Clamp(message.X,4.3f,187.7f);peer.Y=Math.Clamp(message.Y,.8f,1.9f);peer.Z=Math.Clamp(message.Z,4.3f,187.7f); }
                     peer.Yaw=float.IsFinite(message.Yaw)?message.Yaw:peer.Yaw;
                     peer.Pitch=float.IsFinite(message.Pitch)?Math.Clamp(message.Pitch,-1.45f,1.45f):peer.Pitch;
                     peer.MoveSpeed=float.IsFinite(message.MoveSpeed)?Math.Clamp(message.MoveSpeed,0,10):0;
@@ -159,7 +156,7 @@ internal sealed class PhotonAuthority : IDisposable
 
     sealed class PhotonPeer(int id)
     {
-        internal int Id=id,RespawnId=0; internal float X=WorldLayout.Center,Y=1.68f,Z=WorldLayout.Center,Yaw=.63f,Pitch,
+        internal int Id=id,RespawnId=0; internal float X=96,Y=1.68f,Z=96,Yaw=.63f,Pitch,
             HoldDistance=ObjectInteractionProfile.HoldDistance,GrabYaw,GrabPitch;
         internal float MoveSpeed,SprintBlend,CrouchBlend,R=.78f,G=.76f,B=.70f;
         internal string Name=$"BEAN{id}";
