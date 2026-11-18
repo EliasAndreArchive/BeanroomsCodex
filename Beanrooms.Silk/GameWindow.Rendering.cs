@@ -53,6 +53,10 @@ internal sealed partial class GameWindow
         Gl.TexImage2D(0x0DE1,0,0x881A,width,height,0,0x1908,0x1406,IntPtr.Zero);
         Gl.GenerateMipmap(0x0DE1);
         CreateBloomTargets();
+        if(gradedTexture!=0) Gl.DeleteTexture(gradedTexture);
+        if(ntscOutput!=0) Gl.DeleteTexture(ntscOutput);
+        gradedTexture=CreatePostTexture(width,height,IntPtr.Zero);
+        ntscOutput=CreatePostTexture(width,height,IntPtr.Zero);
     }
 
     void CreateBloomTargets()

@@ -88,6 +88,8 @@ internal static class Gl
     internal static void FramebufferTexture2D(uint target,uint attachment,uint texTarget,int tex,int level)=>framebufferTexture(target,attachment,texTarget,tex,level);
     internal static void UseProgram(int program)=>useProgram(program);
     internal static void ActiveTexture(uint unit)=>activeTexture(unit);
+    [UnmanagedFunctionPointer(CallingConvention.Winapi)] delegate void ReadPixelsD(int x,int y,int width,int height,uint format,uint type,[Out]float[] pixels);
+    internal static void ReadPixels(int width,int height,float[] pixels)=>Proc<ReadPixelsD>("glReadPixels")(0,0,width,height,0x1908,0x1406,pixels);
     internal static int GetUniformLocation(int program,string name)=>getUniform(program,name);
     internal static void Uniform1i(int location,int value)=>uniform1(location,value);
     internal static void Uniform1f(int location,float value)=>uniform1Float(location,value);

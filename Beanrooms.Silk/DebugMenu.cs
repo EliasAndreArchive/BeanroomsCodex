@@ -19,6 +19,7 @@ internal sealed partial class DebugMenu
     internal int Samples = 32, Bounces = 2, ResolutionIndex, FpsLimit;
     internal int TonemapMode = 2;
     internal float Exposure = 2f;
+    internal readonly NtscSettings Ntsc = new();
     internal float BloomStrength = 0.1f, BloomThreshold = 0.85f, BloomRadius = 1.9f;
     internal float BounceStrength = 1.75f, AO = 0.9f, LightIntensity = 1f, LightDensity = 0.65f, FogDensity = 0.008f;
     internal int FogSteps = 8;
@@ -69,7 +70,7 @@ internal sealed partial class DebugMenu
     bool developerCategories;
     static readonly (string Name,int Page)[] PlayerTabs =
     {
-        ("DISPLAY",11), ("IMAGE",7), ("HUD",12), ("PROFILE",6)
+        ("DISPLAY",11), ("IMAGE",7), ("HUD",12), ("PROFILE",6), ("NTSC",13)
     };
     static readonly (string Name,int Page)[] DeveloperTabs =
     {
@@ -108,7 +109,7 @@ internal sealed partial class DebugMenu
         ['+']=[0,4,4,31,4,4,0], [':']=[0,4,4,0,4,4,0],
         ['_']=[0,0,0,0,0,0,31], ['=']=[0,0,31,0,31,0,0]
     };
-    static readonly string[][] Labels =
+    static readonly string[][] BaseLabels =
     {
         Array.Empty<string>(),
         new[] { "RENDER MODE", "PATH SAMPLES", "PATH BOUNCES", "BOUNCE LIGHT", "AO STRENGTH", "LIGHT INTENSITY", "LIGHT DENSITY", "RESOLUTION", "FIXTURES", "FPS LIMIT", "VSYNC", "VOLUMETRICS", "FOG DENSITY", "FOG STEPS", "PROBE GRID", "PROBE BOUNCES", "DIRECT SAMPLES" },

@@ -17,6 +17,12 @@
       <HintPath>ThirdParty/PhotonRealtime/PhotonClient.dll</HintPath>
       <Private>true</Private>
     </Reference>
+    <Compile Remove="ThirdParty/NtscRs/native/**/*" />
+    <None Include="ThirdParty/NtscRs/beanrooms_ntsc.dll" Condition="'$(OS)' == 'Windows_NT'" Link="beanrooms_ntsc.dll" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
+    <None Include="ThirdParty/NtscRs/libbeanrooms_ntsc.so" Condition="Exists('ThirdParty/NtscRs/libbeanrooms_ntsc.so')" Link="libbeanrooms_ntsc.so" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
+    <None Update="ThirdParty/NtscRs/dependency-licenses/**/*" CopyToOutputDirectory="PreserveNewest" />
+    <None Include="ThirdParty/NtscRs/LICENSE-MIT" CopyToOutputDirectory="PreserveNewest" />
+    <None Update="ThirdParty/NtscRs/README.md" CopyToOutputDirectory="PreserveNewest" />
     <None Include="ThirdParty/VercidiumAudio/LICENCE.txt" CopyToOutputDirectory="PreserveNewest" />
     <None Include="ThirdParty/VercidiumAudio/vaudio.xml" CopyToOutputDirectory="PreserveNewest" />
     <None Include="ThirdParty/PhotonRealtime/LICENSE.txt" CopyToOutputDirectory="PreserveNewest" />

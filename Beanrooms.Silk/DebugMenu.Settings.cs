@@ -13,7 +13,8 @@ internal sealed partial class DebugMenu
     };
     void Adjust(int row, int direction,bool playSound=true)
     {
-        if(Page>=11)
+        if(Page>=13) { NtscAdjust(row,direction);Dirty=true;if(playSound) InteractionSound?.Invoke();return; }
+        if(Page is 11 or 12)
         {
             var (page,mappedRow)=MappedSetting(Page,row);
             int original=Page;
@@ -139,7 +140,8 @@ internal sealed partial class DebugMenu
 
     string Value(int row)
     {
-        if(Page>=11)
+        if(Page>=13) return NtscValue(row);
+        if(Page is 11 or 12)
         {
             var (page,mappedRow)=MappedSetting(Page,row);
             int original=Page;Page=page;

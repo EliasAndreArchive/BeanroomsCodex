@@ -237,16 +237,20 @@ internal sealed partial class DebugMenu
             return;
         }
         Selected=row;
+        if(Page>=14 && Ntsc.Locked(NtscRow(row))) { CommandFailed("GROUP DISABLED");return; }
+        int originalPage=Page;
         if(value.Length==0 || value=="+")
         {
             if(Page==6 && row==0)
             { CommandFailed("NAME REQUIRED");return; }
             Adjust(row,1);
+            if(Page!=originalPage) return;
             CommandFeedback=$"{Labels[Page][row]}  {Value(row)}";
         }
         else if(value=="-")
         {
             Adjust(row,-1);
+            if(Page!=originalPage) return;
             CommandFeedback=$"{Labels[Page][row]}  {Value(row)}";
         }
         else if(Page==6 && row==0) SetPlayerName(value);
@@ -272,6 +276,7 @@ internal sealed partial class DebugMenu
             .Replace(" SPP","",StringComparison.Ordinal)
             .Replace(',','.');
         string target=Clean(wanted);
+        if(Page>=13) return NtscTrySet(row,target);
         if(Page==6 && row==1)
         {
             int colorIndex=Array.FindIndex(CubeColors,color=>color.Name==target);

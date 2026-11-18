@@ -11,3 +11,7 @@
 .env
 .env.*
 !*.env.example
+
+# Rust native effect build products
+**/target/
+/Beanrooms.Silk/ThirdParty/NtscRs/libbeanrooms_ntsc.so

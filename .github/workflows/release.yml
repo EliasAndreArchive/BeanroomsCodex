@@ -16,9 +16,11 @@ jobs:
         include:
           - os: windows-latest
             rid: win-x64
+            rust: x86_64-pc-windows-msvc
             archive: Beanrooms-Windows-x64.zip
           - os: ubuntu-latest
             rid: linux-x64
+            rust: x86_64-unknown-linux-gnu
             archive: Beanrooms-Linux-x64.zip
     runs-on: ${{ matrix.os }}
     steps:
@@ -26,6 +28,19 @@ jobs:
       - uses: actions/setup-dotnet@v4
         with:
           dotnet-version: 8.0.x
+      - name: Build native NTSC effect
+        shell: pwsh
+        run: |
+          rustup toolchain install stable --profile minimal
+          Push-Location Beanrooms.Silk/ThirdParty/NtscRs/native
+          cargo +stable build --release --locked --target ${{ matrix.rust }}
+          Pop-Location
+          if ($LASTEXITCODE -ne 0) { throw 'Native NTSC build failed' }
+          if ('${{ matrix.rid }}' -eq 'win-x64') {
+            Copy-Item Beanrooms.Silk/ThirdParty/NtscRs/native/target/${{ matrix.rust }}/release/beanrooms_ntsc.dll Beanrooms.Silk/ThirdParty/NtscRs/
+          } else {
+            Copy-Item Beanrooms.Silk/ThirdParty/NtscRs/native/target/${{ matrix.rust }}/release/libbeanrooms_ntsc.so Beanrooms.Silk/ThirdParty/NtscRs/
+          }
       - name: Publish game
         shell: pwsh
         run: dotnet publish Beanrooms.Silk/Beanrooms.Silk.csproj -c Release -r ${{ matrix.rid }} --self-contained true -o publish/game

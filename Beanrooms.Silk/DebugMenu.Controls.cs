@@ -12,13 +12,21 @@ internal sealed partial class DebugMenu
         {
             return ($"{label} {Value(row)}",SliderStartColumn,SliderEndColumn);
         }
-        return ($"{label} <{Value(row)}>",-1,-1);
+        string value=Value(row)+(Page>=14&&Ntsc.Locked(NtscRow(row))?" [GROUP OFF]":"");
+        return ($"{label} <{value}>",-1,-1);
     }
 
     bool TryNumericControl(int row,out NumericControl control)
     {
+        if(Page>=13) {
+            if(Page==13) { control=row==1?new(0,1,.01f,Ntsc.Strength):default;return row==1; }
+            var descriptor=NtscRow(row);
+            bool numeric=descriptor.Kind is "int" or "float" && !Ntsc.Locked(descriptor);
+            control=numeric?new(0,1,.005f,Ntsc.Fraction(descriptor)):default;
+            return numeric;
+        }
         int page=Page;
-        if(page>=11) (page,row)=MappedSetting(page,row);
+        if(page is 11 or 12) (page,row)=MappedSetting(page,row);
         control=(page,row) switch
         {
             (1,2)=>new(1,3,1,Bounces),
@@ -63,10 +71,11 @@ internal sealed partial class DebugMenu
 
     void SetNumericFraction(int row,float fraction)
     {
+        if(Page>=13) { NtscSetFraction(row,fraction);Dirty=true;return; }
         if(Page==5 && !MonsterControlsWritable) return;
         if(!TryNumericControl(row,out NumericControl control)) return;
         int page=Page;
-        if(page>=11) (page,row)=MappedSetting(page,row);
+        if(page is 11 or 12) (page,row)=MappedSetting(page,row);
         float target=Math.Clamp(control.Min+MathF.Round((control.Max-control.Min)*fraction/control.Step)*control.Step,control.Min,control.Max);
         switch(page,row)
         {

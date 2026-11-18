@@ -41,14 +41,16 @@ internal sealed partial class GameWindow : SilkForm
     int seed = 82317;
     int width = 320, height = 240;
     int frames, worldTexture, fixtureTexture, objectTexture, wallTexture, floorTexture, ceilingTexture, faceTexture, eyeTexture, overlayTexture;
-    int pathProgram, probeProgram, displayProgram, menuBackgroundProgram, exposureProgram, bloomExtractProgram, bloomBlurProgram, framebuffer;
-    int renderTexture, sceneTexture, bloomA, bloomB, exposureA, exposureB, exposureCurrent;
+    int pathProgram, probeProgram, displayProgram, menuBackgroundProgram, exposureProgram, bloomExtractProgram, bloomBlurProgram, colorGradeProgram, framebuffer;
+    int renderTexture, sceneTexture, bloomA, bloomB, exposureA, exposureB, exposureCurrent, gradedTexture, ntscOutput;
     int probeDirect, probeA, probeB, probeResult, probeSize;
     bool probeDirty = true;
     int lastProbeSettings;
     double lastExposureTime;
     bool active, wantsCapture = true, ready;
     readonly DebugMenu menu = new();
+    readonly NtscProcessor ntscProcessor = new();
+    float[] ntscPixels = [];
     readonly PlayerMotion motion = new();
     readonly SpawnTransition spawnTransition = new();
     GameAudio? audio;
@@ -204,7 +206,7 @@ internal sealed partial class GameWindow : SilkForm
         MouseUp += (_, e) => { if(menu.Open) { if(e.Button==MouseButtons.Left) menu.ReleaseTerminalSlider();return; } if(!HasPlayer) return; if(e.Button==MouseButtons.Right) rotatingHeld=false; if(e.Button==MouseButtons.Left) { if(network.Connected) network.Send(new NetMessage { Type="release" }); else physics.Release(); networkHolding=false;networkHeldId=0;grabYaw=grabPitch=0f; } };
         Activated += (_, _) => { if(ready && wantsCapture) BeginInvoke(new Action(CaptureMouse)); };
         Deactivate += (_, _) => { networkHolding=false;rotatingHeld=false; network.Send(new NetMessage { Type="release" }); physics.Release(); SuspendMouse(); };
-        FormClosed += (_, _) => { audio?.Dispose(); network.Dispose(); physics.Dispose(); menuBeans.Dispose(); ReleaseMouse(); };
+        FormClosed += (_, _) => { audio?.Dispose(); network.Dispose(); physics.Dispose(); menuBeans.Dispose(); ntscProcessor.Dispose(); ReleaseMouse(); };
     }
 
     Point? MenuPixel(Point pointer)
@@ -265,6 +267,7 @@ internal sealed partial class GameWindow : SilkForm
             exposureProgram = Compile("screen.vert", "exposure.frag");
             bloomExtractProgram = Compile("screen.vert", "bloom_extract.frag");
             bloomBlurProgram = Compile("screen.vert", "bloom_blur.frag");
+            colorGradeProgram = Compile("screen.vert", "color_grade.frag");
             framebuffer = Gl.GenFramebuffer();
             worldTexture = Gl.GenTexture();
             fixtureTexture = Gl.GenTexture();

@@ -26,6 +26,18 @@ For Linux, use `-r linux-x64` and a separate output folder. Run the published `B
 
 Every push to `main` builds self-contained Windows and Linux archives and publishes them in [GitHub Releases](https://github.com/EliasAndreArchive/BeanroomsCodex/releases). Download the archive for your system, extract it, and run `Beanrooms.exe` on Windows or `Beanrooms` on Linux. The release workflow runs only after both builds succeed.
 
+## NTSC / VHS
+
+Open **SETTINGS -> NTSC** in the command terminal. The complete ntsc-rs effect
+runs before pixel enlargement and dithering. Its 60 settings are grouped into
+Signal, Color, Composite Noise, Head Switching, Tracking Noise, Ringing, Luma
+Noise, Chroma Noise, VHS Tape, and Scaling. Click choices, drag numeric sliders,
+or type a setting name and value. `ENABLED OFF` disables the effect; `STRENGTH
+0.65` controls the blend. `RESET` resets the current NTSC section (the hub resets
+all NTSC settings); `BACK` returns to the hub. The Windows build includes the
+native library. Native source, rebuild instructions, and licenses are under
+`Beanrooms.Silk/ThirdParty/NtscRs`.
+
 ## Online rooms
 
 Choose **ONLINE**, then type `CONNECT BEAN` to connect to the room named BEAN. While in an online room, open the pause terminal and choose **NETWORK** to see the room code, player count, host, and chat. Type a message at the network prompt and press **Enter**. Type **PLAYERS** to see everyone in the room, then **BACK** to return to chat. Player names use their in-game colors; the mouse wheel or Page Up/Page Down browses older messages. The client uses the configured Photon App ID; set `BEANROOMS_PHOTON_APP_ID` to override it for another Photon application. The old dedicated server and Render bridge have been removed.

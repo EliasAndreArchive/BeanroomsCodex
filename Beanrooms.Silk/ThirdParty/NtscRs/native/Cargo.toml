@@ -1,0 +1,16 @@
+[package]
+name = "beanrooms-ntsc"
+version = "0.1.0"
+edition = "2024"
+publish = false
+
+[lib]
+crate-type = ["cdylib"]
+
+[dependencies]
+ntsc-rs = { path = "core" }
+serde_json = "1"
+
+[profile.release]
+lto = true
+codegen-units = 1

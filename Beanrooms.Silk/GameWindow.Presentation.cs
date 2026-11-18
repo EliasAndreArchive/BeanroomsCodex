@@ -226,7 +226,38 @@ internal sealed partial class GameWindow
             BlurBloom(bloomA,bloomB,1f,0f,w,h);
             BlurBloom(bloomB,bloomA,0f,1f,w,h);
         }
+        // NTSC receives display-referred RGB before pixel enlargement and dithering.
+        Gl.Viewport(0,0,width,height);
+        Gl.FramebufferTexture2D(0x8D40,0x8CE0,0x0DE1,gradedTexture,0);
+        Gl.UseProgram(colorGradeProgram);
+        Bind(0,sceneTexture);Uniform1(colorGradeProgram,"accumulation",0);
+        Bind(2,bloomA);Uniform1(colorGradeProgram,"bloomTexture",2);
+        Bind(3,exposureCurrent==0?exposureA:exposureB);Uniform1(colorGradeProgram,"exposureTexture",3);
+        Uniform1(colorGradeProgram,"autoExposure",menu.AutoExposure?1:0);
+        Uniform1(colorGradeProgram,"postEnabled",menu.PostEnabled?1:0);
+        Uniform1(colorGradeProgram,"bloomEnabled",menu.Bloom?1:0);
+        Uniform1f(colorGradeProgram,"bloomStrength",menu.BloomStrength);
+        Uniform1(colorGradeProgram,"tonemapMode",menu.TonemapMode);
+        Uniform1f(colorGradeProgram,"exposure",menu.Exposure);
+        Gl.DrawArrays(0x0004,0,3);
+        sceneTexture=ApplyNtsc(gradedTexture,now);
         Gl.BindFramebuffer(0x8D40,0);
+    }
+    int ApplyNtsc(int source,double now)
+    {
+        if(!menu.PostEnabled || !menu.Ntsc.Enabled || menu.Ntsc.Strength<=0f) return source;
+        int length=width*height*4;
+        if(ntscPixels.Length!=length) ntscPixels=new float[length];
+        Gl.ReadPixels(width,height,ntscPixels);
+        uint field=(uint)((now*60.0)%1048576.0);
+        ntscProcessor.Process(ntscPixels,width,height,field,menu.Ntsc);
+        var pin=GCHandle.Alloc(ntscPixels,GCHandleType.Pinned);
+        try {
+            Bind(0,ntscOutput);
+            Gl.TexSubImage2D(0x0DE1,0,0,0,width,height,0x1908,0x1406,pin.AddrOfPinnedObject());
+        }
+        finally { pin.Free(); }
+        return ntscOutput;
     }
     void BlurBloom(int source,int destination,float dx,float dy,int w,int h)
     {
@@ -250,11 +281,12 @@ internal sealed partial class GameWindow
             Gl.UseProgram(menuBackgroundProgram);
             menuBeans.Upload(menuBackgroundProgram);
             Gl.DrawArrays(0x0004,0,3);
+            sceneTexture=ApplyNtsc(renderTexture,watch.Elapsed.TotalSeconds);
             if(menu.Dirty) UploadOverlay();
             Gl.BindFramebuffer(0x8D40,0);
             Gl.Viewport(0,0,FramebufferSize.Width,FramebufferSize.Height);
             Gl.UseProgram(displayProgram);
-            Bind(0,renderTexture);
+            Bind(0,sceneTexture);
             Uniform1(displayProgram,"accumulation",0);
             Bind(1,overlayTexture);
             Uniform1(displayProgram,"overlayTexture",1);
@@ -360,20 +392,12 @@ internal sealed partial class GameWindow
         Uniform1(displayProgram,"menuBlur",menu.Open?1:0);
         Bind(0,sceneTexture); Uniform1(displayProgram,"accumulation",0);
         Bind(1,overlayTexture); Uniform1(displayProgram,"overlayTexture",1);
-        Bind(2,bloomA);Uniform1(displayProgram,"bloomTexture",2);
-        Bind(3,exposureCurrent==0?exposureA:exposureB);Uniform1(displayProgram,"exposureTexture",3);
         Uniform1(displayProgram,"ditheringEnabled",menu.Dithering?1:0);
         Uniform1(displayProgram,"paletteReduction",menu.PaletteReduction?1:0);
         Uniform1(displayProgram,"paletteSteps",16);
         (float transitionDark,float transitionFlash)=spawnTransition.Sample(watch.Elapsed.TotalSeconds);
         Uniform1f(displayProgram,"transitionDark",transitionDark);
         Uniform1f(displayProgram,"transitionFlash",transitionFlash);
-        Uniform1(displayProgram,"autoExposure",menu.AutoExposure?1:0);
-        Uniform1(displayProgram,"postEnabled",menu.PostEnabled?1:0);
-        Uniform1(displayProgram,"bloomEnabled",menu.Bloom?1:0);
-        Uniform1f(displayProgram,"bloomStrength",menu.BloomStrength);
-        Uniform1(displayProgram,"tonemapMode",menu.TonemapMode);
-        Uniform1f(displayProgram,"exposure",menu.Exposure);
         Uniform2(displayProgram,"windowSize",FramebufferSize.Width,FramebufferSize.Height);
         Gl.DrawArrays(0x0004,0,3);
         frames++;

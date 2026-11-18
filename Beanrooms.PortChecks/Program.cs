@@ -33,6 +33,8 @@ static void ClickWideRow(DebugMenu menu,string prefix)
     Check(index>=top,$"Visible menu line missing: {prefix}");
     menu.ClickTerminal(300,10+(index-top)*12+11);
 }
+NtscChecks.Run();
+if(args.Contains("--gpu")) NtscGpuChecks.Run();
 var menu=new DebugMenu();
 menu.ShowTitle();
 int outputSounds=0,inputSounds=0;
@@ -276,6 +278,12 @@ using(var pauseFrame=menu.Draw())
 if(args.Length==2 && args[0]=="--menu-preview")
 {
     Directory.CreateDirectory(args[1]);
+    menu.ShowTitle();Send(menu,"SETTINGS");Send(menu,"NTSC");menu.FlushTerminal();
+    using(var ntsc=menu.Draw()) File.WriteAllBytes(Path.Combine(args[1],"ntsc-hub.bgra"),ntsc.Pixels);
+    for(int page=0;page<NtscSettings.Pages.Length;page++) {
+        menu.SetPage(page+14);menu.FlushTerminal();
+        using var sheet=menu.Draw();File.WriteAllBytes(Path.Combine(args[1],$"ntsc-{page}.bgra"),sheet.Pixels);
+    }
     menu.ShowTitle();
     menu.FlushTerminal();
     using(var title=menu.Draw()) File.WriteAllBytes(Path.Combine(args[1],"title.bgra"),title.Pixels);

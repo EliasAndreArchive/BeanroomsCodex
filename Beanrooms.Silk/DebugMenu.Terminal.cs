@@ -32,6 +32,7 @@ internal sealed partial class DebugMenu
         View==MenuView.Categories?developerCategories?"/BEANROOMS/DEVELOPER":"/BEANROOMS/SETTINGS":
         View==MenuView.Help?"/BEANROOMS/HELP":
         View==MenuView.Network?networkPlayersOpen?"/BEANROOMS/NETWORK/PLAYERS":"/BEANROOMS/NETWORK":
+        Page>=13?"/BEANROOMS/NTSC"+(Page>=14?"/"+NtscSettings.Pages[Page-14].Title.Replace(' ','_'):""):
         "/BEANROOMS/"+Tabs.First(tab=>tab.Page==Page).Name.Replace(' ','_');
 
     internal void ResetTerminal()

@@ -25,6 +25,7 @@ internal sealed partial class DebugMenu
         FinishEditing();
         ClearCommand();
         if(TitleScreen) { if(TitlePage==1) ShowTitle(resetHistory:false);return; }
+        if(View==MenuView.Settings && Page>=14) { SetPage(13);return; }
         if(View==MenuView.Settings)
         {
             View=settingsReturn;
@@ -96,13 +97,14 @@ internal sealed partial class DebugMenu
         ClearCommand();
         if(page!=9 && View!=MenuView.Settings)
             settingsReturn=View==MenuView.Pause?MenuView.Pause:MenuView.Categories;
-        FinishEditing(); Page=Math.Clamp(page,0,12); Selected=0;
+        FinishEditing(); Page=Math.Clamp(page,0,Labels.Length-1); Selected=0;
         View=Page==9?MenuView.Pause:MenuView.Settings;
         Dirty=true;InteractionSound?.Invoke();
         PrintCurrentView();
     }
     internal void ResetDefaults()
     {
+        if(Page>=13) { Ntsc.Reset(Page==13?-1:Page-14);Dirty=true;return; }
         var defaults=new DebugMenu();
         switch(Page)
         {
