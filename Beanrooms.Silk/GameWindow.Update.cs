@@ -51,7 +51,7 @@ internal sealed partial class GameWindow
             }
         }
         if(!HasPlayer || (sessionPhase==GameSessionPhase.PlayingSolo && menu.Open))
-        { mouseYawDelta=0f;return; }
+        { mouseYawDelta=mousePitchDelta=0f;return; }
         NetMessage? respawn=network.ConsumeRespawn();
         if(respawn!=null)
         {
@@ -75,8 +75,8 @@ internal sealed partial class GameWindow
         }
         bool crouching=crouchToggle || keys.Contains(Keys.ControlKey) || keys.Contains(Keys.LControlKey) || keys.Contains(Keys.RControlKey);
         bool sprinting=keys.Contains(Keys.ShiftKey) || keys.Contains(Keys.LShiftKey) || keys.Contains(Keys.RShiftKey);
-        motion.Update(dt,input,sprinting,crouching,mouseYawDelta,yaw,menu,ref camera,Collides,active);
-        mouseYawDelta=0f;
+        motion.Update(dt,input,sprinting,crouching,mouseYawDelta,yaw,menu,ref camera,Collides,active,mousePitchDelta);
+        mouseYawDelta=mousePitchDelta=0f;
         if(!lookInitialized) { smoothYaw=yaw; smoothPitch=pitch; lookInitialized=true; }
         float lookBlend=1f-MathF.Exp(-MathF.Max(menu.CameraSmooth,0.1f)*dt);
         smoothYaw += MathF.Atan2(MathF.Sin(yaw-smoothYaw),MathF.Cos(yaw-smoothYaw))*lookBlend;

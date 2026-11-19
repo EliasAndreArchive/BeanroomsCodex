@@ -30,7 +30,10 @@ Every push to `main` builds self-contained Windows and Linux archives and publis
 
 Open **SETTINGS -> CAMERA** for standing idle, walk, sprint, crouch-walk and
 crouch-idle shake strengths. The camcorder motion combines irregular grip drift,
-distance-driven footsteps with spring rebound, and acceleration/turn lag. Sprint
+continuous distance-driven steps, and acceleration/turn lag on both look axes.
+Layered smooth noise moves all three position and rotation axes; HANDHELD NOISE
+adjusts its strength. Gait, stance and direction changes ease in with damped
+springs instead of discrete footstep kicks. Sprint
 is deliberately more pronounced; crouching at rest is steadier than standing.
 HEAD BOB adjusts step motion and SWAY AMOUNT adjusts movement/turn inertia.
 Set the shake strengths, HEAD BOB and SWAY AMOUNT to zero for a steady camera.

@@ -26,7 +26,9 @@ internal sealed partial class GameWindow
         float yawChange=dx*menu.MouseSensitivity;
         yaw += yawChange;
         mouseYawDelta += yawChange;
-        pitch=Math.Clamp(pitch-dy*menu.MouseSensitivity,-1.35f,1.35f);
+        float nextPitch=Math.Clamp(pitch-dy*menu.MouseSensitivity,-1.35f,1.35f);
+        mousePitchDelta+=nextPitch-pitch;
+        pitch=nextPitch;
     }
 
     static Vector3 CubeLocalExtents(CubeState cube)

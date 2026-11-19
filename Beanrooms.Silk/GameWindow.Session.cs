@@ -163,7 +163,7 @@ internal sealed partial class GameWindow
         remoteFootsteps.Clear();
         motion.Reset();
         crouchToggle=false;rotatingHeld=false;networkHolding=false;networkHeldId=0;
-        chaseLocked=false;chaseBlend=0f;mouseYawDelta=0f;
+        chaseLocked=false;chaseBlend=0f;mouseYawDelta=mousePitchDelta=0f;
         menu.BodyCount=0;
         menu.ShowTitle();
         audio?.SetWorld([]);

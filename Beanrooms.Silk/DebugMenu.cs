@@ -24,7 +24,7 @@ internal sealed partial class DebugMenu
     internal float BounceStrength = 1.75f, AO = 0.9f, LightIntensity = 1f, LightDensity = 0.65f, FogDensity = 0.008f;
     internal int FogSteps = 8;
     internal float MouseSensitivity = 0.00155f, IdleShake = 3f, WalkShake = 5f;
-    internal float SprintShake = 7f, CrouchShake = 2f, CrouchIdleShake = 1.3f, HeadBob = 1f;
+    internal float SprintShake = 7f, CrouchShake = 2f, CrouchIdleShake = 1.3f, HeadBob = 1f, HandheldNoise = 1.35f;
     internal float SwayAmount = 1.2f, StrafeRoll = 5f, TurnRoll = 1.5f, MovePitch = 4f, SwaySmooth = 11f, CameraSmooth = 11f;
     internal int Page, Selected;
     internal int FpsValue;
@@ -114,7 +114,7 @@ internal sealed partial class DebugMenu
         Array.Empty<string>(),
         new[] { "RENDER MODE", "PATH SAMPLES", "PATH BOUNCES", "BOUNCE LIGHT", "AO STRENGTH", "LIGHT INTENSITY", "LIGHT DENSITY", "RESOLUTION", "FIXTURES", "FPS LIMIT", "VSYNC", "VOLUMETRICS", "FOG DENSITY", "FOG STEPS", "PROBE GRID", "PROBE BOUNCES", "DIRECT SAMPLES" },
         Array.Empty<string>(),
-        new[] { "MOUSE SENS", "IDLE SHAKE", "WALK SHAKE", "SPRINT SHAKE", "CROUCH WALK SHAKE", "HEAD BOB", "SWAY AMOUNT", "STRAFE ROLL", "TURN ROLL", "MOVE PITCH", "LOOK SMOOTH", "CROUCH IDLE SHAKE" },
+        new[] { "MOUSE SENS", "IDLE SHAKE", "WALK SHAKE", "SPRINT SHAKE", "CROUCH WALK SHAKE", "HEAD BOB", "SWAY AMOUNT", "STRAFE ROLL", "TURN ROLL", "MOVE PITCH", "LOOK SMOOTH", "CROUCH IDLE SHAKE", "HANDHELD NOISE" },
         Array.Empty<string>(),
         new[] { "MONSTER", "ROAM SPEED", "SEARCH SPEED", "CHASE SPEED", "CHASE TURN", "SEARCH TURN", "ROAM TURN", "SIGHT RANGE", "SIGHT ANGLE", "SEARCH RADIUS", "ROAM RADIUS" },
         new[] { "PLAYER NAME", "BEAN COLOR" },

@@ -133,6 +133,7 @@ internal sealed partial class DebugMenu
                 case 9: MovePitch = Math.Clamp(MovePitch + direction * 0.1f,0f,4f); break;
                 case 10: SwaySmooth = CameraSmooth = Math.Clamp(CameraSmooth + direction * 0.1f,1f,20f); break;
                 case 11: CrouchIdleShake=Math.Clamp(CrouchIdleShake+direction*.01f,0f,4f);break;
+                case 12: HandheldNoise=Math.Clamp(HandheldNoise+direction*.01f,0f,2f);break;
             }
         }
         Dirty = true;
@@ -202,7 +203,7 @@ internal sealed partial class DebugMenu
             7 => $"{StrafeRoll:0.0}",
             8 => $"{TurnRoll:0.0}",
             9 => $"{MovePitch:0.0}",
-            10 => $"{CameraSmooth:0.0}",11 => $"{CrouchIdleShake:0.00}",
+            10 => $"{CameraSmooth:0.0}",11 => $"{CrouchIdleShake:0.00}",12 => $"{HandheldNoise:0.00}",
             _ => ""
         };
         return row switch

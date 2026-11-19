@@ -14,8 +14,9 @@ internal sealed class PlayerMotion
     const float StandingEye = 1.68f;
     const float Tau = MathF.PI * 2f;
     Vector2 velocity;
-    float crouchBlend, sprintBlend, gaitPhase, clock, turnRate, gaitWeight;
-    Vector3 angularMotion, angularVelocity, positionalMotion, positionalVelocity;
+    float crouchBlend, sprintBlend, gaitPhase, clock, turnRate, pitchTurnRate, gaitWeight, cameraSprint, cameraCrouch;
+    Vector2 cameraVelocity, cameraAcceleration;
+    Vector3 angularMotion, angularVelocity, positionalMotion, positionalVelocity, stanceMotion, stanceVelocity;
     internal float Roll { get; private set; }
     internal float PitchOffset { get; private set; }
     internal float YawOffset { get; private set; }
@@ -44,6 +45,15 @@ internal sealed class PlayerMotion
         t=t*t*t*(t*(t*6f-15f)+10f);
         return Sample(cell,seed)+(Sample(cell+1,seed)-Sample(cell,seed))*t;
     }
+    static float HandNoise(float time,int seed)
+    {
+        // Different, warped octave clocks keep every axis wandering without the
+        // pauses at lattice boundaries of a single slow value-noise channel.
+        float warped=time+.32f*Noise(time*.37f+9.1f,seed+71);
+        return .54f*Noise(warped,seed)+.29f*Noise(time*2.13f+17.7f,seed+13)
+            +.13f*Noise(time*4.37f+39.3f,seed+29)+.04f*Noise(time*8.71f+61.1f,seed+47);
+    }
+    static float Limit(float value,float limit)=>limit*MathF.Tanh(value/limit);
     static void Spring(ref Vector3 position,ref Vector3 velocity,Vector3 target,float hz,float damping,float dt)
     {
         // Analytic underdamped spring: its rebound is stable at varying frame rates.
@@ -58,7 +68,9 @@ internal sealed class PlayerMotion
     internal void Reset()
     {
         velocity=Vector2.Zero;
-        crouchBlend=sprintBlend=gaitPhase=clock=turnRate=gaitWeight=0f;
+        crouchBlend=sprintBlend=gaitPhase=clock=turnRate=pitchTurnRate=gaitWeight=cameraSprint=cameraCrouch=0f;
+        cameraVelocity=cameraAcceleration=Vector2.Zero;
+        stanceMotion=stanceVelocity=Vector3.Zero;
         angularMotion=angularVelocity=positionalMotion=positionalVelocity=Vector3.Zero;
         Roll=PitchOffset=YawOffset=0f;
         ViewOffset=Vector3.Zero;
@@ -66,7 +78,7 @@ internal sealed class PlayerMotion
 
     internal void Update(float dt, Vector2 localInput, bool sprintHeld, bool crouchHeld,
         float mouseYawDelta, float yaw, DebugMenu settings, ref Vector3 camera,
-        Func<float,float,float,bool> collides,bool allowTranslation)
+        Func<float,float,float,bool> collides,bool allowTranslation,float mousePitchDelta=0f)
     {
         dt=Math.Clamp(dt,0f,0.05f);
         clock+=dt;
@@ -99,67 +111,82 @@ internal sealed class PlayerMotion
 
         float actualSpeed=velocity.Length();
         float movement=Math.Clamp(actualSpeed/(MovementProfile.WalkSpeed*.8f),0f,1f);
-        gaitWeight=Follow(gaitWeight,movement,10f,dt);
+        // Camera envelopes lag the locomotion state, so a key press or collision
+        // never swaps the noise amplitude or movement direction in one frame.
+        gaitWeight=Follow(gaitWeight,movement,movement>gaitWeight?4.2f:5.5f,dt);
+        cameraSprint=Follow(cameraSprint,sprintBlend,3.6f,dt);
+        cameraCrouch=Follow(cameraCrouch,crouchBlend,4.0f,dt);
         Vector2 localVelocity=new(Vector2.Dot(velocity,right),Vector2.Dot(velocity,forward));
         Vector2 acceleration=dt>0.0001f?(velocity-previousVelocity)/dt:Vector2.Zero;
         Vector2 localAcceleration=new(Vector2.Dot(acceleration,right),Vector2.Dot(acceleration,forward));
+        // Clamp the input to the camera filter, not its final pose; blocked motion
+        // may stop instantly in physics while the camera settles into the stop.
+        localAcceleration=Vector2.Clamp(localAcceleration,new(-18f),new(18f));
+        cameraVelocity=Vector2.Lerp(cameraVelocity,localVelocity,1f-MathF.Exp(-6f*dt));
+        cameraAcceleration=Vector2.Lerp(cameraAcceleration,localAcceleration,1f-MathF.Exp(-5f*dt));
         float maxSpeed=MovementProfile.WalkSpeed*MovementProfile.SprintMultiplier;
 
         float walkStrength=settings.WalkShake/5f;
         float runStrength=settings.SprintShake/7f;
         float crouchStrength=settings.CrouchShake/2f;
-        float movingStrength=(walkStrength*(1f-sprintBlend)+1.8f*runStrength*sprintBlend)*(1f-crouchBlend)
-            +.55f*crouchStrength*crouchBlend;
-        float idleStrength=(settings.IdleShake*(1f-crouchBlend)+settings.CrouchIdleShake*crouchBlend)/3f;
+        float movingStrength=(walkStrength*(1f-cameraSprint)+1.85f*runStrength*cameraSprint)*(1f-cameraCrouch)
+            +.55f*crouchStrength*cameraCrouch;
+        float idleStrength=(settings.IdleShake*(1f-cameraCrouch)+settings.CrouchIdleShake*cameraCrouch)/3f;
         float handheld=idleStrength*(1f-gaitWeight)+movingStrength*gaitWeight;
-        float stride=(2.7f+.4f*sprintBlend)*(1f-crouchBlend)+1.9f*crouchBlend;
-        float previousPhase=gaitPhase;
-        // Distance-driven steps stop when blocked; small cadence variations break symmetry.
-        gaitPhase+=actualSpeed*dt*Tau/stride*(1f+.06f*Noise(clock*.8f,7));
-        float phase=gaitPhase;
+        float noise=Math.Clamp(settings.HandheldNoise,0f,2f);
+        float stride=(2.7f+.4f*cameraSprint)*(1f-cameraCrouch)+1.9f*cameraCrouch;
+        gaitPhase+=actualSpeed*dt*Tau/stride*(1f+.13f*noise*HandNoise(clock*.81f,7));
+        float phase=gaitPhase+.26f*noise*HandNoise(clock*1.11f,11);
         float bob=settings.HeadBob*gaitWeight*movingStrength;
-        float step=MathF.Sin(phase*2f),side=MathF.Sin(phase);
-        float asymmetry=1f+.16f*Noise(clock*1.9f,11);
+        float asymmetry=1f+.36f*noise*HandNoise(clock*1.73f,13);
+        // Spread the weight transfer over the whole step. There are no discrete
+        // footfall velocity impulses, so pitch and translation remain continuous.
+        float step=MathF.Sin(phase*2f)+.17f*MathF.Sin(phase*4f+.8f);
+        float side=MathF.Sin(phase)+.22f*MathF.Sin(phase*2f+1.1f);
+        float heel=MathF.Exp(-3.2f*(1f-MathF.Cos(phase*2f-.45f)))-.17f;
+        Vector3 grip=new(HandNoise(clock*.79f,17),HandNoise(clock*.67f,23),HandNoise(clock*.89f,31));
+        Vector3 travel=new(HandNoise(clock*1.29f,41),HandNoise(clock*1.13f,43),HandNoise(clock*1.47f,47));
 
         float measuredTurn=dt>0.0001f?Math.Clamp(mouseYawDelta/dt,-5f,5f):0f;
-        turnRate=Follow(turnRate,measuredTurn,12f,dt);
+        turnRate=Follow(turnRate,measuredTurn,6f,dt);
+        float measuredPitch=dt>0.0001f?Math.Clamp(mousePitchDelta/dt,-5f,5f):0f;
+        pitchTurnRate=Follow(pitchTurnRate,measuredPitch,6f,dt);
         float sway=settings.SwayAmount;
         Vector3 targetAngles=new(
-            Radians(handheld*(.30f*Noise(clock*.75f,17)+.10f*Noise(clock*4.7f,19)))
-                +Radians(.65f)*bob*step
-                -sway*(localVelocity.Y/maxSpeed*Radians(settings.MovePitch)*.35f
-                    +Math.Clamp(localAcceleration.Y*.0015f,-.028f,.028f)),
-            Radians(handheld*(.23f*Noise(clock*.61f,23)+.065f*Noise(clock*5.3f,29)))
-                +Radians(.36f)*bob*MathF.Sin(phase+.6f)
-                -sway*turnRate*.004f,
-            Radians(handheld*(.42f*Noise(clock*.83f,31)+.11f*Noise(clock*3.9f,37)))
-                +Radians(1.0f)*bob*side*asymmetry
-                -sway*(localVelocity.X/maxSpeed*Radians(settings.StrafeRoll)*.45f
-                    +turnRate*Radians(settings.TurnRoll)*.40f));
+            Radians(noise*handheld*(.95f*grip.X+.13f*HandNoise(clock*4.1f,19)))
+                +Radians(.92f)*bob*(step-.7f*heel)*asymmetry
+                -sway*(cameraVelocity.Y/maxSpeed*Radians(settings.MovePitch)*.40f
+                    +Limit(cameraAcceleration.Y*.0023f,.035f)+pitchTurnRate*.013f),
+            Radians(noise*handheld*(1.30f*grip.Y+.18f*HandNoise(clock*3.7f,29)))
+                +Radians(.90f)*bob*(MathF.Sin(phase+.6f)+.25f*travel.X)
+                -sway*(turnRate*.011f+cameraVelocity.X/maxSpeed*.014f),
+            Radians(noise*handheld*(1.20f*grip.Z+.15f*HandNoise(clock*4.3f,37)))
+                +Radians(1.50f)*bob*side*asymmetry
+                -sway*(cameraVelocity.X/maxSpeed*Radians(settings.StrafeRoll)*.60f
+                    +turnRate*Radians(settings.TurnRoll)*.55f));
         Vector3 targetPosition=new(
-            .018f*bob*side+.0035f*handheld*Noise(clock*1.1f,41)-sway*Math.Clamp(localAcceleration.X*.0007f,-.02f,.02f),
-            .024f*bob*step*asymmetry+.003f*idleStrength*Noise(clock*.46f,43),
-            .011f*bob*MathF.Sin(phase*2f+.9f)+.002f*handheld*Noise(clock*1.3f,47)
-                -sway*Math.Clamp(localAcceleration.Y*.0009f,-.025f,.025f));
+            .033f*bob*side*asymmetry+.018f*noise*handheld*travel.X
+                -sway*Limit(cameraAcceleration.X*.0014f,.03f),
+            .039f*bob*(step-.55f*heel)*asymmetry+.012f*noise*handheld*travel.Y
+                +.004f*noise*idleStrength*HandNoise(clock*.39f,59),
+            .025f*bob*(MathF.Sin(phase*2f+.9f)+.25f*side)+.021f*noise*handheld*travel.Z
+                -sway*Limit(cameraAcceleration.Y*.0019f,.035f));
 
-        if((int)(previousPhase/MathF.PI)!=(int)(phase/MathF.PI))
-        {
-            float impact=settings.HeadBob*movingStrength*gaitWeight;
-            float foot=((int)(phase/MathF.PI)&1)==0?1f:-1f;
-            float variation=1f+.18f*Noise(clock*2.7f,53);
-            angularVelocity+=new Vector3(-Radians(21f),foot*Radians(4f),foot*Radians(12f))*impact*variation;
-            positionalVelocity+=new Vector3(foot*.075f,-.40f,.10f)*impact*variation;
-        }
         float springSpeed=Math.Clamp(settings.SwaySmooth/11f,.35f,2f);
-        Spring(ref angularMotion,ref angularVelocity,targetAngles,3.7f*springSpeed,.67f,dt);
-        Spring(ref positionalMotion,ref positionalVelocity,targetPosition,4.6f*springSpeed,.72f,dt);
-        // Preserve the responsive look direction while adding a bounded handheld pose.
-        PitchOffset=Math.Clamp(angularMotion.X,-.14f,.14f);
-        YawOffset=Math.Clamp(angularMotion.Y,-.08f,.08f);
-        Roll=Math.Clamp(angularMotion.Z,-.18f,.18f);
-        Vector3 offset=Vector3.Clamp(positionalMotion,new Vector3(-.085f,-.11f,-.07f),new Vector3(.085f,.11f,.07f));
-        camera.Y=StandingEye-(StandingEye-MovementProfile.CrouchHeight)*crouchBlend;
-        ViewOffset=new Vector3(right.X*offset.X+forward.X*offset.Z,offset.Y,
-            right.Y*offset.X+forward.Y*offset.Z);
+        Spring(ref angularMotion,ref angularVelocity,targetAngles,2.15f*springSpeed,.86f,dt);
+        Spring(ref positionalMotion,ref positionalVelocity,targetPosition,2.65f*springSpeed,.88f,dt);
+        float stanceHeight=-(StandingEye-MovementProfile.CrouchHeight)*crouchBlend;
+        Spring(ref stanceMotion,ref stanceVelocity,new Vector3(0f,stanceHeight,0f),2.0f,.90f,dt);
+        // Soft limits retain velocity through large movements instead of clipping
+        // the trajectory against a hard rotational/translation boundary.
+        PitchOffset=Limit(angularMotion.X,.14f);
+        YawOffset=Limit(angularMotion.Y,.08f);
+        Roll=Limit(angularMotion.Z,.18f);
+        Vector3 heldCamera=new(positionalMotion.X+YawOffset*.12f-Roll*.07f,
+            positionalMotion.Y-PitchOffset*.08f,positionalMotion.Z+PitchOffset*.05f);
+        Vector3 offset=new(Limit(heldCamera.X,.085f),Limit(heldCamera.Y,.11f),Limit(heldCamera.Z,.07f));
+        camera.Y=StandingEye+stanceHeight;
+        ViewOffset=new Vector3(right.X*offset.X+forward.X*offset.Z,
+            offset.Y+stanceMotion.Y-stanceHeight,right.Y*offset.X+forward.Y*offset.Z);
     }
 }

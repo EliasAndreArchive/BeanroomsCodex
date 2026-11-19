@@ -86,7 +86,7 @@ internal sealed partial class GameWindow : SilkForm
     bool chaseLocked;
     float chaseBlend;
     bool crouchToggle;
-    float mouseYawDelta;
+    float mouseYawDelta, mousePitchDelta;
     int fpsValue;
     int appliedResolution;
     float appliedLightDensity = -1f;

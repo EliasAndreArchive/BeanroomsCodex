@@ -3,7 +3,7 @@ using Beanrooms;
 
 internal static class CameraMotionChecks
 {
-    readonly record struct Sample(float AngularRms,float PositionRms,Vector3 Angles,Vector3 Offset,float Speed);
+    readonly record struct Sample(float AngularRms,float PositionRms,Vector3 Angles,Vector3 Offset,float Speed,float AngularAcceleration,float PositionAcceleration);
     static void Check(bool condition,string message) {if(!condition)throw new Exception(message);}
     static Sample Simulate(bool moving,bool sprint,bool crouch,float dt=1f/120f,bool blocked=false,DebugMenu? settings=null)
     {
@@ -21,12 +21,20 @@ internal static class CameraMotionChecks
             Vector3 mean=values.Aggregate(Vector3.Zero,(a,b)=>a+b)/values.Count;
             return MathF.Sqrt(values.Sum(v=>Vector3.DistanceSquared(v,mean))/values.Count);
         }
-        return new(Rms(angles),Rms(offsets),new(motion.PitchOffset,motion.YawOffset,motion.Roll),motion.ViewOffset,motion.Speed);
+        float Acceleration(List<Vector3> values) {
+            float total=0;
+            for(int i=2;i<values.Count;i++) total+=(values[i]-2*values[i-1]+values[i-2]).LengthSquared()/(dt*dt*dt*dt);
+            return MathF.Sqrt(total/(values.Count-2));
+        }
+        return new(Rms(angles),Rms(offsets),new(motion.PitchOffset,motion.YawOffset,motion.Roll),motion.ViewOffset,motion.Speed,Acceleration(angles),Acceleration(offsets));
     }
     internal static void Run()
     {
         var idle=Simulate(false,false,false);var crouchIdle=Simulate(false,false,true);
         var walk=Simulate(true,false,false);var run=Simulate(true,true,false);var crouch=Simulate(true,false,true);
+        Console.WriteLine($"CAMERA DYNAMICS: walk angular accel {walk.AngularAcceleration:0.00}, sprint {run.AngularAcceleration:0.00}, position {walk.PositionAcceleration:0.00}/{run.PositionAcceleration:0.00}");
+        Check(walk.AngularAcceleration<3f&&run.AngularAcceleration<7f,
+            "Footstep motion has regained abrupt angular acceleration.");
         Check(run.AngularRms>walk.AngularRms*1.25f&&walk.AngularRms>crouch.AngularRms*1.25f,
             "Running, walking and crouch walking need distinct camera strengths.");
         Check(run.PositionRms>walk.PositionRms*1.25f&&walk.PositionRms>crouch.PositionRms*1.25f,
@@ -61,14 +69,40 @@ internal static class CameraMotionChecks
             motion.Update(1f/60,moving?Vector2.UnitY:Vector2.Zero,true,crouching,frame%120<60?.03f:-.03f,
                 0,settings,ref position,(_,_,_)=>false,true);
             var angles=new Vector3(motion.PitchOffset,motion.YawOffset,motion.Roll);
-            Check(Vector3.Distance(angles,previousAngles)<.08f&&Vector3.Distance(motion.ViewOffset,previousOffset)<.05f,
+            var visualOffset=motion.ViewOffset+new Vector3(0,position.Y-1.68f,0);
+            Check(Vector3.Distance(angles,previousAngles)<.08f&&Vector3.Distance(visualOffset,previousOffset)<.05f,
                 "Camera stance or gait transition produced a discontinuity.");
-            previousAngles=angles;previousOffset=motion.ViewOffset;
+            previousAngles=angles;previousOffset=visualOffset;
         }
+        // Noise must actually move and rotate all axes even with gait/turn sway disabled.
+        motion.Reset();position=new(96,1.68f,96);
+        var noisy=new DebugMenu {HeadBob=0,SwayAmount=0};
+        Vector3 minAngles=new(float.PositiveInfinity),maxAngles=new(float.NegativeInfinity);
+        Vector3 minPosition=new(float.PositiveInfinity),maxPosition=new(float.NegativeInfinity);
+        for(int i=0;i<900;i++) {
+            motion.Update(1f/60,Vector2.Zero,false,false,0,0,noisy,ref position,(_,_,_)=>false,true);
+            Vector3 angles=new(motion.PitchOffset,motion.YawOffset,motion.Roll);
+            minAngles=Vector3.Min(minAngles,angles);maxAngles=Vector3.Max(maxAngles,angles);
+            minPosition=Vector3.Min(minPosition,motion.ViewOffset);maxPosition=Vector3.Max(maxPosition,motion.ViewOffset);
+        }
+        var angleRange=maxAngles-minAngles;var positionRange=maxPosition-minPosition;
+        Check(angleRange.X>.006f&&angleRange.Y>.006f&&angleRange.Z>.006f&&
+            positionRange.X>.004f&&positionRange.Y>.004f&&positionRange.Z>.004f,
+            "Handheld noise must affect all six camera pose axes.");
+        noisy.HandheldNoise=0;var quiet=Simulate(false,false,false,settings:noisy);
+        Check(quiet.AngularRms==0&&quiet.PositionRms==0,"Zero handheld noise retained idle noise.");
+        var looking=new PlayerMotion();var still=new PlayerMotion();Vector3 a=new(96,1.68f,96),b=a;
+        noisy.SwayAmount=1.2f;
+        for(int i=0;i<60;i++) {
+            looking.Update(1f/60,Vector2.Zero,false,false,0,0,noisy,ref a,(_,_,_)=>false,true,.02f);
+            still.Update(1f/60,Vector2.Zero,false,false,0,0,noisy,ref b,(_,_,_)=>false,true);
+        }
+        Check(Math.Abs(looking.PitchOffset-still.PitchOffset)>.005f,"Vertical looking has no handheld inertia.");
         var menu=new DebugMenu();menu.ShowTitle();menu.ShowSettingsFromTitle();menu.PasteCommand("CAMERA");menu.SubmitCommand();
         Check(menu.Page==3,"Camera settings are not accessible from CMD settings.");
         menu.PasteCommand("CROUCH IDLE SHAKE 0");menu.SubmitCommand();Check(menu.CrouchIdleShake==0,"Crouch idle setting did not apply.");
-        menu.PasteCommand("RESET");menu.SubmitCommand();Check(menu.CrouchIdleShake==1.3f,"Camera reset missed crouch idle strength.");
+        menu.PasteCommand("HANDHELD NOISE 0");menu.SubmitCommand();Check(menu.HandheldNoise==0,"Noise setting did not apply.");
+        menu.PasteCommand("RESET");menu.SubmitCommand();Check(menu.CrouchIdleShake==1.3f&&menu.HandheldNoise==1.35f,"Camera reset missed crouch idle strength.");
         Console.WriteLine($"PASS: camcorder motion; rotation RMS idle {idle.AngularRms*180/MathF.PI:0.00}, crouched {crouchIdle.AngularRms*180/MathF.PI:0.00}, walk {walk.AngularRms*180/MathF.PI:0.00}, sprint {run.AngularRms*180/MathF.PI:0.00}, crouch walk {crouch.AngularRms*180/MathF.PI:0.00} degrees; 30/60/144 Hz, blocked motion, reset, controls.");
     }
 }
