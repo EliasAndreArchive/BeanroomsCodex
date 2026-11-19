@@ -64,6 +64,7 @@ internal sealed partial class DebugMenu
             (3,8)=>new(0,3,.1f,TurnRoll),
             (3,9)=>new(0,4,.1f,MovePitch),
             (3,10)=>new(1,20,.1f,CameraSmooth),
+            (3,11)=>new(0,4,.01f,CrouchIdleShake),
             _=>default
         };
         return control.Max>control.Min;
@@ -114,6 +115,7 @@ internal sealed partial class DebugMenu
             case (3,8): TurnRoll=target;break;
             case (3,9): MovePitch=target;break;
             case (3,10): SwaySmooth=CameraSmooth=target;break;
+            case (3,11): CrouchIdleShake=target;break;
         }
         Dirty=true;
     }

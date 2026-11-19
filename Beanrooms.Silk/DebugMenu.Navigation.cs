@@ -122,6 +122,7 @@ internal sealed partial class DebugMenu
                 MouseSensitivity=defaults.MouseSensitivity;
                 IdleShake=defaults.IdleShake;WalkShake=defaults.WalkShake;
                 SprintShake=defaults.SprintShake;CrouchShake=defaults.CrouchShake;
+                CrouchIdleShake=defaults.CrouchIdleShake;
                 HeadBob=defaults.HeadBob;SwayAmount=defaults.SwayAmount;
                 StrafeRoll=defaults.StrafeRoll;TurnRoll=defaults.TurnRoll;
                 MovePitch=defaults.MovePitch;SwaySmooth=defaults.SwaySmooth;

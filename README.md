@@ -26,6 +26,15 @@ For Linux, use `-r linux-x64` and a separate output folder. Run the published `B
 
 Every push to `main` builds self-contained Windows and Linux archives and publishes them in [GitHub Releases](https://github.com/EliasAndreArchive/BeanroomsCodex/releases). Download the archive for your system, extract it, and run `Beanrooms.exe` on Windows or `Beanrooms` on Linux. The release workflow runs only after both builds succeed.
 
+## Handheld camera
+
+Open **SETTINGS -> CAMERA** for standing idle, walk, sprint, crouch-walk and
+crouch-idle shake strengths. The camcorder motion combines irregular grip drift,
+distance-driven footsteps with spring rebound, and acceleration/turn lag. Sprint
+is deliberately more pronounced; crouching at rest is steadier than standing.
+HEAD BOB adjusts step motion and SWAY AMOUNT adjusts movement/turn inertia.
+Set the shake strengths, HEAD BOB and SWAY AMOUNT to zero for a steady camera.
+
 ## NTSC / VHS
 
 Open **SETTINGS -> NTSC** in the command terminal. The complete ntsc-rs effect

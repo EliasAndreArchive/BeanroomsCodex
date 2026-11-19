@@ -277,6 +277,13 @@ internal sealed partial class DebugMenu
             .Replace(',','.');
         string target=Clean(wanted);
         if(Page>=13) return NtscTrySet(row,target);
+        if(Page==3 && TryNumericControl(row,out NumericControl numeric))
+        {
+            if(!float.TryParse(target,NumberStyles.Float,CultureInfo.InvariantCulture,out float number) ||
+                !float.IsFinite(number) || number<numeric.Min || number>numeric.Max) return false;
+            SetNumericFraction(row,(number-numeric.Min)/(numeric.Max-numeric.Min));
+            return true;
+        }
         if(Page==6 && row==1)
         {
             int colorIndex=Array.FindIndex(CubeColors,color=>color.Name==target);

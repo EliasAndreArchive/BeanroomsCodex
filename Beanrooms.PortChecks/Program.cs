@@ -33,6 +33,7 @@ static void ClickWideRow(DebugMenu menu,string prefix)
     Check(index>=top,$"Visible menu line missing: {prefix}");
     menu.ClickTerminal(300,10+(index-top)*12+11);
 }
+CameraMotionChecks.Run();
 NtscChecks.Run();
 if(args.Contains("--gpu")) NtscGpuChecks.Run();
 var menu=new DebugMenu();
@@ -379,3 +380,4 @@ using(var solo=new SoloNetClient())
 }
 
 Console.WriteLine("PASS: terminal commands and scrollback, cube spawning, Photon authority, solo physics");
+
