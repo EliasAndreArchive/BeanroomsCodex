@@ -380,4 +380,3 @@ using(var solo=new SoloNetClient())
 }
 
 Console.WriteLine("PASS: terminal commands and scrollback, cube spawning, Photon authority, solo physics");
-
